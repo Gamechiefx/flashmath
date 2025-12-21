@@ -9,6 +9,876 @@
       "created_at": "2025-12-21T04:39:14.347Z"
     }
   ],
-  "mastery_stats": [],
-  "sessions": []
+  "mastery_stats": [
+    {
+      "id": 1766292922034.34,
+      "operation": "Multiplication",
+      "fact": "5x11",
+      "last_response_time": 2570,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T04:55:22.034Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.9797,
+      "operation": "Multiplication",
+      "fact": "8x4",
+      "last_response_time": 1872,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T04:55:22.034Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.8894,
+      "operation": "Multiplication",
+      "fact": "9x11",
+      "last_response_time": 2697,
+      "mastery_level": 1.2,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.0654,
+      "operation": "Multiplication",
+      "fact": "7x4",
+      "last_response_time": 1208,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T04:55:22.034Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.427,
+      "operation": "Multiplication",
+      "fact": "5x2",
+      "last_response_time": 1934,
+      "mastery_level": 3,
+      "updated_at": "2025-12-21T05:00:28.873Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.897,
+      "operation": "Multiplication",
+      "fact": "7x7",
+      "last_response_time": 1045,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:00:28.872Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.6182,
+      "operation": "Multiplication",
+      "fact": "6x9",
+      "last_response_time": 2609,
+      "mastery_level": 1.4,
+      "updated_at": "2025-12-21T05:00:28.872Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.8987,
+      "operation": "Multiplication",
+      "fact": "2x3",
+      "last_response_time": 1918,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T04:55:22.034Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.2861,
+      "operation": "Multiplication",
+      "fact": "3x12",
+      "last_response_time": 1579,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:00:28.872Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.2488,
+      "operation": "Multiplication",
+      "fact": "10x8",
+      "last_response_time": 1966,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T04:55:22.034Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766292922034.0237,
+      "operation": "Multiplication",
+      "fact": "9x9",
+      "last_response_time": 1195,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T04:55:22.034Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228872.5916,
+      "operation": "Multiplication",
+      "fact": "6x7",
+      "last_response_time": 3874,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:00:28.872Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228872.922,
+      "operation": "Multiplication",
+      "fact": "5x7",
+      "last_response_time": 1106,
+      "mastery_level": 1.2,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228872.5334,
+      "operation": "Multiplication",
+      "fact": "2x6",
+      "last_response_time": 2034,
+      "mastery_level": 1.2,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228872.5366,
+      "operation": "Multiplication",
+      "fact": "11x4",
+      "last_response_time": 1085,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:00:28.872Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228872.834,
+      "operation": "Multiplication",
+      "fact": "11x10",
+      "last_response_time": 3163,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:00:28.872Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228872.501,
+      "operation": "Multiplication",
+      "fact": "9x4",
+      "last_response_time": 1100,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:00:28.872Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228872.069,
+      "operation": "Multiplication",
+      "fact": "6x6",
+      "last_response_time": 1062,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:00:28.872Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228872.9456,
+      "operation": "Multiplication",
+      "fact": "11x2",
+      "last_response_time": 927,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:00:28.873Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228873.733,
+      "operation": "Multiplication",
+      "fact": "6x2",
+      "last_response_time": 763,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228873.1816,
+      "operation": "Multiplication",
+      "fact": "10x7",
+      "last_response_time": 5414,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:00:28.873Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293228873.723,
+      "operation": "Multiplication",
+      "fact": "10x9",
+      "last_response_time": 2902,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:00:28.873Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293478000.2021,
+      "operation": "Multiplication",
+      "fact": "6x5",
+      "last_response_time": 1087,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293478000.2368,
+      "operation": "Multiplication",
+      "fact": "2x7",
+      "last_response_time": 2242,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293478000.0588,
+      "operation": "Multiplication",
+      "fact": "9x5",
+      "last_response_time": 1129,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293478000.0193,
+      "operation": "Multiplication",
+      "fact": "4x5",
+      "last_response_time": 2706,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293478000.143,
+      "operation": "Multiplication",
+      "fact": "6x4",
+      "last_response_time": 2157,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293478000.779,
+      "operation": "Multiplication",
+      "fact": "9x10",
+      "last_response_time": 1111,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293478000.9534,
+      "operation": "Multiplication",
+      "fact": "3x5",
+      "last_response_time": 1143,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:04:38.000Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766294940143.2563,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "10+8",
+      "last_response_time": 937,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766294940143.9558,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "7+10",
+      "last_response_time": 935,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:29:00.143Z"
+    },
+    {
+      "id": 1766294940143.479,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "10+7",
+      "last_response_time": 809,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766294940143.2864,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "4+9",
+      "last_response_time": 1028,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:29:00.143Z"
+    },
+    {
+      "id": 1766294940143.4226,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "8+3",
+      "last_response_time": 952,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766294940143.2783,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "5+9",
+      "last_response_time": 6655,
+      "mastery_level": 0,
+      "updated_at": "2025-12-21T05:29:00.143Z"
+    },
+    {
+      "id": 1766294940143.1196,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "3+2",
+      "last_response_time": 1027,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:29:00.143Z"
+    },
+    {
+      "id": 1766294940143.3203,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "10+10",
+      "last_response_time": 1492,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:29:00.143Z"
+    },
+    {
+      "id": 1766294940143.2717,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "3+9",
+      "last_response_time": 1587,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:29:00.143Z"
+    },
+    {
+      "id": 1766294940143.117,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "3+8",
+      "last_response_time": 947,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:29:00.143Z"
+    },
+    {
+      "id": 1766295002792.6667,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "9+5",
+      "last_response_time": 1760,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.343,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "11+7",
+      "last_response_time": 1591,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295002792.8955,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "5+5",
+      "last_response_time": 1233,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.9753,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "4+2",
+      "last_response_time": 1360,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.9976,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "7+3",
+      "last_response_time": 882,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:30:02.793Z"
+    },
+    {
+      "id": 1766295002792.1052,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "7+5",
+      "last_response_time": 1403,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.8215,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "8+9",
+      "last_response_time": 1127,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295002792.764,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "8+4",
+      "last_response_time": 1028,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.0276,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "4+7",
+      "last_response_time": 1059,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.3828,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "10+3",
+      "last_response_time": 797,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.6204,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "10+6",
+      "last_response_time": 988,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:30:02.793Z"
+    },
+    {
+      "id": 1766295002792.8545,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "6+4",
+      "last_response_time": 902,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.9282,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "12+11",
+      "last_response_time": 1945,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.0515,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "9+7",
+      "last_response_time": 1042,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.8792,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "12+3",
+      "last_response_time": 1069,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.657,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "7+12",
+      "last_response_time": 1354,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002792.754,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "6+8",
+      "last_response_time": 959,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.792Z"
+    },
+    {
+      "id": 1766295002793.7424,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "4+5",
+      "last_response_time": 1000,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.793Z"
+    },
+    {
+      "id": 1766295002793.2793,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "11+4",
+      "last_response_time": 1655,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.793Z"
+    },
+    {
+      "id": 1766295002793.8772,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "6+5",
+      "last_response_time": 1578,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.793Z"
+    },
+    {
+      "id": 1766295002793.0413,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "8+2",
+      "last_response_time": 1042,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:30:02.793Z"
+    },
+    {
+      "id": 1766295122288.832,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "8+7",
+      "last_response_time": 1356,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.8118,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "3+4",
+      "last_response_time": 1275,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.4377,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "6+7",
+      "last_response_time": 1015,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.042,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "5+7",
+      "last_response_time": 775,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.0042,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "9+2",
+      "last_response_time": 868,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.9792,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "9+6",
+      "last_response_time": 880,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.0427,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "2+5",
+      "last_response_time": 985,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.232,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "3+7",
+      "last_response_time": 828,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.8833,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "7+11",
+      "last_response_time": 2716,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.7039,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "3+5",
+      "last_response_time": 1060,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.7134,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "9+8",
+      "last_response_time": 1045,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.4575,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "7+2",
+      "last_response_time": 888,
+      "mastery_level": 2,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122288.0156,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "8+6",
+      "last_response_time": 2326,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122288.4543,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "12+4",
+      "last_response_time": 1135,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.288Z"
+    },
+    {
+      "id": 1766295122289.539,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "12+6",
+      "last_response_time": 1005,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122289.2136,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "3+6",
+      "last_response_time": 955,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122289.3254,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "6+3",
+      "last_response_time": 1890,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122289.661,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "12+8",
+      "last_response_time": 1277,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122289.2288,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "9+4",
+      "last_response_time": 977,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122289.7925,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "11+10",
+      "last_response_time": 1037,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122289.75,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "8+12",
+      "last_response_time": 985,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122289.7693,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "5+11",
+      "last_response_time": 947,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295122289.4429,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "fact": "3+10",
+      "last_response_time": 947,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:02.289Z"
+    },
+    {
+      "id": 1766295171189.796,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Division",
+      "fact": "77÷7",
+      "last_response_time": 1882,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:51.189Z"
+    },
+    {
+      "id": 1766295171189.7053,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Division",
+      "fact": "36÷3",
+      "last_response_time": 5417,
+      "mastery_level": 0.2,
+      "updated_at": "2025-12-21T05:32:51.189Z"
+    },
+    {
+      "id": 1766295171189.942,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Division",
+      "fact": "24÷6",
+      "last_response_time": 1432,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:51.189Z"
+    },
+    {
+      "id": 1766295171189.99,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Division",
+      "fact": "81÷9",
+      "last_response_time": 932,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:51.189Z"
+    },
+    {
+      "id": 1766295171189.2976,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Division",
+      "fact": "20÷10",
+      "last_response_time": 1892,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:51.189Z"
+    },
+    {
+      "id": 1766295171189.601,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Division",
+      "fact": "22÷11",
+      "last_response_time": 924,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:51.189Z"
+    },
+    {
+      "id": 1766295171189.5845,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Division",
+      "fact": "18÷6",
+      "last_response_time": 1842,
+      "mastery_level": 1,
+      "updated_at": "2025-12-21T05:32:51.189Z"
+    }
+  ],
+  "sessions": [
+    {
+      "id": 1766293228678,
+      "operation": "Multiplication",
+      "correct_count": 15,
+      "total_count": 15,
+      "avg_speed": 2.1114,
+      "created_at": "2025-12-21T05:00:28.678Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766293477822,
+      "operation": "Multiplication",
+      "correct_count": 11,
+      "total_count": 14,
+      "avg_speed": 1.6522727272727273,
+      "created_at": "2025-12-21T05:04:37.822Z",
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e"
+    },
+    {
+      "id": 1766294940089,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "correct_count": 12,
+      "total_count": 13,
+      "avg_speed": 2.2455833333333333,
+      "xp_earned": 260,
+      "created_at": "2025-12-21T05:29:00.089Z"
+    },
+    {
+      "id": 1766295002638,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "correct_count": 27,
+      "total_count": 28,
+      "avg_speed": 1.1882592592592593,
+      "xp_earned": 675,
+      "created_at": "2025-12-21T05:30:02.638Z"
+    },
+    {
+      "id": 1766295122070,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Addition",
+      "correct_count": 27,
+      "total_count": 27,
+      "avg_speed": 1.1823703703703705,
+      "xp_earned": 655,
+      "created_at": "2025-12-21T05:32:02.070Z"
+    },
+    {
+      "id": 1766295171072,
+      "user_id": "1e00f8b6-ce2c-475a-81be-bbe3873bc17e",
+      "operation": "Division",
+      "correct_count": 7,
+      "total_count": 10,
+      "avg_speed": 2.045857142857143,
+      "xp_earned": 165,
+      "created_at": "2025-12-21T05:32:51.072Z"
+    }
+  ]
 }

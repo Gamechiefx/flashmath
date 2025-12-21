@@ -12,15 +12,6 @@ export default function LoginPage() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
 
-    async function handleSubmit(formData: FormData) {
-        setLoading(true);
-        setError(null);
-        const result = await loginUser(formData);
-        if (result?.error) {
-            setError(result.error);
-            setLoading(false);
-        }
-    }
 
     return (
         <main className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden bg-background text-foreground">
@@ -49,7 +40,18 @@ export default function LoginPage() {
                 </div>
 
                 <GlassCard className="space-y-6">
-                    <form action={handleSubmit} className="space-y-4">
+                    <form
+                        action={async (formData) => {
+                            setLoading(true);
+                            setError(null);
+                            const result = await loginUser(formData);
+                            if (result?.error) {
+                                setError(result.error);
+                                setLoading(false);
+                            }
+                        }}
+                        className="space-y-4"
+                    >
                         {error && (
                             <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-bold text-center">
                                 {error.toUpperCase()}
@@ -57,7 +59,7 @@ export default function LoginPage() {
                         )}
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Email Protocol</label>
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Email</label>
                             <div className="relative">
                                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                                 <input
@@ -71,7 +73,7 @@ export default function LoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Secure Key</label>
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Password</label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                                 <input
@@ -85,12 +87,12 @@ export default function LoginPage() {
                         </div>
 
                         <NeonButton className="w-full mt-4" type="submit" disabled={loading}>
-                            {loading ? "AUTHENTICATING..." : "INITIALIZE AUTH"}
+                            {loading ? "AUTHENTICATING..." : "LOGIN"}
                         </NeonButton>
                     </form>
 
                     <div className="text-center text-sm text-muted-foreground">
-                        Don't have an uplink?{" "}
+                        Don't have an account?{" "}
                         <Link href="/auth/register" className="text-accent hover:underline">
                             Create Account
                         </Link>

@@ -53,6 +53,7 @@ export async function registerUser(formData: FormData) {
 export async function loginUser(formData: FormData) {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
+    console.log("[ACTION] loginUser called for:", email);
 
     try {
         await signIn("credentials", {
@@ -60,6 +61,7 @@ export async function loginUser(formData: FormData) {
             password,
             redirectTo: "/dashboard",
         });
+        console.log("[ACTION] signIn successful for:", email);
     } catch (error) {
         if (error instanceof AuthError) {
             switch (error.type) {

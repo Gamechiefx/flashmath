@@ -4,8 +4,8 @@ import path from 'path';
 // Define the database file path
 const dbPath = path.join(process.cwd(), 'flashmath_db.json');
 
-// Memory cache of the database
-let data: {
+// Memory cache of the database - using a stable object reference
+const data: {
     users: any[];
     mastery_stats: any[];
     sessions: any[];
@@ -16,20 +16,43 @@ let data: {
 };
 
 // HELPER: Load data from file
-const loadData = () => {
+export const loadData = () => {
     if (fs.existsSync(dbPath)) {
         try {
             const content = fs.readFileSync(dbPath, 'utf8');
-            data = JSON.parse(content);
+            if (!content || content.trim() === '') return data;
+
+            const parsed = JSON.parse(content);
+
+            // Update the stable object properties instead of reassigning 'data'
+            data.users = parsed.users || [];
+
+            // Critical: Heal orphaned data missing user_id
+            const defaultId = data.users[0]?.id || "unknown";
+            data.mastery_stats = (parsed.mastery_stats || []).map((s: any) => ({
+                ...s,
+                user_id: s.user_id || defaultId
+            }));
+            data.sessions = (parsed.sessions || []).map((s: any) => ({
+                ...s,
+                user_id: s.user_id || defaultId
+            }));
+
+            console.log(`[DB] Sync: ${data.users.length} users, ${data.sessions.length} sessions`);
         } catch (e) {
-            console.error("Failed to parse DB file, resetting to empty state", e);
+            console.error("Failed to parse DB file", e);
         }
     }
+    return data;
 };
 
 // HELPER: Save data to file
-const saveData = () => {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+export const saveData = () => {
+    try {
+        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
+    } catch (e) {
+        console.error("Critical: Failed to save DB file", e);
+    }
 };
 
 // Initial load
@@ -37,7 +60,6 @@ loadData();
 
 /**
  * Executes a query that returns multiple rows.
- * Pure JS Implementation
  */
 export const query = (text: string, params: any[] = []) => {
     loadData();
@@ -48,7 +70,15 @@ export const query = (text: string, params: any[] = []) => {
     }
     if (lowerText.includes('from mastery_stats')) {
         const userId = params[0];
-        return data.mastery_stats.filter(s => s.user_id === userId);
+        let results = data.mastery_stats.filter(s => s.user_id === userId);
+
+        if (lowerText.includes('operation = ?') && params[1]) {
+            results = results.filter(s => s.operation === params[1]);
+        }
+        if (lowerText.includes('fact = ?') && params[2]) {
+            results = results.filter(s => s.fact === params[2]);
+        }
+        return results;
     }
     return [];
 };
@@ -62,7 +92,8 @@ export const queryOne = (text: string, params: any[] = []) => {
 
     if (lowerText.includes('select * from users where email = ?')) {
         const email = params[0];
-        return data.users.find(u => u.email === email) || null;
+        const user = data.users.find(u => u.email === email);
+        return user || null;
     }
 
     if (lowerText.includes('select id from users where email = ?')) {
@@ -76,7 +107,6 @@ export const queryOne = (text: string, params: any[] = []) => {
 
 /**
  * Executes a statement (INSERT, UPDATE, DELETE).
- * Mimics SQL behavior using JS arrays.
  */
 export const execute = (text: string, params: any[] = []) => {
     loadData();
@@ -97,10 +127,9 @@ export const execute = (text: string, params: any[] = []) => {
 
     // INSERT INTO mastery_stats
     if (lowerText.includes('insert into mastery_stats')) {
-        // This is a simplification for the prototype
         const [user_id, operation, fact, speed, mastery] = params;
         data.mastery_stats.push({
-            id: Date.now(),
+            id: Date.now() + Math.random(),
             user_id,
             operation,
             fact,
@@ -110,17 +139,28 @@ export const execute = (text: string, params: any[] = []) => {
         });
     }
 
+    // INSERT INTO sessions
+    if (lowerText.includes('insert into sessions')) {
+        const [user_id, operation, correct_count, total_count, avg_speed, xp_earned] = params;
+        data.sessions.push({
+            id: Date.now(),
+            user_id,
+            operation,
+            correct_count,
+            total_count,
+            avg_speed,
+            xp_earned: xp_earned || 0,
+            created_at: new Date().toISOString()
+        });
+    }
+
     saveData();
     return { changes: 1 };
 };
 
-// Initialize schema (No-op in JSON version, but kept for compatibility)
 export const initSchema = () => {
-    console.log('Initializing JSON Storage Engine...');
-    if (!fs.existsSync(dbPath)) {
-        saveData();
-    }
-    console.log('JSON Engine ready.');
+    loadData(); // Trigger healing
+    saveData(); // Persist healing
 };
 
 export default data;

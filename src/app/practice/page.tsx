@@ -1,236 +1,355 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+    Zap,
+    Trophy,
+    RotateCcw,
+    Clock,
+    LayoutDashboard,
+    Star
+} from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
-import { generateProblem, getSymbol, Fact, Operation, THRESHOLDS, Performance } from "@/lib/math-engine";
-import { Zap, Timer, Trophy, ArrowLeft, Lightbulb } from "lucide-react";
+import { NeonButton } from "@/components/ui/neon-button";
+import { generateProblem, getPerformance, Operation } from "@/lib/math-engine";
 import Link from "next/link";
+import { AuthHeader } from "@/components/auth-header";
+import { saveSession, updateMastery } from "@/lib/actions/game";
+import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
+import { useSearchParams } from "next/navigation";
+import { soundEngine } from "@/lib/sound-engine";
 
-export default function PracticePage() {
-    const [op, setOp] = useState<Operation>("add");
-    const [problem, setProblem] = useState<Fact | null>(null);
+function PracticeContent() {
+    const { data: session } = useSession();
+    const searchParams = useSearchParams();
+    const operation = (searchParams.get("op") || "Multiplication") as Operation;
+
+    // Game State
+    const [gameState, setGameState] = useState<"menu" | "playing" | "finished">("menu");
+    const [problem, setProblem] = useState(generateProblem(operation));
     const [inputValue, setInputValue] = useState("");
     const [score, setScore] = useState(0);
-    const [feedback, setFeedback] = useState<Performance | null>(null);
-    const [timeRemaining, setTimeRemaining] = useState(30);
-    const [gameState, setGameState] = useState<"ready" | "playing" | "finished">("ready");
+    const [totalAttempts, setTotalAttempts] = useState(0);
+    const [timeLeft, setTimeLeft] = useState(30);
+    const [sessionXP, setSessionXP] = useState(0);
 
-    const [problemStartTime, setProblemStartTime] = useState<number>(0);
-    const [lastSpeed, setLastSpeed] = useState<number>(0);
-    const [mastery, setMastery] = useState<Record<string, number>>({});
+    // Feedback & Tracking
+    const [feedback, setFeedback] = useState<string | null>(null);
+    const [problemStartTime, setProblemStartTime] = useState(Date.now());
+    const [lastSpeed, setLastSpeed] = useState<number | null>(null);
 
-    const inputRef = useRef<HTMLInputElement>(null);
+    // Session History
+    const [sessionStats, setSessionStats] = useState<any[]>([]);
+    const [attempts, setAttempts] = useState(0);
+    const [streak, setStreak] = useState(0);
+    const [isError, setIsError] = useState(false);
 
-    useEffect(() => {
-        if (gameState === "playing") {
-            nextProblem();
-            const timer = setInterval(() => {
-                setTimeRemaining((prev) => {
-                    if (prev <= 1) {
-                        setGameState("finished");
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-            return () => clearInterval(timer);
-        }
-    }, [gameState]);
-
-    const nextProblem = () => {
-        // Simple adaptive logic: try to pick a problem the user hasn't mastered yet
-        // For now, we still use random generation but could filter in a real scenario
-        const newProblem = generateProblem(op);
-        setProblem(newProblem);
-        setInputValue("");
-        setFeedback(null);
-        setProblemStartTime(Date.now());
-    };
-
-    const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const val = e.target.value;
-        setInputValue(val);
-
-        if (problem && parseInt(val) === problem.answer) {
-            const responseTime = Date.now() - problemStartTime;
-            setLastSpeed(responseTime);
-
-            let performance: Performance = 'correct';
-            if (responseTime <= THRESHOLDS.FAST) {
-                performance = 'fast';
-                // Update session mastery
-                setMastery(prev => ({
-                    ...prev,
-                    [problem.id]: (prev[problem.id] || 0) + 1
-                }));
-            } else if (responseTime > THRESHOLDS.MAX) {
-                performance = 'slow';
-            }
-
-            setFeedback(performance);
-            setScore((s) => s + 1);
-            setTimeout(nextProblem, 400);
-        }
-    };
-
-
+    // Start the game
     const startGame = () => {
-        setScore(0);
-        setTimeRemaining(30);
         setGameState("playing");
+        setScore(0);
+        setTotalAttempts(0);
+        setSessionStats([]);
+        setSessionXP(0);
+        setTimeLeft(30);
+        setProblem(generateProblem(operation));
+        setProblemStartTime(Date.now());
+        setInputValue("");
+        setAttempts(0);
+        setStreak(0);
+        setIsError(false);
     };
 
+    // End the game
+    const endGame = useCallback(async () => {
+        setGameState("finished");
+
+        // If logged in, save to DB
+        if (session?.user) {
+            const stats = [...sessionStats];
+            const correct = score;
+            const total = totalAttempts;
+
+            const avgSpeed = stats.length > 0
+                ? stats.reduce((acc, s) => acc + s.responseTime, 0) / stats.length
+                : 0;
+
+            await saveSession({
+                operation,
+                correctCount: correct,
+                totalCount: total,
+                avgSpeed: avgSpeed / 1000,
+                xpGained: sessionXP
+            });
+
+            await updateMastery(stats.map(s => ({
+                fact: s.fact,
+                operation,
+                responseTime: s.responseTime,
+                masteryDelta: s.performance === 'fast' ? 1 : (s.performance === 'correct' ? 0.2 : -0.5)
+            })));
+        }
+        soundEngine.playComplete();
+    }, [session, score, totalAttempts, sessionStats, operation, sessionXP]);
+
+    // Timer logic
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (gameState === "playing" && timeLeft > 0) {
+            timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
+        } else if (timeLeft === 0 && gameState === "playing") {
+            endGame();
+        }
+        return () => clearTimeout(timer);
+    }, [gameState, timeLeft, endGame]);
+
+    // Handle Input
+    const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        if (isError) return;
+
+        setInputValue(value);
+
+        const intVal = parseInt(value);
+        const answerStr = problem.answer.toString();
+
+        // Correct answer
+        if (!isNaN(intVal) && intVal === problem.answer) {
+            const responseTime = Date.now() - problemStartTime;
+            const perf = getPerformance(responseTime);
+
+            setLastSpeed(responseTime);
+            setFeedback(perf.label);
+            setScore(prev => prev + 1);
+            setTotalAttempts(prev => prev + 1);
+            setSessionXP(prev => prev + perf.xp);
+
+            setSessionStats(prev => [...prev, {
+                fact: `${problem.num1}${operation === 'Multiplication' ? 'x' : operation === 'Addition' ? '+' : operation === 'Subtraction' ? '-' : '÷'}${problem.num2}`,
+                responseTime,
+                performance: perf.type,
+                xp: perf.xp
+            }]);
+
+            setStreak(prev => prev + 1);
+            soundEngine.playCorrect(streak + 1);
+
+            setTimeout(() => {
+                setProblem(generateProblem(operation));
+                setInputValue("");
+                setProblemStartTime(Date.now());
+                setFeedback(null);
+                setAttempts(0);
+                setIsError(false);
+            }, 200);
+            return;
+        }
+
+        // Detect incorrect answer
+        if (value.length >= answerStr.length && intVal !== problem.answer) {
+            setIsError(true);
+            setAttempts(prev => prev + 1);
+            setStreak(0);
+            soundEngine.playIncorrect();
+
+            if (attempts + 1 >= 2) {
+                setFeedback("SKIP");
+                setTotalAttempts(prev => prev + 1);
+
+                setTimeout(() => {
+                    setProblem(generateProblem(operation));
+                    setInputValue("");
+                    setProblemStartTime(Date.now());
+                    setFeedback(null);
+                    setAttempts(0);
+                    setIsError(false);
+                }, 600);
+            } else {
+                setTimeout(() => {
+                    setInputValue("");
+                    setIsError(false);
+                }, 400);
+            }
+        }
+    };
+
+    const getSymbol = () => {
+        switch (operation) {
+            case 'Addition': return '+';
+            case 'Subtraction': return '-';
+            case 'Division': return '÷';
+            default: return '×';
+        }
+    };
 
     return (
-        <main className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center p-6 lg:p-12 relative overflow-hidden">
-            {/* Background Glow */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 rounded-full blur-[150px] pointer-events-none" />
+        <main className="min-h-screen bg-background text-foreground flex flex-col items-center relative overflow-hidden">
+            <div className="w-full max-w-7xl mx-auto">
+                <AuthHeader />
+            </div>
 
-            <Link href="/" className="absolute top-10 left-10 text-muted-foreground hover:text-primary transition-colors flex items-center gap-2">
-                <ArrowLeft size={20} />
-                Exit Session
-            </Link>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 
-            <AnimatePresence mode="wait">
-                {gameState === "ready" && (
-                    <motion.div
-                        key="ready"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.9 }}
-                        className="text-center"
-                    >
-                        <Zap className="w-16 h-16 text-primary mx-auto mb-6" />
-                        <h1 className="text-4xl font-black mb-8 tracking-tighter">SPEED TRIAL</h1>
-
-                        <div className="flex justify-center gap-4 mb-10">
-                            {(['add', 'sub', 'mult', 'div'] as Operation[]).map((type) => (
-                                <button
-                                    key={type}
-                                    onClick={() => setOp(type)}
-                                    className={cn(
-                                        "w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold border transition-all",
-                                        op === type ? "bg-primary text-primary-foreground border-primary" : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"
-                                    )}
-                                >
-                                    {getSymbol(type)}
-                                </button>
-                            ))}
-                        </div>
-
-                        <button
-                            onClick={startGame}
-                            className="bg-primary text-primary-foreground px-10 py-4 rounded-2xl font-black text-xl shadow-[0_0_30px_rgba(34,211,238,0.3)] hover:scale-105 transition-all"
+            <div className="flex-1 flex flex-col items-center justify-center p-6 w-full max-w-4xl relative z-10">
+                <AnimatePresence mode="wait">
+                    {gameState === "menu" && (
+                        <motion.div
+                            key="menu"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="text-center space-y-8"
                         >
-                            INITIALIZE FLOW
-                        </button>
-                    </motion.div>
-                )}
-
-                {gameState === "playing" && problem && (
-                    <motion.div
-                        key="playing"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        className="w-full max-w-xl text-center"
-                    >
-                        {/* Stats Bar */}
-                        <div className="flex items-center justify-between mb-12 glass px-6 py-3 rounded-2xl">
-                            <div className="flex items-center gap-3">
-                                <Timer className="text-primary" size={20} />
-                                <span className="font-mono text-xl tabular-nums">{timeRemaining}s</span>
+                            <div className="space-y-4">
+                                <h1 className="text-6xl font-black tracking-tighter uppercase">{operation} TRIAL</h1>
+                                <p className="text-muted-foreground max-w-md mx-auto">
+                                    Test your neural response time. 30 seconds to solve as many {operation.toLowerCase()} facts as possible.
+                                </p>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <Trophy className="text-accent" size={20} />
-                                <span className="font-mono text-xl tabular-nums">{score}</span>
-                            </div>
-                        </div>
+                            <NeonButton onClick={startGame} className="px-12 py-6 text-xl">
+                                START SIMULATION
+                            </NeonButton>
+                        </motion.div>
+                    )}
 
-                        <GlassCard className="py-20 flex flex-col items-center">
-                            <div className="relative mb-12">
-                                <div className="flex items-center gap-8 text-7xl md:text-9xl font-black tracking-tighter">
-                                    <span>{problem.n1}</span>
-                                    <span className="text-primary">{getSymbol(problem.op)}</span>
-                                    <span>{problem.n2}</span>
-                                    <span className="text-muted-foreground">=</span>
+                    {gameState === "playing" && (
+                        <motion.div
+                            key="playing"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="w-full"
+                        >
+                            <div className="flex justify-between items-center mb-12">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-primary/20 rounded-xl border border-primary/20">
+                                        <Clock className="text-primary w-6 h-6" />
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Time Remaining</div>
+                                        <div className="text-2xl font-mono font-bold text-primary">{timeLeft}s</div>
+                                    </div>
                                 </div>
 
-                                {/* Performance Feedback Overlay */}
-                                <AnimatePresence>
-                                    {feedback && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 10, scale: 0.8 }}
-                                            animate={{ opacity: 1, y: -40, scale: 1 }}
-                                            exit={{ opacity: 0 }}
-                                            className={cn(
-                                                "absolute -top-12 left-0 right-0 text-center font-black tracking-widest text-xl uppercase",
-                                                feedback === 'fast' && "text-primary drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]",
-                                                feedback === 'correct' && "text-green-400",
-                                                feedback === 'slow' && "text-amber-400"
-                                            )}
-                                        >
-                                            {feedback === 'fast' && "⚡ LIGHTNING FAST!"}
-                                            {feedback === 'correct' && "✓ CORRECT"}
-                                            {feedback === 'slow' && "🐢 GOT IT"}
-                                            <div className="text-[10px] mt-1 opacity-50 font-mono">{(lastSpeed / 1000).toFixed(2)}s</div>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
+                                <div className="flex items-center gap-4 text-right">
+                                    <div>
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Exp Gained</div>
+                                        <div className="text-2xl font-mono font-bold text-accent">+{sessionXP}</div>
+                                    </div>
+                                    <div className="p-3 bg-accent/20 rounded-xl border border-accent/20">
+                                        <Star className="text-accent w-6 h-6" />
+                                    </div>
+                                </div>
                             </div>
 
-                            <input
-                                ref={inputRef}
-                                autoFocus
-                                type="number"
-                                value={inputValue}
-                                onChange={handleInput}
-                                className={cn(
-                                    "bg-white/5 border-2 rounded-3xl text-center text-7xl font-mono w-64 py-4 outline-none transition-all",
-                                    feedback === 'fast' && "border-primary bg-primary/10 shadow-[0_0_20px_rgba(34,211,238,0.2)]",
-                                    feedback === 'correct' && "border-green-500 bg-green-500/10",
-                                    feedback === 'slow' && "border-amber-500 bg-amber-500/10",
-                                    !feedback && "border-white/10 focus:border-primary/50"
-                                )}
-                            />
+                            <div className="flex flex-col items-center justify-center py-12">
+                                <motion.div
+                                    key={problem.num1 + "" + problem.num2}
+                                    initial={{ opacity: 0, x: 20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    className="flex items-center gap-8 mb-12"
+                                >
+                                    <div className="text-7xl md:text-9xl font-black tracking-tighter tabular-nums">
+                                        {problem.num1} <span className="text-primary">{getSymbol()}</span> {problem.num2}
+                                    </div>
+                                    <div className="text-7xl md:text-9xl font-thin text-muted-foreground">=</div>
+                                </motion.div>
 
-                        </GlassCard>
-                    </motion.div>
-                )}
+                                <div className="relative w-full max-w-sm">
+                                    <input
+                                        autoFocus
+                                        type="number"
+                                        value={inputValue}
+                                        onChange={handleInput}
+                                        className={cn(
+                                            "w-full border-2 rounded-3xl py-8 text-center text-6xl font-black outline-none transition-all shadow-lg",
+                                            isError
+                                                ? "bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_30px_rgba(239,68,68,0.2)] animate-shake"
+                                                : "bg-white/5 border-primary/30 text-foreground focus:border-primary shadow-[0_0_30px_rgba(34,211,238,0.1)]"
+                                        )}
+                                        placeholder="?"
+                                    />
 
-                {gameState === "finished" && (
-                    <motion.div
-                        key="finished"
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="text-center"
-                    >
-                        <Trophy className="w-20 h-20 text-accent mx-auto mb-6 drop-shadow-[0_0_20px_rgba(168,85,247,0.5)]" />
-                        <h2 className="text-4xl font-black mb-2 tracking-tighter">SESSION COMPLETE</h2>
-                        <p className="text-muted-foreground mb-8">You mastered {score} facts in this rotation.</p>
+                                    <AnimatePresence>
+                                        {feedback && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, y: -10 }}
+                                                className="absolute -top-12 left-0 right-0 text-center flex flex-col items-center"
+                                            >
+                                                <div className={cn(
+                                                    "text-sm font-black uppercase tracking-widest mb-1",
+                                                    feedback.includes("LIGHTNING") ? "text-accent" : "text-primary"
+                                                )}>
+                                                    {feedback}
+                                                </div>
+                                                <div className="text-[10px] font-mono font-bold text-muted-foreground">
+                                                    {(lastSpeed! / 1000).toFixed(2)}s
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
 
-                        <GlassCard className="inline-block mb-10 px-12">
-                            <div className="text-6xl font-black text-primary mb-2">{score}</div>
-                            <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">CORRECT RECALLS</div>
-                        </GlassCard>
+                    {gameState === "finished" && (
+                        <motion.div
+                            key="finished"
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="w-full max-w-2xl"
+                        >
+                            <GlassCard className="text-center p-12 overflow-hidden relative">
+                                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-primary/10 rounded-full blur-[80px] -mt-24 pointer-events-none" />
 
-                        <div className="flex gap-4 justify-center">
-                            <button
-                                onClick={startGame}
-                                className="bg-primary text-primary-foreground px-8 py-3 rounded-xl font-bold transition-all hover:scale-105"
-                            >
-                                RE-INITIALIZE
-                            </button>
-                            <Link href="/">
-                                <button className="bg-white/5 border border-white/10 px-8 py-3 rounded-xl font-bold hover:bg-white/10 transition-all">
-                                    TERMINATE
-                                </button>
-                            </Link>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+                                <h2 className="text-4xl font-black tracking-tight mb-8">SESSION COMPLETE</h2>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                                    <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Correct</div>
+                                        <div className="text-4xl font-black text-primary">{score}</div>
+                                    </div>
+                                    <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Avg Speed</div>
+                                        <div className="text-4xl font-black text-accent">
+                                            {(sessionStats.length > 0 ? sessionStats.reduce((acc, s) => acc + s.responseTime, 0) / sessionStats.length / 1000 : 0).toFixed(2)}s
+                                        </div>
+                                    </div>
+                                    <div className="p-6 rounded-2xl bg-primary/20 border border-primary/20">
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">XP Gained</div>
+                                        <div className="text-4xl font-black text-primary">+{sessionXP}</div>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                                    <NeonButton onClick={startGame} className="w-full sm:w-auto flex items-center gap-2">
+                                        <RotateCcw size={18} />
+                                        RETRY TRIAL
+                                    </NeonButton>
+                                    <Link href="/dashboard" className="w-full sm:w-auto">
+                                        <button className="w-full px-8 py-4 rounded-xl font-bold border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2">
+                                            <LayoutDashboard size={18} />
+                                            GO TO DASHBOARD
+                                        </button>
+                                    </Link>
+                                </div>
+                            </GlassCard>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </div>
         </main>
+    );
+}
+
+export default function PracticePage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center font-mono text-primary animate-pulse">LOADING SIMULATION...</div>}>
+            <PracticeContent />
+        </Suspense>
     );
 }

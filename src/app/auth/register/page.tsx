@@ -44,8 +44,8 @@ export default function RegisterPage() {
                     <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-accent/20 text-accent mb-4">
                         <Zap size={24} />
                     </div>
-                    <h1 className="text-3xl font-black tracking-tight mb-2">CREATE UPLINK</h1>
-                    <p className="text-muted-foreground text-sm">Join the next generation of math masters.</p>
+                    <h1 className="text-3xl font-black tracking-tight mb-2">JOIN THE SQUAD</h1>
+                    <p className="text-muted-foreground text-sm">Create an account to track your mastery.</p>
                 </div>
 
                 <GlassCard className="space-y-6">
@@ -71,7 +71,7 @@ export default function RegisterPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Email Protocol</label>
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Email</label>
                             <div className="relative">
                                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                                 <input
@@ -85,7 +85,7 @@ export default function RegisterPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Secure Key</label>
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Password</label>
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                                 <input
@@ -99,14 +99,14 @@ export default function RegisterPage() {
                         </div>
 
                         <NeonButton variant="accent" className="w-full mt-4" type="submit" disabled={loading}>
-                            {loading ? "INITIALIZING..." : "ESTABLISH CONNECTION"}
+                            {loading ? "INITIALIZING..." : "CREATE ACCOUNT"}
                         </NeonButton>
                     </form>
 
                     <div className="text-center text-sm text-muted-foreground">
-                        Already have an uplink?{" "}
+                        Already have an account?{" "}
                         <Link href="/auth/login" className="text-primary hover:underline">
-                            Login to Terminal
+                            Login here
                         </Link>
                     </div>
                 </GlassCard>

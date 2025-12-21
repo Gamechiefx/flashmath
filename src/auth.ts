@@ -12,15 +12,37 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 if (!credentials?.email || !credentials?.password) return null;
 
                 // User lookup in SQLite
+                console.log("[AUTH] Attempting lookup for:", credentials.email);
                 const user = queryOne('SELECT * FROM users WHERE email = ?', [credentials.email]) as any;
 
-                if (user && await bcrypt.compare(credentials.password as string, user.password_hash)) {
+                if (!user) {
+                    console.log("[AUTH] User not found:", credentials.email);
+                    return null;
+                }
+
+                const isPasswordValid = await bcrypt.compare(credentials.password as string, user.password_hash);
+                if (isPasswordValid) {
+                    console.log("[AUTH] Password valid for:", credentials.email);
                     return { id: user.id, name: user.name, email: user.email };
                 }
 
-                console.log("Auth attempt failed for:", credentials.email);
+                console.log("[AUTH] Invalid password for:", credentials.email);
                 return null;
             },
         }),
     ],
+    callbacks: {
+        async jwt({ token, user }) {
+            if (user) {
+                token.id = user.id;
+            }
+            return token;
+        },
+        async session({ session, token }) {
+            if (token && session.user) {
+                (session.user as any).id = token.id;
+            }
+            return session;
+        },
+    },
 });
