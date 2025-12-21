@@ -1,24 +1,26 @@
-import { auth } from "@/auth";
+"use client";
+
 import { redirect } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { motion } from "framer-motion";
+import { cn } from "@/lib/utils";
 import {
     Zap,
     Trophy,
     Target,
-    BarChart3,
     History,
-    User as UserIcon,
     LogOut,
     ChevronRight
 } from "lucide-react";
 import Link from "next/link";
-import { signOut } from "@/auth";
+import { signOut, useSession } from "next-auth/react";
 
-export default async function DashboardPage() {
-    const session = await auth();
+export default function DashboardPage() {
+    const { data: session, status } = useSession();
 
+    if (status === "loading") return <div className="min-h-screen bg-background flex items-center justify-center font-mono text-primary animate-pulse">BOOTING TERMINAL...</div>;
     if (!session?.user) {
         redirect("/auth/login");
     }
@@ -45,15 +47,14 @@ export default async function DashboardPage() {
 
                 <div className="flex items-center gap-4">
                     <ThemeToggle />
-                    <form action={async () => {
-                        "use server";
-                        await signOut();
-                    }}>
-                        <button className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-red-500/10 hover:text-red-500 transition-all">
-                            <LogOut size={20} />
-                        </button>
-                    </form>
+                    <button
+                        onClick={() => signOut({ callbackUrl: "/" })}
+                        className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-red-500/10 hover:text-red-500 transition-all"
+                    >
+                        <LogOut size={20} />
+                    </button>
                 </div>
+
             </nav>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 relative z-10">
@@ -177,7 +178,3 @@ export default async function DashboardPage() {
     );
 }
 
-// Utility to fix Tailwind classes in the loop
-function cn(...classes: string[]) {
-    return classes.filter(Boolean).join(' ');
-}

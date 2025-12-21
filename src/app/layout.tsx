@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   description: "Master math at lightning speed with futuristic game-like practice.",
 };
 
+import { AuthProvider } from "@/components/auth-provider";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -26,16 +28,19 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem
-          disableTransitionOnChange
-        >
-          {children}
-        </ThemeProvider>
+        <AuthProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="dark"
+            enableSystem
+            disableTransitionOnChange
+          >
+            {children}
+          </ThemeProvider>
+        </AuthProvider>
       </body>
     </html>
   );
 }
+
 

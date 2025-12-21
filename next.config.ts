@@ -1,7 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Pure JavaScript version doesn't need external packages or webpack hacks
+  experimental: {
+    allowedDevOrigins: ["192.168.56.1", "localhost:3000"],
+  },
+  // Pure JavaScript version doesn't need external packages 
 };
+
 
 export default nextConfig;
