@@ -59,6 +59,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                 <div className="flex items-center gap-3 pl-2">
                     <div className="text-right hidden sm:block">
                         <div className="text-[10px] font-bold uppercase tracking-widest text-primary line-clamp-1">{session.user?.name}</div>
+                        <div className="text-[8px] font-mono text-white/40 uppercase tracking-tighter">LVL {(session.user as any)?.level || 1} • § {(session.user as any)?.coins || 0}</div>
                     </div>
                     <button
                         onClick={async () => {

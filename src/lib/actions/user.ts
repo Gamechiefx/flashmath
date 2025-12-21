@@ -1,13 +1,15 @@
 "use server";
 
-import { loadData } from "@/lib/db";
+import { loadData, queryOne } from "@/lib/db";
 import { auth } from "@/auth";
+import { syncLeagueState } from "@/lib/league-engine";
 
 export async function getDashboardStats() {
     const session = await auth();
     if (!session?.user) return null;
     const userId = (session.user as any).id;
 
+    await syncLeagueState();
     const db = loadData();
     const userSessions = db.sessions.filter(s => s.user_id === userId);
     const userMastery = db.mastery_stats.filter(s => s.user_id === userId);
@@ -30,10 +32,15 @@ export async function getDashboardStats() {
         };
     });
 
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+
     return {
         accuracy: totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0,
         avgSpeed: avgSpeed.toFixed(2) + "s",
-        totalXP: userSessions.reduce((acc, s) => acc + (s.xp_earned || 0), 0),
+        totalXP: user?.total_xp || 0,
+        coins: user?.coins || 0,
+        level: user?.level || 1,
+        leagueId: user?.current_league_id || 'neon-league',
         recentSessions: userSessions.slice(-10).reverse(),
         masteryMap
     };

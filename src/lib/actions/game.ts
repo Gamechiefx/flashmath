@@ -1,8 +1,9 @@
 "use server";
 
-import { execute, loadData, saveData } from "@/lib/db";
+import { execute, loadData, saveData, queryOne } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
+import { syncLeagueState } from "@/lib/league-engine";
 
 export async function saveSession(sessionId: any) {
     const session = await auth();
@@ -16,7 +17,30 @@ export async function saveSession(sessionId: any) {
         [userId, operation, correctCount, totalCount, avgSpeed, xpGained]
     );
 
+    // 🏆 LEAGUE & LEVELING SYSTEM
+    await syncLeagueState(); // Process any time-based resets
+
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    if (user) {
+        const newTotalXp = (user.total_xp || 0) + xpGained;
+        const newLevel = Math.floor(newTotalXp / 1000) + 1; // 1000 XP per level
+        const coinsEarned = Math.floor(xpGained * 0.5); // 1 Flux per 2 XP
+        const newCoins = (user.coins || 0) + coinsEarned;
+
+        execute(
+            "UPDATE users SET total_xp = ?, level = ?, coins = ? WHERE id = ?",
+            [newTotalXp, newLevel, newCoins, userId]
+        );
+
+        // Update League XP
+        execute(
+            "INSERT INTO league_participants (league_id, user_id, name, weekly_xp) VALUES (?, ?, ?, ?)",
+            [user.current_league_id || 'neon-league', userId, user.name, xpGained]
+        );
+    }
+
     revalidatePath("/dashboard");
+    revalidatePath("/leaderboard");
     return { success: true };
 }
 

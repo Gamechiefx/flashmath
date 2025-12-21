@@ -10,7 +10,10 @@ import {
     Target,
     History,
     ChevronRight,
-    Activity
+    Activity,
+    Coins,
+    BarChart3,
+    ShoppingBag
 } from "lucide-react";
 import Link from "next/link";
 
@@ -28,16 +31,16 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                     <div className="p-6 bg-primary/10 border-b border-primary/10">
                         <div className="flex items-center gap-3 mb-2 text-primary">
                             <Trophy size={20} />
-                            <span className="text-xs font-bold uppercase tracking-widest">Global Rank</span>
+                            <span className="text-xs font-bold uppercase tracking-widest">{stats?.leagueId?.replace('-league', '')?.toUpperCase()} LEAGUE</span>
                         </div>
-                        <div className="text-3xl font-black">{stats?.totalXP > 500 ? "PHANTOM PILOT" : "NEON RECRUIT"}</div>
+                        <div className="text-3xl font-black">LEVEL {stats?.level || 1} PILOT</div>
                         <div className="mt-4 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
                             <div
                                 className="h-full bg-primary shadow-[0_0_10px_rgba(34,211,238,0.5)] transition-all duration-1000"
-                                style={{ width: `${Math.min(100, (stats?.totalXP % 1000) / 10)}%` }}
+                                style={{ width: `${(stats?.totalXP % 1000) / 10}%` }}
                             />
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-tighter">Next Rank at {Math.ceil((stats?.totalXP || 0) / 1000) * 1000} XP ({stats?.totalXP || 0} XP Total)</p>
+                        <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-tighter">Next Level at {Math.ceil(((stats?.totalXP || 0) + 1) / 1000) * 1000} XP ({stats?.totalXP || 0} Total)</p>
                     </div>
 
                     <div className="p-6 grid grid-cols-2 gap-4">
@@ -51,14 +54,29 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                         </div>
                         <div className="space-y-1">
                             <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Rank #</div>
-                            <div className="text-xl font-mono tracking-tighter text-accent">--</div>
+                            <div className="text-xl font-mono tracking-tighter text-accent">TOP 10</div>
                         </div>
                         <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Total XP</div>
-                            <div className="text-xl font-mono tracking-tighter text-primary">{stats?.totalXP || 0}</div>
+                            <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Flux Coins</div>
+                            <div className="text-xl font-mono tracking-tighter text-yellow-400">§ {stats?.coins || 0}</div>
                         </div>
                     </div>
                 </GlassCard>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <Link href="/leaderboard" className="block">
+                        <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-primary/5 transition-all group">
+                            <BarChart3 className="text-primary group-hover:scale-110 transition-transform" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Leagues</span>
+                        </GlassCard>
+                    </Link>
+                    <Link href="/shop" className="block">
+                        <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-accent/5 transition-all group">
+                            <ShoppingBag className="text-accent group-hover:scale-110 transition-transform" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Shop</span>
+                        </GlassCard>
+                    </Link>
+                </div>
 
                 <GlassCard className="space-y-4">
                     <div className="flex items-center justify-between">

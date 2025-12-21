@@ -41,6 +41,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         async session({ session, token }) {
             if (token && session.user) {
                 (session.user as any).id = token.id;
+
+                // Get freshest data from DB for header display
+                const user = queryOne("SELECT * FROM users WHERE id = ?", [token.id]) as any;
+                if (user) {
+                    (session.user as any).level = user.level;
+                    (session.user as any).coins = user.coins;
+                }
             }
             return session;
         },

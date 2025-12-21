@@ -9,10 +9,18 @@ const data: {
     users: any[];
     mastery_stats: any[];
     sessions: any[];
+    leagues: any[];
+    league_participants: any[];
+    shop_items: any[];
+    inventory: any[];
 } = {
     users: [],
     mastery_stats: [],
-    sessions: []
+    sessions: [],
+    leagues: [],
+    league_participants: [],
+    shop_items: [],
+    inventory: []
 };
 
 // HELPER: Load data from file
@@ -25,7 +33,16 @@ export const loadData = () => {
             const parsed = JSON.parse(content);
 
             // Update the stable object properties instead of reassigning 'data'
-            data.users = parsed.users || [];
+            data.users = (parsed.users || []).map((u: any) => ({
+                level: 1,
+                coins: 100,
+                current_league_id: 'neon-league',
+                ...u
+            }));
+            data.leagues = parsed.leagues || [];
+            data.league_participants = parsed.league_participants || [];
+            data.shop_items = parsed.shop_items || [];
+            data.inventory = parsed.inventory || [];
 
             // Critical: Heal orphaned data missing user_id
             const defaultId = data.users[0]?.id || "unknown";
@@ -80,6 +97,13 @@ export const query = (text: string, params: any[] = []) => {
         }
         return results;
     }
+    if (lowerText.includes('from leagues')) {
+        return data.leagues;
+    }
+    if (lowerText.includes('from league_participants')) {
+        const leagueId = params[0];
+        return data.league_participants.filter(p => p.league_id === leagueId);
+    }
     return [];
 };
 
@@ -102,6 +126,17 @@ export const queryOne = (text: string, params: any[] = []) => {
         return user ? { id: user.id } : null;
     }
 
+    if (lowerText.includes('select * from users where id = ?')) {
+        const id = params[0];
+        const user = data.users.find(u => u.id === id);
+        return user || null;
+    }
+
+    if (lowerText.includes('select * from leagues where id = ?')) {
+        const id = params[0];
+        return data.leagues.find(l => l.id === id) || null;
+    }
+
     return null;
 };
 
@@ -121,8 +156,28 @@ export const execute = (text: string, params: any[] = []) => {
             email,
             password_hash,
             theme_preferences: 'dark',
+            level: 1,
+            total_xp: 0,
+            coins: 100,
+            current_league_id: 'neon-league',
             created_at: new Date().toISOString()
         });
+    }
+
+    // UPDATE users (for xp, coins, level)
+    if (lowerText.includes('update users')) {
+        const id = params[params.length - 1];
+        const user = data.users.find(u => u.id === id);
+        if (user) {
+            if (lowerText.includes('total_xp = ?, level = ?, coins = ?')) {
+                const [xp, level, coins] = params;
+                user.total_xp = xp;
+                user.level = level;
+                user.coins = coins;
+            } else if (lowerText.includes('current_league_id = ?')) {
+                user.current_league_id = params[0];
+            }
+        }
     }
 
     // INSERT INTO mastery_stats
@@ -154,13 +209,52 @@ export const execute = (text: string, params: any[] = []) => {
         });
     }
 
+    // LEAGUE STATEMENTS
+    if (lowerText.includes('insert into league_participants')) {
+        const [league_id, user_id, name, weekly_xp] = params;
+        const existing = data.league_participants.find(p => p.league_id === league_id && p.user_id === user_id);
+        if (existing) {
+            existing.weekly_xp += weekly_xp;
+        } else {
+            data.league_participants.push({ league_id, user_id, name, weekly_xp });
+        }
+    }
+
+    if (lowerText.includes('delete from league_participants')) {
+        const leagueId = params[0];
+        data.league_participants = data.league_participants.filter(p => p.league_id !== leagueId);
+    }
+
+    if (lowerText.includes('update leagues')) {
+        const id = params[params.length - 1];
+        const league = data.leagues.find(l => l.id === id);
+        if (league && lowerText.includes('end_time = ?')) {
+            league.end_time = params[0];
+        }
+    }
+
     saveData();
     return { changes: 1 };
 };
 
 export const initSchema = () => {
-    loadData(); // Trigger healing
-    saveData(); // Persist healing
+    loadData();
+
+    // Seed Leagues if empty
+    if (data.leagues.length === 0) {
+        data.leagues = [
+            { id: 'neon-league', name: 'NEON', min_rank: 1, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
+            { id: 'cobalt-league', name: 'COBALT', min_rank: 2, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
+            { id: 'plasma-league', name: 'PLASMA', min_rank: 3, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
+            { id: 'void-league', name: 'VOID', min_rank: 4, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
+            { id: 'apex-league', name: 'APEX', min_rank: 5, end_time: new Date(Date.now() + 5 * 60000).toISOString() }
+        ];
+    }
+
+    saveData();
 };
+
+// Initial load
+initSchema();
 
 export default data;

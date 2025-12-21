@@ -308,20 +308,24 @@ function PracticeContent() {
 
                                 <h2 className="text-4xl font-black tracking-tight mb-8">SESSION COMPLETE</h2>
 
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
                                     <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
                                         <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Correct</div>
                                         <div className="text-4xl font-black text-primary">{score}</div>
                                     </div>
                                     <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
-                                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Avg Speed</div>
-                                        <div className="text-4xl font-black text-accent">
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Speed</div>
+                                        <div className="text-3xl font-black text-accent">
                                             {(sessionStats.length > 0 ? sessionStats.reduce((acc, s) => acc + s.responseTime, 0) / sessionStats.length / 1000 : 0).toFixed(2)}s
                                         </div>
                                     </div>
                                     <div className="p-6 rounded-2xl bg-primary/20 border border-primary/20">
                                         <div className="text-[10px] font-bold uppercase tracking-widest text-primary mb-1">XP Gained</div>
                                         <div className="text-4xl font-black text-primary">+{sessionXP}</div>
+                                    </div>
+                                    <div className="p-6 rounded-2xl bg-yellow-400/20 border border-yellow-400/20">
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-yellow-500 mb-1">Flux Earned</div>
+                                        <div className="text-4xl font-black text-yellow-400">§ {Math.floor(sessionXP * 0.5)}</div>
                                     </div>
                                 </div>
 
