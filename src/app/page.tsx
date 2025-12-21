@@ -70,7 +70,7 @@ export default function Home() {
                 Quick Practice
               </NeonButton>
             </Link>
-            <Link href="/auth">
+            <Link href="/auth/login">
               <button className="px-6 py-3 rounded-xl font-bold border border-foreground/10 hover:bg-foreground/5 transition-all text-foreground flex items-center gap-2">
                 Full Mastery
                 <ArrowRight size={18} />
