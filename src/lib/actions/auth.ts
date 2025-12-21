@@ -1,7 +1,7 @@
 "use server";
 
 import { execute, queryOne, initSchema } from "@/lib/db";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { signIn } from "@/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";

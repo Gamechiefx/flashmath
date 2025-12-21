@@ -1,16 +1,13 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import bcrypt from "bcrypt";
-import { query, queryOne } from "./lib/db";
+import bcrypt from "bcryptjs";
+import { queryOne } from "./lib/db";
+import { authConfig } from "./auth.config";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+    ...authConfig,
     providers: [
         Credentials({
-            name: "Credentials",
-            credentials: {
-                email: { label: "Email", type: "email" },
-                password: { label: "Password", type: "password" },
-            },
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) return null;
 
@@ -24,21 +21,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 console.log("Auth attempt failed for:", credentials.email);
                 return null;
             },
-
         }),
     ],
-    pages: {
-        signIn: "/auth/login",
-    },
-    callbacks: {
-        authorized({ auth, request: { nextUrl } }) {
-            const isLoggedIn = !!auth?.user;
-            const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
-            if (isOnDashboard) {
-                if (isLoggedIn) return true;
-                return false; // Redirect unauthenticated users to login page
-            }
-            return true;
-        },
-    },
 });
