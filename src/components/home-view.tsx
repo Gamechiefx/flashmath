@@ -66,9 +66,11 @@ export function HomeView({ session }: HomeViewProps) {
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                         <Link href="/practice">
-                            <NeonButton className="flex items-center gap-2 px-8">
-                                <Play className="fill-current" size={18} />
-                                Quick Practice
+                            <NeonButton className="px-8">
+                                <span className="flex items-center gap-2 whitespace-nowrap">
+                                    Quick Practice
+                                    <Play className="fill-current" size={18} />
+                                </span>
                             </NeonButton>
                         </Link>
                         {session ? (

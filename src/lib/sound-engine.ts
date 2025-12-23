@@ -28,6 +28,12 @@ class SoundEngine {
         return this.enabled;
     }
 
+    private pack: string = 'default';
+
+    setPack(assetValue: string) {
+        this.pack = assetValue;
+    }
+
     playCorrect(streak: number = 0) {
         if (!this.enabled) return;
         this.init();
@@ -37,19 +43,33 @@ class SoundEngine {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
 
-        // Subtler pitch increase, capped at 8 notes of a scale
-        const scale = [0, 2, 4, 7, 9, 12, 14, 16]; // Major/Pentatonic feel
+        // Pack Logic
+        let type: OscillatorType = 'sine';
+        if (this.pack.includes('mech')) type = 'square'; // Clicky
+        if (this.pack.includes('scifi')) type = 'sawtooth'; // Sci-Fi
+
+        osc.type = type;
+
+        // Frequency Logic (Scale)
+        const scale = [0, 2, 4, 7, 9, 12, 14, 16];
         const noteIndex = Math.min(streak, scale.length - 1);
-        const baseFreq = 523.25; // C5
+        const baseFreq = this.pack.includes('scifi') ? 880 : 523.25;
         const freq = baseFreq * Math.pow(2, scale[noteIndex] / 12);
 
-        osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, now);
-        osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + 0.05);
 
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.15, now + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        if (this.pack.includes('silencer')) {
+            // Muted/soft
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.05, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        } else {
+            // Normal
+            osc.frequency.exponentialRampToValueAtTime(freq * 1.05, now + 0.05); // slight chirp
+            gain.gain.setValueAtTime(0, now);
+            gain.gain.linearRampToValueAtTime(0.15, now + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+        }
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);

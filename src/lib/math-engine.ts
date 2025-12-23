@@ -30,10 +30,10 @@ export function generateProblem(op: Operation = 'Multiplication') {
 
 export function getPerformance(responseTime: number): { type: PerformanceType; label: string; xp: number } {
     if (responseTime <= THRESHOLDS.FAST) {
-        return { type: 'fast', label: '⚡ LIGHTNING FAST', xp: 25 };
+        return { type: 'fast', label: '⚡ LIGHTNING FAST', xp: 5 };
     }
     if (responseTime <= THRESHOLDS.SLOW) {
-        return { type: 'correct', label: '✓ ACCURATE', xp: 15 };
+        return { type: 'correct', label: '✓ ACCURATE', xp: 3 };
     }
-    return { type: 'slow', label: '🐢 GOT IT', xp: 5 };
+    return { type: 'slow', label: '🐢 GOT IT', xp: 1 };
 }

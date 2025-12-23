@@ -1,8 +1,9 @@
 "use server";
 
-import { query, queryOne } from "@/lib/db";
+import { query, queryOne, execute } from "@/lib/db";
 import { auth } from "@/auth";
 import { syncLeagueState } from "@/lib/league-engine";
+import { revalidatePath } from "next/cache";
 
 export async function getLeagueData() {
     const session = await auth();
@@ -14,8 +15,19 @@ export async function getLeagueData() {
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
     const currentLeagueId = user?.current_league_id || 'neon-league';
 
-    const league = queryOne("SELECT * FROM leagues WHERE id = ?", [currentLeagueId]) as any;
-    const participants = query("SELECT * FROM league_participants WHERE league_id = ?", [currentLeagueId]);
+    const league = queryOne("SELECT * FROM leagues where id = ?", [currentLeagueId]) as any;
+    let participants = query("SELECT * FROM league_participants WHERE league_id = ?", [currentLeagueId]);
+
+    // Ensure the user is in the participants list
+    const userInLeague = participants.find(p => p.user_id === userId);
+    if (!userInLeague && user) {
+        execute(
+            "INSERT INTO league_participants (league_id, user_id, name, weekly_xp) VALUES (?, ?, ?, ?)",
+            [currentLeagueId, userId, user.name, 0]
+        );
+        // Refresh participants
+        participants = query("SELECT * FROM league_participants WHERE league_id = ?", [currentLeagueId]);
+    }
 
     // Sort participants by weekly_xp
     const sorted = [...participants].sort((a, b) => b.weekly_xp - a.weekly_xp);

@@ -118,7 +118,7 @@ export async function simulateGhostActivity(progress: number = 0) {
             const randomGhost = ghosts[Math.floor(Math.random() * ghosts.length)];
             // XP gain scales with progress (base 20-100, increases by up to 3x near the end)
             const multiplier = 1 + (progress * 2);
-            const xpGain = Math.floor((Math.random() * 80 + 20) * multiplier);
+            const xpGain = Math.floor((Math.random() * 6 + 2) * multiplier);
 
             execute('INSERT INTO league_participants (league_id, user_id, name, weekly_xp) VALUES (?, ?, ?, ?)', [
                 randomGhost.league_id,
@@ -159,6 +159,31 @@ export async function seedGhostPlayers(targetTierId?: string) {
                 name,
                 startXp
             ]);
+        }
+    }
+}
+
+export async function ensureLeagueParticipation(userId: string, userName: string) {
+    // 1. Check if user is already in a league
+    const existing = queryOne('SELECT * FROM league_participants WHERE user_id = ?', [userId]) as any;
+
+    // 2. If not, add them to their current league (or default Neon)
+    if (!existing) {
+        const user = queryOne('SELECT * FROM users WHERE id = ?', [userId]) as any;
+        const leagueId = user?.current_league_id || 'neon-league';
+        const weeklyXp = 0; // Or calculate from sessions this week? safer to start at 0 if new to league.
+
+        execute('INSERT INTO league_participants (league_id, user_id, name, weekly_xp) VALUES (?, ?, ?, ?)', [
+            leagueId,
+            userId,
+            userName,
+            weeklyXp
+        ]);
+        console.log(`[LEAGUE] Auto-joined ${userName} to ${leagueId}`);
+    } else {
+        // Optional: Update name if changed?
+        if (existing.name !== userName) {
+            execute('UPDATE league_participants SET name = ? WHERE user_id = ?', [userName, userId]);
         }
     }
 }

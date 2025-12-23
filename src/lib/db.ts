@@ -37,7 +37,37 @@ export const loadData = () => {
                 level: 1,
                 coins: 100,
                 current_league_id: 'neon-league',
-                ...u
+                math_tiers: {
+                    addition: 0,
+                    subtraction: 0,
+                    multiplication: 0,
+                    division: 0
+                },
+                ...u,
+                // Ensure math_tiers exists even if ...u overwrites it with nothing (if u comes from old DB)
+                // Actually ...u comes from parsed JSON which MIGHT have math_tiers.
+                // If it doesn't, we want the default.
+                // So...
+            }));
+
+            // Second pass to ensure math_tiers is set if it was missing in the file
+            data.users = data.users.map(u => ({
+                ...u,
+                math_tiers: u.math_tiers || {
+                    addition: 0,
+                    subtraction: 0,
+                    multiplication: 0,
+                    division: 0
+                },
+                equipped_items: u.equipped_items || {
+                    theme: 'default',
+                    particle: 'default',
+                    font: 'default',
+                    sound: 'default',
+                    bgm: 'default',
+                    title: 'default',
+                    frame: 'default'
+                }
             }));
             data.leagues = parsed.leagues || [];
             data.league_participants = parsed.league_participants || [];
@@ -75,6 +105,9 @@ export const saveData = () => {
 // Initial load
 loadData();
 
+// Seed items logic helper
+import { ITEMS } from './items';
+
 /**
  * Executes a query that returns multiple rows.
  */
@@ -103,6 +136,9 @@ export const query = (text: string, params: any[] = []) => {
     if (lowerText.includes('from league_participants')) {
         const leagueId = params[0];
         return data.league_participants.filter(p => p.league_id === leagueId);
+    }
+    if (lowerText.includes('from items')) { // NEW
+        return data.shop_items;
     }
     return [];
 };
@@ -137,6 +173,11 @@ export const queryOne = (text: string, params: any[] = []) => {
         return data.leagues.find(l => l.id === id) || null;
     }
 
+    if (lowerText.includes('select * from items where id = ?')) { // NEW
+        const id = params[0];
+        return data.shop_items.find(i => i.id === id) || null;
+    }
+
     return null;
 };
 
@@ -160,6 +201,21 @@ export const execute = (text: string, params: any[] = []) => {
             total_xp: 0,
             coins: 100,
             current_league_id: 'neon-league',
+            math_tiers: {
+                addition: 0,
+                subtraction: 0,
+                multiplication: 0,
+                division: 0
+            },
+            equipped_items: {
+                theme: 'default',
+                particle: 'default',
+                font: 'default',
+                sound: 'default',
+                bgm: 'default',
+                title: 'default',
+                frame: 'default'
+            },
             created_at: new Date().toISOString()
         });
     }
@@ -176,9 +232,35 @@ export const execute = (text: string, params: any[] = []) => {
                 user.coins = coins;
             } else if (lowerText.includes('current_league_id = ?')) {
                 user.current_league_id = params[0];
+            } else if (lowerText.includes('math_tiers = ?')) {
+                user.math_tiers = params[0];
+            } else if (lowerText.includes('equipped_items = ?')) {
+                user.equipped_items = params[0];
             }
         }
     }
+
+    // UPDATE items (for Admin editing)
+    if (lowerText.includes('update items')) {
+        const id = params[params.length - 1];
+        const item = data.shop_items.find(i => i.id === id);
+        if (item) {
+            if (lowerText.includes('rarity = ?')) {
+                item.rarity = params[0];
+            }
+            if (lowerText.includes('price = ?')) {
+                item.price = params[0]; // Or params[1] depending on SQL structure, but let's assume simple updates
+                // Actually usually execute logic parses the exact SET string. 
+                // We'll simplify: "UPDATE items SET rarity = ?, price = ? WHERE id = ?"
+                // Params: [newRarity, newPrice, id]
+                if (params.length === 3) {
+                    item.rarity = params[0];
+                    item.price = params[1];
+                }
+            }
+        }
+    }
+
 
     // INSERT INTO mastery_stats
     if (lowerText.includes('insert into mastery_stats')) {
@@ -249,6 +331,17 @@ export const initSchema = () => {
             { id: 'void-league', name: 'VOID', min_rank: 4, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
             { id: 'apex-league', name: 'APEX', min_rank: 5, end_time: new Date(Date.now() + 5 * 60000).toISOString() }
         ];
+    }
+
+    // Seed Items if empty
+    if (data.shop_items.length === 0) {
+        // Strip out React icons (they don't serialize well to JSON/DB)
+        // We'll hydrate the icons on the frontend based on ItemType/ID if needed, or store simple string identifiers
+        // Actually ITEMS are just static data in items.ts, we want to migrate them to DB.
+        // We can store everything EXCEPT the icon function.
+        const dbItems = ITEMS.map(({ icon, ...rest }) => rest);
+        data.shop_items = dbItems;
+        console.log(`[DB] Seeded ${data.shop_items.length} items into database.`);
     }
 
     saveData();

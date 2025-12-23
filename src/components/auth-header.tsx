@@ -1,10 +1,12 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { Zap, LogOut, LayoutDashboard } from "lucide-react";
+import { Zap, LogOut, LayoutDashboard, Settings, Moon, Sun, Volume2, VolumeX } from "lucide-react";
 import Link from "next/link";
-import { ThemeToggle } from "./theme-toggle";
-import { SoundToggle } from "./sound-toggle";
+import { useState, useEffect } from "react";
+import { useTheme } from "next-themes";
+import { soundEngine } from "@/lib/sound-engine";
+import { UserAvatar } from "@/components/user-avatar";
 
 interface AuthHeaderProps {
     session?: any;
@@ -13,6 +15,20 @@ interface AuthHeaderProps {
 export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
     const { data: clientSession } = useSession();
     const session = initialSession || clientSession;
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [isMuted, setIsMuted] = useState(true);
+    const { theme, setTheme } = useTheme();
+
+    useEffect(() => {
+        // Initialize mute state from soundEngine
+        setIsMuted(!soundEngine.isEnabled());
+    }, []);
+
+    const toggleMute = () => {
+        const newMutedState = !isMuted;
+        setIsMuted(newMutedState);
+        soundEngine.setEnabled(!newMutedState);
+    };
 
     if (!session) return (
         <nav className="flex items-center justify-between p-6 relative z-50">
@@ -23,8 +39,6 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                 <span className="font-black tracking-tighter text-lg">FLASHMATH</span>
             </Link>
             <div className="flex items-center gap-4">
-                <SoundToggle />
-                <ThemeToggle />
                 <Link href="/auth/login" className="text-sm font-bold uppercase tracking-widest hover:text-primary transition-colors">Login</Link>
             </div>
         </nav>
@@ -51,25 +65,84 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                     </Link>
                 </div>
 
-                <SoundToggle />
-                <ThemeToggle />
-
                 <div className="h-8 w-[1px] bg-white/10 mx-2 hidden md:block" />
 
-                <div className="flex items-center gap-3 pl-2">
-                    <div className="text-right hidden sm:block">
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-primary line-clamp-1">{session.user?.name}</div>
-                        <div className="text-[8px] font-mono text-white/40 uppercase tracking-tighter">LVL {(session.user as any)?.level || 1} • § {(session.user as any)?.coins || 0}</div>
+                {/* User Dropdown */}
+                <div
+                    className="relative"
+                    onMouseEnter={() => setIsDropdownOpen(true)}
+                    onMouseLeave={() => setIsDropdownOpen(false)}
+                >
+                    <div className="flex items-center gap-3 pl-2 cursor-pointer">
+                        <div className="text-right hidden sm:block">
+                            <div className="text-[10px] font-bold uppercase tracking-widest text-primary line-clamp-1">{session.user?.name}</div>
+                            {(() => {
+                                const { ITEMS } = require("@/lib/items");
+                                const titleId = (session.user as any)?.equipped_items?.title;
+                                const titleItem = ITEMS.find((i: any) => i.id === titleId);
+                                if (titleItem && titleId !== 'default') {
+                                    return <div className="text-[8px] font-black uppercase tracking-widest text-accent mb-0.5">{titleItem.assetValue}</div>
+                                }
+                                return null;
+                            })()}
+                            <div className="text-[8px] font-mono text-white/40 uppercase tracking-tighter">LVL {(session.user as any)?.level || 1} • § {(session.user as any)?.coins || 0}</div>
+                        </div>
+                        <UserAvatar user={session.user} size="sm" />
                     </div>
-                    <button
-                        onClick={async () => {
-                            await signOut({ redirect: false });
-                            window.location.href = "/";
-                        }}
-                        className="p-2 rounded-lg bg-white/5 border border-white/10 hover:bg-red-500/10 hover:text-red-500 transition-all"
-                    >
-                        <LogOut size={18} />
-                    </button>
+
+                    {/* Dropdown Menu */}
+                    {isDropdownOpen && (
+                        <div className="absolute right-0 top-full pt-2">
+                            <div className="w-56 bg-black/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+                                {/* Theme Toggle */}
+                                <button
+                                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
+                                >
+                                    {theme === "dark" ? <Moon size={16} /> : <Sun size={16} />}
+                                    <span className="text-sm font-bold uppercase tracking-widest">
+                                        {theme === "dark" ? "Dark" : "Light"} Mode
+                                    </span>
+                                </button>
+
+                                {/* Sound Toggle */}
+                                <button
+                                    onClick={toggleMute}
+                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
+                                >
+                                    {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                                    <span className="text-sm font-bold uppercase tracking-widest">
+                                        Sound {isMuted ? "Off" : "On"}
+                                    </span>
+                                </button>
+
+                                <div className="h-[1px] bg-white/10 my-1" />
+
+                                {/* Settings Link */}
+                                <Link
+                                    href="/settings"
+                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                                >
+                                    <Settings size={16} />
+                                    <span className="text-sm font-bold uppercase tracking-widest">Settings</span>
+                                </Link>
+
+                                <div className="h-[1px] bg-white/10 my-1" />
+
+                                {/* Logout */}
+                                <button
+                                    onClick={async () => {
+                                        await signOut({ redirect: false });
+                                        window.location.href = "/";
+                                    }}
+                                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors text-left"
+                                >
+                                    <LogOut size={16} />
+                                    <span className="text-sm font-bold uppercase tracking-widest">Logout</span>
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
         </nav>

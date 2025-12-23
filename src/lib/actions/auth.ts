@@ -45,8 +45,8 @@ export async function registerUser(formData: FormData) {
         if (error instanceof AuthError) {
             return { error: "Registration successful, but login failed." };
         }
-        console.error("Registration error:", error);
-        return { error: "Internal server error" };
+        // Rethrow Next.js redirect errors (success)
+        throw error;
     }
 }
 
