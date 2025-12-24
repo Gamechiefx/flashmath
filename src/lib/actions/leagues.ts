@@ -34,26 +34,60 @@ export async function getLeagueData() {
     // Sort participants by weekly_xp
     const sorted = [...participants].sort((a, b) => b.weekly_xp - a.weekly_xp);
 
-    // Enrich with Titles
+    // Enrich with Titles and Frames
     const titleItems = ITEMS.filter(i => i.type === ItemType.TITLE);
+    const frameItems = ITEMS.filter(i => i.type === ItemType.FRAME);
+
+    // Fetch real users details for accurate frames
+    const realUserIds = sorted.filter(p => !p.user_id.startsWith('ghost-')).map(p => p.user_id);
+    let realUsersMap: Record<string, any> = {};
+
+    if (realUserIds.length > 0) {
+        // Safe parameter expansion
+        const placeholders = realUserIds.map(() => '?').join(',');
+        const users = query(`SELECT id, equipped_items FROM users WHERE id IN (${placeholders})`, realUserIds);
+        users.forEach((u: any) => {
+            realUsersMap[u.id] = u;
+        });
+    }
 
     const enrichedParticipants = sorted.map(p => {
         let titleId = null;
+        let frameId = 'default';
 
-        if (p.user_id === userId) {
-            titleId = user.equipped_items?.title || null;
+        if (p.user_id === userId || !p.user_id.startsWith('ghost-')) {
+            // Real User
+            const uData = p.user_id === userId ? user : realUsersMap[p.user_id];
+            if (uData && uData.equipped_items) {
+                // Parse if string (SQLite) or object
+                const equipped = typeof uData.equipped_items === 'string'
+                    ? JSON.parse(uData.equipped_items)
+                    : uData.equipped_items;
+
+                titleId = equipped.title || null;
+                frameId = equipped.frame || 'default';
+            }
         } else if (p.user_id.startsWith('ghost-')) {
-            // Deterministic random title for ghosts
+            // Deterministic random decoration for ghosts
             const hash = p.user_id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
-            if (hash % 3 === 0) { // Only give titles to 1/3 of bots to make them feel special
+
+            // Titles for 1/3
+            if (hash % 3 === 0) {
                 titleId = titleItems[hash % titleItems.length].id;
+            }
+
+            // Frames for 1/2
+            if (hash % 2 === 0) {
+                frameId = frameItems[hash % frameItems.length].id;
             }
         }
 
         const titleItem = titleId ? ITEMS.find(i => i.id === titleId) : null;
+
         return {
             ...p,
-            titleName: titleItem ? titleItem.name : null
+            titleName: titleItem ? titleItem.name : null,
+            equippedFrame: frameId
         };
     });
 

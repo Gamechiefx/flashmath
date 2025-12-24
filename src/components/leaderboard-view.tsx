@@ -5,6 +5,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { motion } from "framer-motion";
 import { Trophy, Timer, ChevronUp, ChevronDown, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { UserAvatar } from "@/components/user-avatar";
 
 interface LeaderboardViewProps {
     data: any;
@@ -84,12 +85,14 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
                                     </div>
 
                                     <div className="flex items-center gap-3">
-                                        <div className={cn(
-                                            "w-8 h-8 rounded-full flex items-center justify-center",
-                                            p.user_id.startsWith('ghost-') ? "bg-accent/10 text-accent" : "bg-primary/10 text-primary"
-                                        )}>
-                                            <User size={16} />
-                                        </div>
+                                        <UserAvatar
+                                            user={{
+                                                name: p.name,
+                                                equipped_items: { frame: p.equippedFrame }
+                                            }}
+                                            size="sm"
+                                            className="w-10 h-10"
+                                        />
                                         <div>
                                             <div className={cn("text-sm font-bold uppercase tracking-tight", isUser && "text-primary")}>
                                                 {p.name} {isUser && "(YOU)"}

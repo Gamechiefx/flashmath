@@ -79,6 +79,7 @@ export const ITEMS: Item[] = [
         type: ItemType.THEME,
         rarity: Rarity.LEGENDARY,
         price: 50000,
+        assetValue: 'theme-deep-space',
         icon: Hexagon
     },
     {

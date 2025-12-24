@@ -31,7 +31,10 @@ export function GlobalThemeManager({ equippedItems }: GlobalThemeManagerProps) {
         const themeItem = ITEMS.find(i => i.id === themeId);
 
         // Reset classes
-        root.classList.remove('theme-caution', 'theme-matrix', 'theme-synthwave', 'theme-deep-space');
+        root.classList.remove(
+            'theme-caution', 'theme-matrix', 'theme-synthwave', 'theme-deep-space',
+            'theme-red-alert', 'theme-ice-cold', 'theme-sunset-drive'
+        );
 
         if (themeItem && themeItem.type === ItemType.THEME) {
             if (themeItem.assetValue !== 'default') {

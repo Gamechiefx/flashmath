@@ -100,6 +100,14 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
         const symbols = ["+", "-", "×", "÷", "=", "√", "%"];
         const symbol = symbols[Math.floor(Math.random() * symbols.length)];
 
+        // Get Theme Color
+        let color = '#fbbf24'; // Fallback Amber
+        if (typeof window !== 'undefined') {
+            const style = getComputedStyle(document.documentElement);
+            const primary = style.getPropertyValue('--primary').trim();
+            if (primary) color = primary;
+        }
+
         particles.current.push({
             type: 'text_boom',
             text: symbol,
@@ -109,7 +117,7 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
             vy: (Math.random() - 0.5) * 6 - 3,
             life: 1.0,
             angle: (Math.random() - 0.5) * 1, // Random rotation
-            color: '#fbbf24', // Amber
+            color: color,
             size: 32 + Math.random() * 16
         });
     };

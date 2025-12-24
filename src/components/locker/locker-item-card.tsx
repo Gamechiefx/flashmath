@@ -35,7 +35,7 @@ export function LockerItemCard({ item, isEquipped, type }: LockerItemCardProps) 
 
     return (
         <GlassCard
-            className={`p-4 relative group hover:border-white/20 transition-colors ${isEquipped ? 'border-accent shadow-[0_0_20px_rgba(34,211,238,0.2)]' : ''}`}
+            className={`p-3 relative group hover:border-white/20 transition-colors ${isEquipped ? 'border-accent shadow-[0_0_20px_rgba(34,211,238,0.2)]' : ''}`}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
         >

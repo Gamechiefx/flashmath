@@ -67,12 +67,23 @@ export default async function LockerPage() {
                         const itemsInCat = ownedItems.filter(i => i.type === cat);
                         if (itemsInCat.length === 0) return null;
 
+                        // Sort: Common -> Legendary
+                        const rarityOrder = {
+                            'common': 1,
+                            'uncommon': 2,
+                            'rare': 3,
+                            'epic': 4,
+                            'legendary': 5
+                        } as Record<string, number>;
+
+                        itemsInCat.sort((a, b) => (rarityOrder[a.rarity] || 0) - (rarityOrder[b.rarity] || 0));
+
                         return (
                             <div key={cat} className="space-y-4">
                                 <h3 className="text-xl font-bold uppercase tracking-wider text-white border-b border-white/10 pb-2">
                                     {cat}s
                                 </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
 
 
                                     {itemsInCat.map(item => {
