@@ -5,6 +5,7 @@ import { Item, ItemType, ITEMS } from "@/lib/items";
 
 interface GlobalThemeManagerProps {
     equippedItems: Record<string, string>;
+    availableItems?: Item[];
 }
 
 import { soundEngine } from "@/lib/sound-engine";
@@ -15,7 +16,7 @@ import { Starfield } from "./effects/starfield";
 import { useItemPreview } from "./item-preview-provider";
 import { useAudioSettings } from "./audio-settings-provider";
 
-export function GlobalThemeManager({ equippedItems }: GlobalThemeManagerProps) {
+export function GlobalThemeManager({ equippedItems, availableItems = ITEMS }: GlobalThemeManagerProps) {
     const { sfxVolume } = useAudioSettings();
 
     // Sync SFX Volume
@@ -28,7 +29,7 @@ export function GlobalThemeManager({ equippedItems }: GlobalThemeManagerProps) {
 
         // Apply Theme
         const themeId = equippedItems[ItemType.THEME];
-        const themeItem = ITEMS.find(i => i.id === themeId);
+        const themeItem = availableItems.find(i => i.id === themeId);
 
         // Reset classes
         root.classList.remove(
@@ -44,7 +45,7 @@ export function GlobalThemeManager({ equippedItems }: GlobalThemeManagerProps) {
 
         // Apply Font
         const fontId = equippedItems[ItemType.FONT];
-        const fontItem = ITEMS.find(i => i.id === fontId);
+        const fontItem = availableItems.find(i => i.id === fontId);
         if (fontItem && fontItem.type === ItemType.FONT) {
             root.style.setProperty('--font-primary', fontItem.assetValue);
 
@@ -73,7 +74,7 @@ export function GlobalThemeManager({ equippedItems }: GlobalThemeManagerProps) {
 
         // Apply Sound Pack
         const soundId = equippedItems[ItemType.SOUND];
-        const soundItem = ITEMS.find(i => i.id === soundId);
+        const soundItem = availableItems.find(i => i.id === soundId);
         if (soundItem && soundItem.type === ItemType.SOUND) {
             soundEngine.setPack(soundItem.assetValue);
         }
@@ -90,12 +91,12 @@ export function GlobalThemeManager({ equippedItems }: GlobalThemeManagerProps) {
 
     // BGM Asset Path
     const bgmId = equippedItems[ItemType.BGM];
-    const bgmItem = ITEMS.find(i => i.id === bgmId);
+    const bgmItem = availableItems.find(i => i.id === bgmId);
     let bgmSrc = (bgmItem && bgmItem.type === ItemType.BGM) ? bgmItem.assetValue : 'default';
 
     // Sound Pack
     const soundId = equippedItems[ItemType.SOUND];
-    const soundItem = ITEMS.find(i => i.id === soundId);
+    const soundItem = availableItems.find(i => i.id === soundId);
     let soundPack = (soundItem && soundItem.type === ItemType.SOUND) ? soundItem.assetValue : 'default';
 
     // PREVIEW OVERRIDES

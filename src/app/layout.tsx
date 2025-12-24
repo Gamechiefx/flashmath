@@ -25,13 +25,13 @@ export const metadata: Metadata = {
 };
 
 import { auth } from "@/auth";
-import { queryOne } from "@/lib/db";
+import { loadData, queryOne } from "@/lib/db";
+import { ITEMS } from "@/lib/items";
 import { GlobalThemeManager } from "@/components/global-theme-manager";
 import { AuthProvider } from "@/components/auth-provider";
 import { ItemPreviewProvider } from "@/components/item-preview-provider";
 import { AudioSettingsProvider } from "@/components/audio-settings-provider";
 import { SessionGuard } from "@/components/session-guard";
-
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -39,6 +39,9 @@ export default async function RootLayout({
 }>) {
   const session = await auth();
   let equippedItems = {};
+
+  const db = loadData();
+  const availableItems = (db.shop_items && db.shop_items.length > 0) ? db.shop_items : ITEMS;
 
   if (session?.user) {
     const user = queryOne("SELECT * FROM users WHERE id = ?", [(session.user as any).id]) as any;
@@ -50,9 +53,6 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`}>
-
-
-
         <AuthProvider session={session}>
           <AudioSettingsProvider>
             <ItemPreviewProvider>
@@ -62,8 +62,7 @@ export default async function RootLayout({
                 enableSystem
                 disableTransitionOnChange
               >
-                <GlobalThemeManager equippedItems={equippedItems} />
-                {/* <SessionGuard /> */}
+                <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
                 {children}
               </ThemeProvider>
             </ItemPreviewProvider>

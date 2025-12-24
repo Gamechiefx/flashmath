@@ -118,8 +118,11 @@ export async function getDashboardStats() {
     const titleId = (user?.equipped_items as any)?.title;
     let equippedTitle = "";
     if (titleId && titleId !== 'default') {
-        const { ITEMS } = require("@/lib/items"); // Dynamic require to avoid circular dependency if any (lib/items is safe though)
-        const item = ITEMS.find((i: any) => i.id === titleId);
+        const { ITEMS } = require("@/lib/items");
+        // Prefer DB items if available to reflect dynamic changes
+        const dbShopItems = db.shop_items as any[] || [];
+        const item = dbShopItems.find((i: any) => i.id === titleId) || ITEMS.find((i: any) => i.id === titleId);
+
         if (item) equippedTitle = item.assetValue;
     }
 

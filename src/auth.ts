@@ -55,35 +55,40 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return token;
         },
         async session({ session, token }) {
-            if (token && session.user) {
-                // (session.user as any).id = token.id; // Moved below logging usually
+            try {
+                if (token && session.user) {
+                    // (session.user as any).id = token.id; // Moved below logging usually
 
-                console.log("[SESSION] Processing session for token:", token.id);
-                // Get freshest data from DB for header display
-                const user = queryOne("SELECT * FROM users WHERE id = ?", [token.id]) as any;
+                    console.log("[SESSION] Processing session for token:", token.id);
+                    // Get freshest data from DB for header display
+                    const user = queryOne("SELECT * FROM users WHERE id = ?", [token.id]) as any;
 
-                if (user) {
-                    console.log("[SESSION] Found user:", user.name, "BannedUntil:", user.banned_until);
-                    // SESSION KICK CHECK
-                    if (user.banned_until) {
-                        const banDate = new Date(user.banned_until);
-                        if (banDate > new Date()) {
-                            console.log("[AUTH] Session invalidated due to ban:", user.banned_until);
-                            return null as any; // Force logout
+                    if (user) {
+                        console.log("[SESSION] Found user:", user.name, "BannedUntil:", user.banned_until);
+                        // SESSION KICK CHECK
+                        if (user.banned_until) {
+                            const banDate = new Date(user.banned_until);
+                            if (banDate > new Date()) {
+                                console.log("[AUTH] Session invalidated due to ban:", user.banned_until);
+                                return null as any; // Force logout
+                            }
                         }
-                    }
 
-                    (session.user as any).id = user.id; // Ensure ID is set from DB
-                    (session.user as any).level = user.level;
-                    (session.user as any).coins = user.coins;
-                    (session.user as any).equipped_items = user.equipped_items;
-                } else {
-                    console.log("[SESSION] User not found for token:", token.id, "Invalidating.");
-                    // User was deleted/not found - invalidate session
-                    return null as any;
+                        (session.user as any).id = user.id; // Ensure ID is set from DB
+                        (session.user as any).level = user.level;
+                        (session.user as any).coins = user.coins;
+                        (session.user as any).equipped_items = user.equipped_items;
+                    } else {
+                        console.log("[SESSION] User not found for token:", token.id, "Invalidating.");
+                        // User was deleted/not found - invalidate session
+                        return null as any;
+                    }
                 }
+                return session;
+            } catch (error) {
+                console.error("[SESSION CALLBACK ERROR]", error);
+                return session; // Return potentially stale session rather than crashing
             }
-            return session;
         },
     },
 });

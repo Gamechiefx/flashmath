@@ -1,6 +1,6 @@
 "use server";
 
-import { query, queryOne, execute } from "@/lib/db";
+import { query, queryOne, execute, loadData } from "@/lib/db";
 import { auth } from "@/auth";
 import { syncLeagueState } from "@/lib/league-engine";
 import { revalidatePath } from "next/cache";
@@ -35,8 +35,12 @@ export async function getLeagueData() {
     const sorted = [...participants].sort((a, b) => b.weekly_xp - a.weekly_xp);
 
     // Enrich with Titles and Frames
-    const titleItems = ITEMS.filter(i => i.type === ItemType.TITLE);
-    const frameItems = ITEMS.filter(i => i.type === ItemType.FRAME);
+    // Enrich with Titles and Frames
+    const db = loadData();
+    const sourceItems = (db.shop_items && db.shop_items.length > 0) ? db.shop_items : ITEMS; // Use DB items if available
+
+    const titleItems = sourceItems.filter((i: any) => i.type === ItemType.TITLE);
+    const frameItems = sourceItems.filter((i: any) => i.type === ItemType.FRAME);
 
     // Fetch real users details for accurate frames
     const realUserIds = sorted.filter(p => !p.user_id.startsWith('ghost-')).map(p => p.user_id);
@@ -82,7 +86,7 @@ export async function getLeagueData() {
             }
         }
 
-        const titleItem = titleId ? ITEMS.find(i => i.id === titleId) : null;
+        const titleItem = titleId ? sourceItems.find((i: any) => i.id === titleId) : null;
 
         return {
             ...p,

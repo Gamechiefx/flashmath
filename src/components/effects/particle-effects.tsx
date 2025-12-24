@@ -77,7 +77,8 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
     };
 
     const spawnBinary = () => {
-        const { x, y, width } = getTargetPosition();
+        const { x, y, width, height } = getTargetPosition();
+        // console.log("Spawning binary", { x, y, height });
         const spreadX = width ? width / 2 : 50;
 
         for (let i = 0; i < 4; i++) {
@@ -85,11 +86,11 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
                 type: 'binary',
                 text: Math.random() > 0.5 ? '1' : '0',
                 x: x + (Math.random() - 0.5) * spreadX,
-                y: y,
-                vy: 2 + Math.random() * 3, // Falling down
-                life: 1.0,
+                y: y - (height ? height / 2 : 0) - 40, // Spawn 40px above the TOP edge
+                vy: 4 + Math.random() * 4, // Faster fall
+                life: 1.2,
                 color: '#22c55e', // Green-500
-                size: 14 + Math.random() * 6
+                size: 20 + Math.random() * 12 // Bigger text
             });
         }
     };
@@ -147,17 +148,22 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
         const allowedPaths = ['/practice', '/placement', '/shop', '/locker'];
         if (effectType === 'default' || !allowedPaths.some(p => pathname.includes(p))) return;
 
-        const handleInput = (e: Event) => {
+        const handleInput = (e: KeyboardEvent) => {
             // Check keydown event for actual typing
             if (effectType.includes('sparks')) spawnFragments();
             if (effectType.includes('glitch')) spawnGlitch();
-            if (effectType.includes('binary')) spawnBinary();
+
+            // Only spawn binary numbers if typing numbers
+            if (effectType.includes('binary') && /^[0-9]$/.test(e.key)) {
+                spawnBinary();
+            }
+
             if (effectType.includes('explosion')) spawnExplosion();
             if (effectType.includes('vortex')) spawnVortex();
         };
 
-        window.addEventListener('keydown', handleInput);
-        return () => window.removeEventListener('keydown', handleInput);
+        window.addEventListener('keydown', handleInput as any);
+        return () => window.removeEventListener('keydown', handleInput as any);
     }, [effectType, pathname, previewRect]);
 
     // 2. ANIMATION LOOP
