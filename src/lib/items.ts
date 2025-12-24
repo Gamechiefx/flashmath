@@ -131,6 +131,7 @@ export const ITEMS: Item[] = [
         type: ItemType.PARTICLE,
         rarity: Rarity.LEGENDARY,
         price: 35000,
+        assetValue: 'particle-glitch',
         icon: Zap
     },
     {
@@ -204,6 +205,7 @@ export const ITEMS: Item[] = [
         type: ItemType.SOUND,
         rarity: Rarity.EPIC,
         price: 9000,
+        assetValue: '/sounds/scifi.mp3',
         icon: Monitor
     },
     {

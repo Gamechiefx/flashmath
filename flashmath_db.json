@@ -2,7 +2,7 @@
   "users": [
     {
       "level": 2,
-      "coins": 5001334,
+      "coins": 5001368,
       "current_league_id": "neon-league",
       "math_tiers": {
         "addition": 3,
@@ -15,16 +15,16 @@
       "email": "math@gmail.com",
       "password_hash": "$2b$10$.LlY.WdEK1FJGbwMAMw4I.oVUY.f9hZ2MUyoSmuBK8C.U6vnJYA1i",
       "theme_preferences": "dark",
-      "total_xp": 1169,
+      "total_xp": 1237,
       "created_at": "2025-12-23T17:38:05.872Z",
       "equipped_items": {
-        "theme": "default",
+        "theme": "theme_sunset_drive",
         "particle": "particle_binary",
         "font": "default",
-        "sound": "sound_typewriter",
+        "sound": "sound_8bit",
         "bgm": "default",
-        "title": "title_wizard",
-        "frame": "frame_wanted"
+        "title": "title_accuracy_ace",
+        "frame": "frame_hologram"
       },
       "is_banned": false,
       "banned_until": null
@@ -128,9 +128,9 @@
       "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
       "operation": "Multiplication",
       "fact": "4 × 4",
-      "last_response_time": 2057,
-      "mastery_level": 0,
-      "updated_at": "2025-12-23T22:01:18.408Z"
+      "last_response_time": 1346,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.575Z"
     },
     {
       "id": 1766527278408.285,
@@ -698,6 +698,159 @@
       "last_response_time": 1070,
       "mastery_level": 1,
       "updated_at": "2025-12-24T21:13:23.229Z"
+    },
+    {
+      "id": 1766618949574.8315,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "7 × 5",
+      "last_response_time": 1282,
+      "mastery_level": 2,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949574.2273,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "5 × 9",
+      "last_response_time": 989,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.574Z"
+    },
+    {
+      "id": 1766618949574.6296,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "7 × 2",
+      "last_response_time": 1008,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.574Z"
+    },
+    {
+      "id": 1766618949574.5498,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "5 × 8",
+      "last_response_time": 935,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.574Z"
+    },
+    {
+      "id": 1766618949574.3123,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "9 × 7",
+      "last_response_time": 1542,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949574.3406,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "7 × 6",
+      "last_response_time": 2434,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T23:29:09.574Z"
+    },
+    {
+      "id": 1766618949575.8496,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "8 × 2",
+      "last_response_time": 1380,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.7954,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "24 × 8",
+      "last_response_time": 8594,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.1292,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "5 × 3",
+      "last_response_time": 892,
+      "mastery_level": 2,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.0376,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "10 × 7",
+      "last_response_time": 1411,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.1897,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "8 × 6",
+      "last_response_time": 8393,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.5886,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "8 × 5",
+      "last_response_time": 2205,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.8518,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "14 × 6",
+      "last_response_time": 3546,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.6008,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "6 × 7",
+      "last_response_time": 2075,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.514,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "11 × 3",
+      "last_response_time": 1098,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.4946,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "5 × 2",
+      "last_response_time": 984,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T23:29:09.575Z"
+    },
+    {
+      "id": 1766618949575.0461,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "21 × 7",
+      "last_response_time": 2876,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T23:29:09.575Z"
     }
   ],
   "sessions": [
@@ -830,6 +983,16 @@
       "avg_speed": 0,
       "xp_earned": 0,
       "created_at": "2025-12-24T22:55:35.787Z"
+    },
+    {
+      "id": 1766618949432,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "correct_count": 21,
+      "total_count": 23,
+      "avg_speed": 2.3787619047619044,
+      "xp_earned": 68,
+      "created_at": "2025-12-24T23:29:09.433Z"
     }
   ],
   "leagues": [
@@ -837,31 +1000,31 @@
       "id": "neon-league",
       "name": "NEON",
       "min_rank": 1,
-      "end_time": "2025-12-24T22:57:29.412Z"
+      "end_time": "2025-12-24T23:32:09.579Z"
     },
     {
       "id": "cobalt-league",
       "name": "COBALT",
       "min_rank": 2,
-      "end_time": "2025-12-24T22:57:29.412Z"
+      "end_time": "2025-12-24T23:32:09.579Z"
     },
     {
       "id": "plasma-league",
       "name": "PLASMA",
       "min_rank": 3,
-      "end_time": "2025-12-24T22:57:29.412Z"
+      "end_time": "2025-12-24T23:32:09.579Z"
     },
     {
       "id": "void-league",
       "name": "VOID",
       "min_rank": 4,
-      "end_time": "2025-12-24T22:57:29.412Z"
+      "end_time": "2025-12-24T23:32:09.579Z"
     },
     {
       "id": "apex-league",
       "name": "APEX",
       "min_rank": 5,
-      "end_time": "2025-12-24T22:57:29.412Z"
+      "end_time": "2025-12-24T23:32:09.579Z"
     }
   ],
   "league_participants": [
@@ -869,157 +1032,187 @@
       "league_id": "neon-league",
       "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
       "name": "Mathlete",
-      "weekly_xp": 0
+      "weekly_xp": 68
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-649ca1bc-e824-4963-a789-b38ef3406f6c",
-      "name": "VoidRunner#864",
-      "weekly_xp": 19
+      "user_id": "ghost-b2aebc10-ffdc-4332-9a6c-81176ce64279",
+      "name": "VoidRunner#877",
+      "weekly_xp": 29
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-97c68ee6-b980-4834-a497-0cdcfa9c84cc",
-      "name": "DeltaBot#961",
-      "weekly_xp": 37
+      "user_id": "ghost-cf7b9058-9fb7-4ea3-936b-31609759ef3f",
+      "name": "CyberBlade#438",
+      "weekly_xp": 36
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-283c34fa-7845-4db5-9308-4f7cd6939393",
-      "name": "Zenith#884",
-      "weekly_xp": 57
+      "user_id": "ghost-9d8cd576-23f2-4d21-a049-c30a84399c25",
+      "name": "DeltaBot#253",
+      "weekly_xp": 96
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-8cb51375-2b9e-4d98-91b3-74459794ba63",
-      "name": "CircuitLink#594",
+      "user_id": "ghost-383f8d49-a37c-43b1-b1ca-c9265da93130",
+      "name": "VoidRunner#792",
+      "weekly_xp": 70
+    },
+    {
+      "league_id": "neon-league",
+      "user_id": "ghost-9f8bc673-b4b9-4e1d-a1d7-2517dbcd4251",
+      "name": "DeltaBot#568",
+      "weekly_xp": 95
+    },
+    {
+      "league_id": "neon-league",
+      "user_id": "ghost-20b07983-d512-4766-9be7-67a1da24df5d",
+      "name": "CircuitLink#32",
+      "weekly_xp": 82
+    },
+    {
+      "league_id": "cobalt-league",
+      "user_id": "ghost-fe356915-d53e-4de5-8bba-83a2554bc840",
+      "name": "DeltaBot#811",
+      "weekly_xp": 31
+    },
+    {
+      "league_id": "cobalt-league",
+      "user_id": "ghost-163d8619-3276-480c-94c0-6835722fb9b9",
+      "name": "Zenith#574",
+      "weekly_xp": 84
+    },
+    {
+      "league_id": "cobalt-league",
+      "user_id": "ghost-e00e9f8d-2924-4c5c-b0b0-646e59a660f5",
+      "name": "CircuitLink#938",
+      "weekly_xp": 3
+    },
+    {
+      "league_id": "cobalt-league",
+      "user_id": "ghost-7e0a2f84-26d6-47ce-abec-4b6edeac3eac",
+      "name": "Echo#405",
+      "weekly_xp": 87
+    },
+    {
+      "league_id": "cobalt-league",
+      "user_id": "ghost-15d74b8a-fbb6-459b-9815-81728849fea5",
+      "name": "VoidRunner#563",
       "weekly_xp": 34
     },
     {
-      "league_id": "neon-league",
-      "user_id": "ghost-e92a5b09-87fc-49c7-9557-b97eaeccce65",
-      "name": "CircuitLink#580",
-      "weekly_xp": 0
-    },
-    {
-      "league_id": "neon-league",
-      "user_id": "ghost-9b126c35-7bad-48f8-b9c7-0a47d7f6dac1",
-      "name": "Zenith#203",
-      "weekly_xp": 32
-    },
-    {
       "league_id": "cobalt-league",
-      "user_id": "ghost-278d0513-8cdc-42cc-b5e0-26655a91e64a",
-      "name": "Quantum#272",
-      "weekly_xp": 64
+      "user_id": "ghost-531cb21f-b200-4621-8a12-89c24660c4ba",
+      "name": "NeoMath#737",
+      "weekly_xp": 2
     },
     {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-ea9d8325-b7c1-4df6-b333-660d8223c939",
-      "name": "DeltaBot#139",
-      "weekly_xp": 21
+      "league_id": "plasma-league",
+      "user_id": "ghost-0aabfe9d-7bc6-4895-9854-7692ad4e838c",
+      "name": "CircuitLink#915",
+      "weekly_xp": 12
     },
     {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-41346a95-8f41-4aed-a559-d9d90ffe8188",
-      "name": "Echo#280",
-      "weekly_xp": 65
+      "league_id": "plasma-league",
+      "user_id": "ghost-8ba6b18c-6779-4460-870d-6b7f6ca6fdc9",
+      "name": "CyberBlade#733",
+      "weekly_xp": 93
     },
     {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-43b14ea2-7084-4be2-af27-9238b5f81496",
-      "name": "Zenith#450",
-      "weekly_xp": 41
+      "league_id": "plasma-league",
+      "user_id": "ghost-090822a4-de6f-4153-bcf6-ba9e26ce6265",
+      "name": "Quantum#436",
+      "weekly_xp": 74
     },
     {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-1e876cde-17c5-4d8d-a054-8ea759a814ff",
-      "name": "Quantum#684",
-      "weekly_xp": 63
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-07d394ab-64df-4c75-8960-4f914a78171d",
-      "name": "CircuitLink#113",
+      "league_id": "plasma-league",
+      "user_id": "ghost-ba925c16-816c-4bec-b42a-05cde04dd640",
+      "name": "Echo#113",
       "weekly_xp": 28
     },
     {
       "league_id": "plasma-league",
-      "user_id": "ghost-3bb0fe71-3dd0-4c31-8a98-5c2be66d3548",
-      "name": "DeltaBot#212",
-      "weekly_xp": 27
+      "user_id": "ghost-60970f3a-344c-4d35-b44a-21ebbfab5202",
+      "name": "DeltaBot#457",
+      "weekly_xp": 57
     },
     {
       "league_id": "plasma-league",
-      "user_id": "ghost-51b58370-93ef-446a-af40-1c1f432638c1",
-      "name": "CyberBlade#481",
-      "weekly_xp": 90
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-8dc9562a-3780-4930-b996-12cafabb9049",
-      "name": "NeoMath#519",
-      "weekly_xp": 22
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-dd7f368c-2735-47ba-964b-9d47b069d61f",
-      "name": "NeoMath#289",
-      "weekly_xp": 11
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-8788cfd2-a267-4c3d-abe5-68dcc0f171de",
-      "name": "NeoMath#114",
-      "weekly_xp": 36
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-88da2e47-1be4-4959-8455-6e8f73880527",
-      "name": "VoidRunner#677",
-      "weekly_xp": 81
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-f44dba59-b49d-48a0-9fc7-3bf6c10d86ca",
-      "name": "DeltaBot#823",
+      "user_id": "ghost-da904dd1-127c-4d5d-9b51-05aa3ea87125",
+      "name": "DeltaBot#246",
       "weekly_xp": 62
     },
     {
       "league_id": "void-league",
-      "user_id": "ghost-0a263e54-0866-49c2-86b5-73a07edeb223",
-      "name": "DeltaBot#541",
-      "weekly_xp": 35
+      "user_id": "ghost-c2ad6c32-ebad-42a1-ab20-fb8ff255938a",
+      "name": "Zenith#955",
+      "weekly_xp": 11
     },
     {
       "league_id": "void-league",
-      "user_id": "ghost-cc45b347-23c1-4ec0-a6da-966f7bf6245e",
-      "name": "Zenith#784",
-      "weekly_xp": 8
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-58226af9-00dd-4275-aec8-4a2be064713a",
-      "name": "DeltaBot#689",
-      "weekly_xp": 23
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-4c7ce6c7-8a3d-47f0-b58f-5ed4cb4c1054",
-      "name": "CyberBlade#609",
-      "weekly_xp": 25
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-c39eb1bf-7ec4-460b-8718-093066392fd5",
-      "name": "Quantum#138",
+      "user_id": "ghost-49e4fae5-cd9f-407c-be3e-ff44f9ae4525",
+      "name": "CircuitLink#729",
       "weekly_xp": 83
     },
     {
+      "league_id": "void-league",
+      "user_id": "ghost-efcad012-1899-449b-a0d2-25a2166316c0",
+      "name": "DeltaBot#280",
+      "weekly_xp": 86
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-c05ad96d-9b91-4094-b858-e455d52b1786",
+      "name": "Echo#679",
+      "weekly_xp": 27
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-ed8a08eb-c30e-49b0-956a-540a47adaef3",
+      "name": "Quantum#183",
+      "weekly_xp": 36
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-97be8152-6264-4551-aa3d-c7b540fc4339",
+      "name": "Quantum#574",
+      "weekly_xp": 10
+    },
+    {
       "league_id": "apex-league",
-      "user_id": "ghost-66d153f4-fe96-4327-9d27-98be7a7a2a00",
-      "name": "DeltaBot#949",
-      "weekly_xp": 25
+      "user_id": "ghost-1b27a92a-3718-43a4-8e20-81cf3ebdd3d1",
+      "name": "CircuitLink#580",
+      "weekly_xp": 5
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-6562fdf0-5e74-45f0-8e61-60ffd4d029c3",
+      "name": "VoidRunner#791",
+      "weekly_xp": 55
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-e74394fa-30c7-4120-a53b-5082b10b7147",
+      "name": "DeltaBot#440",
+      "weekly_xp": 51
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-8e330f27-9f8c-4b96-a768-15d459d4578b",
+      "name": "CircuitLink#121",
+      "weekly_xp": 4
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-0eaaa433-6c9a-42d0-a1e9-093e23464ee3",
+      "name": "DeltaBot#439",
+      "weekly_xp": 55
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-ac514a7d-6390-437f-95e7-9c52830320f1",
+      "name": "Zenith#41",
+      "weekly_xp": 85
     }
   ],
   "shop_items": [
@@ -1591,6 +1784,12 @@
       "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
       "item_id": "particle_binary",
       "acquired_at": "2025-12-24T22:40:06.971Z"
+    },
+    {
+      "id": 1766618582585.167,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "item_id": "theme_sunset_drive",
+      "acquired_at": "2025-12-24T23:23:02.585Z"
     }
   ]
 }
