@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FlashMath ⚡
 
-## Getting Started
+> **Master Math at the Speed of Light.**
 
-First, run the development server:
+FlashMath is a futuristic, high-velocity arithmetic training platform designed to make mental math addictive. Transporting users into a cyberpunk universe, it combines rigorous drill practice with RPG-like progression, competitive leagues, and deep customization.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+![Dashboard Preview](./dashboard-preview.png) *Add a screenshot of your dashboard here*
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 Key Features
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 🎮 Gamified Training
+- **Speed Drills**: Race against the clock in Addition, Subtraction, Multiplication, and Division.
+- **Adaptive Difficulty**: Progression system that adapts to your skill level (Tiers I - IV).
+- **Instant Feedback**: Visual and auditory cues for correct/incorrect answers to reinforce learning.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 🏆 Competitive Leagues
+- **Weekly Leaderboards**: Compete against other "Pilots" in a 5-tier league system (Neon -> Cobalt -> Plasma -> Void -> Apex).
+- **Promotion & Relegation**: Fight to stay in the promotion zone or risk falling back.
+- **Ghost Data**: Simulate a living world with intelligent bot activity.
 
-## Learn More
+### 🛍️ The Shop & Locker
+- **Global Shop**: Spend your hard-earned **Flux Coins (§)** on exclusive cosmetic upgrades.
+- **Cyberpunk Aesthetics**:
+  - **Themes**: Switch your UI between *Dark Mode*, *Synthwave*, *Matrix*, *Deep Space*, and more.
+  - **Particles**: Unlock explosive visual effects like *Math Boom*, *Glitch*, and *Vortex*.
+  - **Audio Packs**: Change the soundscape with *8-Bit*, *Typewriter*, or *Futuristic* SFX.
+- **Inventory System**: Manage and equip your loadout in the Locker.
 
-To learn more about Next.js, take a look at the following resources:
+### 📊 Advanced Analytics
+- **Career Stats**: Track your lifetime accuracy, total XP, and speed.
+- **Trend Analysis**: Visualize your improvement over time with dynamic charts.
+- **Weakest Link**: Automatically identifies operations that need more practice.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🛠️ Tech Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Built with a modern, performance-first stack:
 
-## Deploy on Vercel
+- **Framework**: [Next.js 14](https://nextjs.org/) (App Router)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+- **Animations**: [Framer Motion](https://www.framer.com/motion/)
+- **Database**: [SQLite](https://www.sqlite.org/) (Local file-based `flashmath.db` for zero-latency).
+- **Authentication**: Custom Session/NextAuth implementation.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## ⚡ Getting Started
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Clone the repository**
+   ```bash
+   git clone https://gitcode.lanit.services/e.hill/FlashMath.git
+   cd FlashMath
+   ```
+
+2. **Install Dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Initialize Database**
+   The app uses a local SQLite database. It will be automatically seeded on the first run, or you can run:
+   ```bash
+   npm run seed
+   ```
+
+4. **Run the Development Server**
+   ```bash
+   npm run dev
+   ```
+
+5. **Open your browser**
+   Navigate to [http://localhost:3000](http://localhost:3000) to start your training.
+
+## 🛡️ Admin & Security
+
+- Access the hidden Admin Dashboard at `/admin` (Restricted to specific User IDs).
+- Manage users, ban accounts, and inspect server-side stats.
+
+## 🤝 Contributing
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+*Built with ⚡ by the FlashMath Team*
