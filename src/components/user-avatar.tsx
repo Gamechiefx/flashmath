@@ -40,6 +40,12 @@ export function UserAvatar({ user, className, size = "md" }: UserAvatarProps) {
             case 'frame_glitch_ring': return 'frame-glitch';
             case 'frame_gold_hex': return 'frame-gold-hex';
             case 'frame_nebula': return 'frame-nebula';
+            // Expansion Pack
+            case 'frame_wanted': return 'frame-wanted';
+            case 'frame_hologram': return 'frame-hologram';
+            case 'frame_rainbow': return 'frame-rainbow';
+            case 'frame_diamond': return 'frame-diamond';
+            case 'frame_red_alert': return 'frame-red-alert';
             default: return '';
         }
     };

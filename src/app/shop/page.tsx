@@ -10,6 +10,10 @@ import Link from "next/link";
 import { PurchaseButton } from "@/components/shop/purchase-button";
 import { ShopTimer } from "@/components/shop/shop-timer";
 import { ShopItemCard } from "@/components/shop/shop-item-card";
+import { AuthHeader } from "@/components/auth-header";
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function ShopPage() {
     const session = await auth();
@@ -36,11 +40,15 @@ export default async function ShopPage() {
     const dailySelection = getDailyShopSelection();
 
     return (
-        <div className="min-h-screen bg-background text-foreground p-6 md:p-12 pb-64 relative overflow-hidden">
+        <div className="min-h-screen bg-background text-foreground p-6 md:p-12 relative">
             {/* Background Ambience */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] right-[-20%] w-[800px] h-[800px] bg-primary/5 rounded-full blur-[120px]" />
                 <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-accent/5 rounded-full blur-[100px]" />
+            </div>
+
+            <div className="w-full max-w-7xl mx-auto">
+                <AuthHeader session={session} />
             </div>
 
             <div className="max-w-6xl mx-auto relative z-10 space-y-8">
@@ -90,7 +98,7 @@ export default async function ShopPage() {
                         return (
                             <ShopItemCard
                                 key={item.id}
-                                itemId={item.id}
+                                item={item}
                                 isOwned={isOwned}
                                 userCoins={user.coins}
                             />
@@ -98,6 +106,9 @@ export default async function ShopPage() {
                     })}
                 </div>
             </div>
+
+            {/* Spacer for fixed footer */}
+            <div className="h-48" />
 
             {/* Nav Footer */}
             <div className="fixed bottom-0 left-0 w-full p-4 bg-background/80 backdrop-blur-md border-t border-white/10 flex justify-center z-50">

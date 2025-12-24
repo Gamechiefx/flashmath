@@ -1,31 +1,62 @@
 {
   "users": [
     {
-      "level": 1,
-      "coins": 5000595,
+      "level": 2,
+      "coins": 5001334,
       "current_league_id": "neon-league",
       "math_tiers": {
-        "addition": 0,
-        "subtraction": 0,
-        "multiplication": 0,
-        "division": 0
+        "addition": 3,
+        "subtraction": 3,
+        "multiplication": 1,
+        "division": 1
       },
       "id": "868035a7-e14b-4175-8adb-948c664326a3",
       "name": "Mathlete",
       "email": "math@gmail.com",
       "password_hash": "$2b$10$.LlY.WdEK1FJGbwMAMw4I.oVUY.f9hZ2MUyoSmuBK8C.U6vnJYA1i",
       "theme_preferences": "dark",
-      "total_xp": 190,
+      "total_xp": 1169,
       "created_at": "2025-12-23T17:38:05.872Z",
       "equipped_items": {
-        "theme": "theme_deep_space",
-        "particle": "particle_glitch",
+        "theme": "theme_matrix",
+        "particle": "particle_explosion",
         "font": "default",
-        "sound": "sound_clicky",
+        "sound": "sound_typewriter",
         "bgm": "default",
-        "title": "title_just_fun",
-        "frame": "frame_camo"
-      }
+        "title": "title_turbo",
+        "frame": "frame_rainbow"
+      },
+      "is_banned": false,
+      "banned_until": null
+    },
+    {
+      "level": 1,
+      "coins": 100,
+      "current_league_id": "neon-league",
+      "math_tiers": {
+        "addition": 2,
+        "subtraction": 1,
+        "multiplication": 1,
+        "division": 2
+      },
+      "id": "2617b648-9584-4b78-beca-2b7e918a28d2",
+      "name": "tester",
+      "email": "test@nexus.com",
+      "password_hash": "$2b$10$cw0dfUyCU57KjW4xD4WENu1Izyi7yGxUJTeGzgBUggp9SNddeqXfa",
+      "theme_preferences": "dark",
+      "total_xp": 0,
+      "equipped_items": {
+        "theme": "default",
+        "particle": "default",
+        "font": "default",
+        "sound": "default",
+        "bgm": "default",
+        "title": "default",
+        "frame": "default"
+      },
+      "created_at": "2025-12-24T20:04:41.132Z",
+      "is_banned": true,
+      "banned_until": "2025-12-24T21:22:05.732Z"
     }
   ],
   "mastery_stats": [
@@ -34,18 +65,18 @@
       "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
       "operation": "Addition",
       "fact": "7 + 5",
-      "last_response_time": 3862,
-      "mastery_level": 0,
-      "updated_at": "2025-12-23T21:03:28.999Z"
+      "last_response_time": 967,
+      "mastery_level": 2,
+      "updated_at": "2025-12-23T22:42:11.440Z"
     },
     {
       "id": 1766523808999.3728,
       "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
       "operation": "Addition",
       "fact": "8 + 5",
-      "last_response_time": 1001,
-      "mastery_level": 1,
-      "updated_at": "2025-12-23T21:03:28.999Z"
+      "last_response_time": 787,
+      "mastery_level": 2,
+      "updated_at": "2025-12-23T22:42:11.440Z"
     },
     {
       "id": 1766523808999.9238,
@@ -61,9 +92,9 @@
       "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
       "operation": "Addition",
       "fact": "8 + 6",
-      "last_response_time": 745,
-      "mastery_level": 1,
-      "updated_at": "2025-12-23T21:03:28.999Z"
+      "last_response_time": 839,
+      "mastery_level": 3,
+      "updated_at": "2025-12-23T22:42:11.440Z"
     },
     {
       "id": 1766523808999.5537,
@@ -127,6 +158,546 @@
       "last_response_time": 1227,
       "mastery_level": 1,
       "updated_at": "2025-12-23T22:01:18.408Z"
+    },
+    {
+      "id": 1766529731438.8845,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "2 + 2",
+      "last_response_time": 657,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.1501,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "6 + 6",
+      "last_response_time": 778,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.1152,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "8 + 7",
+      "last_response_time": 1021,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.9924,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "9 + 4",
+      "last_response_time": 961,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.6604,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "5 + 7",
+      "last_response_time": 997,
+      "mastery_level": 2,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731439.7227,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "2 + 4",
+      "last_response_time": 831,
+      "mastery_level": 2,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731439.016,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "4 + 2",
+      "last_response_time": 1284,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.52,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "9 + 8",
+      "last_response_time": 1492,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.4092,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "4 + 5",
+      "last_response_time": 1118,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.9502,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "9 + 3",
+      "last_response_time": 1707,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.6814,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "6 + 5",
+      "last_response_time": 887,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.0613,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "5 + 2",
+      "last_response_time": 1388,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.4204,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "5 + 3",
+      "last_response_time": 1014,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.7124,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "2 + 5",
+      "last_response_time": 893,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.9175,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "24 + 5",
+      "last_response_time": 1660,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.2397,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "14 + 5",
+      "last_response_time": 1442,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.492,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "17 + 8",
+      "last_response_time": 1612,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.6028,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "9 + 5",
+      "last_response_time": 1034,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731439.764,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "24 + 4",
+      "last_response_time": 1811,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.439Z"
+    },
+    {
+      "id": 1766529731440.3047,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "25 + 9",
+      "last_response_time": 2144,
+      "mastery_level": 0,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.2466,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "7 + 2",
+      "last_response_time": 1006,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.579,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "25 + 2",
+      "last_response_time": 1231,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.7122,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "2 + 7",
+      "last_response_time": 917,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.5903,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "11 + 4",
+      "last_response_time": 975,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.7554,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "6 + 8",
+      "last_response_time": 828,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.1907,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "8 + 4",
+      "last_response_time": 2203,
+      "mastery_level": 0,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.1892,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "2 + 9",
+      "last_response_time": 1262,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.1838,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "21 + 6",
+      "last_response_time": 1118,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.5066,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "2 + 3",
+      "last_response_time": 797,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.2993,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "4 + 9",
+      "last_response_time": 1252,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.6633,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "9 + 7",
+      "last_response_time": 1938,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.7244,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "6 + 4",
+      "last_response_time": 1617,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.8142,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "10 + 8",
+      "last_response_time": 4220,
+      "mastery_level": 0,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.5042,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "14 + 3",
+      "last_response_time": 1012,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.4482,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "9 + 6",
+      "last_response_time": 943,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.0378,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "12 + 3",
+      "last_response_time": 1356,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.924,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "5 + 5",
+      "last_response_time": 1924,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.1536,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "5 + 9",
+      "last_response_time": 1477,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.3235,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "3 + 9",
+      "last_response_time": 1257,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.5305,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "8 + 8",
+      "last_response_time": 1234,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766529731440.1233,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "15 + 9",
+      "last_response_time": 1691,
+      "mastery_level": 1,
+      "updated_at": "2025-12-23T22:42:11.440Z"
+    },
+    {
+      "id": 1766546312640.862,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "82 + 61",
+      "last_response_time": 2951,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T03:18:32.640Z"
+    },
+    {
+      "id": 1766546312640.523,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "69 + 69",
+      "last_response_time": 11833,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T03:18:32.640Z"
+    },
+    {
+      "id": 1766546312640.115,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "57 + 60",
+      "last_response_time": 3753,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T03:18:32.640Z"
+    },
+    {
+      "id": 1766546312640.5527,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "51 + 62",
+      "last_response_time": 3977,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T03:18:32.640Z"
+    },
+    {
+      "id": 1766546312640.6797,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "50 + 73",
+      "last_response_time": 2550,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T03:18:32.640Z"
+    },
+    {
+      "id": 1766546312640.76,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "43 + 66",
+      "last_response_time": 9046,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T03:18:32.640Z"
+    },
+    {
+      "id": 1766546312640.6453,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "46 + 39",
+      "last_response_time": 7036,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T03:18:32.640Z"
+    },
+    {
+      "id": 1766546312640.5386,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "49 + 60",
+      "last_response_time": 2961,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T03:18:32.641Z"
+    },
+    {
+      "id": 1766610549067.154,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "x + 17 = 47",
+      "last_response_time": 2133,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T21:09:09.067Z"
+    },
+    {
+      "id": 1766610549067.6482,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "x + 43 = 78",
+      "last_response_time": 3023,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T21:09:09.067Z"
+    },
+    {
+      "id": 1766610549067.2583,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "88 + 71",
+      "last_response_time": 3490,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T21:09:09.067Z"
+    },
+    {
+      "id": 1766610549067.8337,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "76 + 47",
+      "last_response_time": 9473,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T21:09:09.067Z"
+    },
+    {
+      "id": 1766610549068.5476,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "66 + 85",
+      "last_response_time": 5434,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T21:09:09.068Z"
+    },
+    {
+      "id": 1766610549068.199,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "30 + 20",
+      "last_response_time": 1477,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T21:09:09.068Z"
+    },
+    {
+      "id": 1766610549068.1653,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "20 + x = 63",
+      "last_response_time": 2138,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T21:09:09.068Z"
+    },
+    {
+      "id": 1766610549068.4038,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "fact": "26 + 93",
+      "last_response_time": 4241,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T21:09:09.068Z"
+    },
+    {
+      "id": 1766610802337.0542,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "2 × 8",
+      "last_response_time": 1068,
+      "mastery_level": 2,
+      "updated_at": "2025-12-24T21:13:23.229Z"
+    },
+    {
+      "id": 1766610802337.7947,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "12 × 5",
+      "last_response_time": 2523,
+      "mastery_level": 0,
+      "updated_at": "2025-12-24T21:13:23.229Z"
+    },
+    {
+      "id": 1766610803229.7405,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "fact": "9 × 4",
+      "last_response_time": 1070,
+      "mastery_level": 1,
+      "updated_at": "2025-12-24T21:13:23.229Z"
     }
   ],
   "sessions": [
@@ -149,6 +720,56 @@
       "avg_speed": 1.44575,
       "xp_earned": 70,
       "created_at": "2025-12-23T22:01:17.899Z"
+    },
+    {
+      "id": 1766529730746,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "correct_count": 48,
+      "total_count": 51,
+      "avg_speed": 1.2837708333333333,
+      "xp_earned": 930,
+      "created_at": "2025-12-23T22:42:10.746Z"
+    },
+    {
+      "id": 1766546311794,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "correct_count": 8,
+      "total_count": 8,
+      "avg_speed": 5.513375,
+      "xp_earned": 15,
+      "created_at": "2025-12-24T03:18:31.794Z"
+    },
+    {
+      "id": 1766610548585,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Addition",
+      "correct_count": 8,
+      "total_count": 11,
+      "avg_speed": 3.926125,
+      "xp_earned": 18,
+      "created_at": "2025-12-24T21:09:08.585Z"
+    },
+    {
+      "id": 1766610801724,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "correct_count": 2,
+      "total_count": 4,
+      "avg_speed": 1.7955,
+      "xp_earned": 6,
+      "created_at": "2025-12-24T21:13:21.724Z"
+    },
+    {
+      "id": 1766610802649,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "operation": "Multiplication",
+      "correct_count": 3,
+      "total_count": 5,
+      "avg_speed": 1.5536666666666668,
+      "xp_earned": 10,
+      "created_at": "2025-12-24T21:13:22.649Z"
     }
   ],
   "leagues": [
@@ -156,213 +777,213 @@
       "id": "neon-league",
       "name": "NEON",
       "min_rank": 1,
-      "end_time": "2025-12-23T22:37:26.509Z"
+      "end_time": "2025-12-24T22:02:58.255Z"
     },
     {
       "id": "cobalt-league",
       "name": "COBALT",
       "min_rank": 2,
-      "end_time": "2025-12-23T22:37:26.509Z"
+      "end_time": "2025-12-24T22:02:58.255Z"
     },
     {
       "id": "plasma-league",
       "name": "PLASMA",
       "min_rank": 3,
-      "end_time": "2025-12-23T22:37:26.509Z"
+      "end_time": "2025-12-24T22:02:58.255Z"
     },
     {
       "id": "void-league",
       "name": "VOID",
       "min_rank": 4,
-      "end_time": "2025-12-23T22:37:26.509Z"
+      "end_time": "2025-12-24T22:02:58.255Z"
     },
     {
       "id": "apex-league",
       "name": "APEX",
       "min_rank": 5,
-      "end_time": "2025-12-23T22:37:26.509Z"
+      "end_time": "2025-12-24T22:02:58.255Z"
     }
   ],
   "league_participants": [
     {
       "league_id": "neon-league",
-      "user_id": "ghost-091525d0-7bf8-435c-aca0-6fce29f6909d",
-      "name": "VoidRunner#753",
-      "weekly_xp": 19
+      "user_id": "ghost-c74b763e-999a-49a0-b94a-685d612b7e57",
+      "name": "Echo#455",
+      "weekly_xp": 69
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-2f8d2774-1497-460d-a446-f04ffee00289",
-      "name": "NeoMath#614",
-      "weekly_xp": 99
+      "user_id": "ghost-d517b5ca-5dde-4f80-a764-96fdd90c592c",
+      "name": "VoidRunner#151",
+      "weekly_xp": 72
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-4980563a-db55-4974-9b6d-1663f2fae5f2",
-      "name": "CyberBlade#807",
-      "weekly_xp": 77
+      "user_id": "ghost-ca2e8992-3af4-491b-8656-fc3a76a1c181",
+      "name": "VoidRunner#863",
+      "weekly_xp": 47
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-84657909-e479-458d-bfd8-0d90e75a2036",
-      "name": "CircuitLink#701",
-      "weekly_xp": 77
+      "user_id": "ghost-f8acef40-fad4-4606-a511-ab4601fa0196",
+      "name": "Echo#436",
+      "weekly_xp": 86
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-b00ba234-e0bb-4ca2-b545-92563f5b8f9a",
-      "name": "CircuitLink#327",
-      "weekly_xp": 67
+      "user_id": "ghost-5f0688d4-f58e-447b-8b14-f9e72e3c6721",
+      "name": "DeltaBot#961",
+      "weekly_xp": 36
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-081c0492-666a-405a-9415-23591a437c5f",
-      "name": "NeoMath#150",
-      "weekly_xp": 97
+      "user_id": "ghost-1f63da93-c012-4194-9029-27e4a4e9415d",
+      "name": "NeoMath#825",
+      "weekly_xp": 7
     },
     {
       "league_id": "cobalt-league",
-      "user_id": "ghost-b350d651-5705-45ac-bfe2-c369443ab86a",
-      "name": "Zenith#20",
-      "weekly_xp": 31
+      "user_id": "ghost-03685812-078e-4cdd-be76-a38f34c7edf9",
+      "name": "Quantum#284",
+      "weekly_xp": 64
     },
     {
       "league_id": "cobalt-league",
-      "user_id": "ghost-4ecba4e8-8dc9-453b-8eb6-d6baf6e42f9a",
-      "name": "VoidRunner#865",
-      "weekly_xp": 30
+      "user_id": "ghost-76ed0019-46b3-47f0-b76f-c1bdfdd84d18",
+      "name": "CircuitLink#600",
+      "weekly_xp": 62
     },
     {
       "league_id": "cobalt-league",
-      "user_id": "ghost-f9ae1dcc-ef92-4a18-9dc5-31fa8bf83988",
-      "name": "Echo#358",
-      "weekly_xp": 25
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-0d8eeb10-1110-44cf-a8d7-f42403581d33",
-      "name": "NeoMath#663",
-      "weekly_xp": 79
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-32a3cf47-bc00-4b74-bd8c-ed7e2f01abe2",
-      "name": "Quantum#639",
-      "weekly_xp": 78
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-f3020057-9b49-44a9-91f1-4143e90fc7a9",
-      "name": "Zenith#801",
+      "user_id": "ghost-2d74fd35-4270-42e3-971d-4840f0a58341",
+      "name": "Quantum#902",
       "weekly_xp": 21
     },
     {
-      "league_id": "plasma-league",
-      "user_id": "ghost-722abd86-5f32-4aa7-a017-4b56afc64e97",
-      "name": "CircuitLink#574",
+      "league_id": "cobalt-league",
+      "user_id": "ghost-b5bf486f-920b-452b-9a97-95400b9b6b66",
+      "name": "CyberBlade#832",
+      "weekly_xp": 92
+    },
+    {
+      "league_id": "cobalt-league",
+      "user_id": "ghost-ee9c03a7-1dba-41c8-a75d-fcc6231cd52c",
+      "name": "Echo#706",
+      "weekly_xp": 61
+    },
+    {
+      "league_id": "cobalt-league",
+      "user_id": "ghost-da8bb034-9a9b-41bb-9b14-2962eed8a801",
+      "name": "CircuitLink#114",
       "weekly_xp": 38
     },
     {
       "league_id": "plasma-league",
-      "user_id": "ghost-2d12956e-8022-408a-8c29-b75f5de861d2",
-      "name": "VoidRunner#203",
-      "weekly_xp": 89
+      "user_id": "ghost-f6f27bd6-9a24-4e50-97f1-9d1e2ddb9a4d",
+      "name": "VoidRunner#736",
+      "weekly_xp": 46
     },
     {
       "league_id": "plasma-league",
-      "user_id": "ghost-f98a9513-b709-4d0d-9a13-c62409516547",
-      "name": "Quantum#974",
-      "weekly_xp": 63
+      "user_id": "ghost-6d5b324e-1d5c-48b9-955e-05642d2b37ba",
+      "name": "CircuitLink#725",
+      "weekly_xp": 50
     },
     {
       "league_id": "plasma-league",
-      "user_id": "ghost-3cce0923-83e4-46cb-9e3e-f4d9b0e65207",
-      "name": "DeltaBot#904",
-      "weekly_xp": 99
+      "user_id": "ghost-6fe5155d-8d9c-4172-bd0c-adee155947b4",
+      "name": "CircuitLink#806",
+      "weekly_xp": 36
     },
     {
       "league_id": "plasma-league",
-      "user_id": "ghost-7d03466f-caa9-4246-a6bd-d2cca095c681",
-      "name": "CircuitLink#684",
-      "weekly_xp": 14
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-7434498e-9d11-4ff5-815d-95b271ff1987",
-      "name": "VoidRunner#295",
+      "user_id": "ghost-44fb69ae-1fb4-46f0-b1d5-4585bef1475a",
+      "name": "CircuitLink#570",
       "weekly_xp": 96
     },
     {
-      "league_id": "void-league",
-      "user_id": "ghost-2f0aeb6d-1e9c-4e21-987c-217af7d08194",
-      "name": "CyberBlade#50",
-      "weekly_xp": 44
+      "league_id": "plasma-league",
+      "user_id": "ghost-7436a2eb-488e-4d06-9fdc-7e2d8e06fc10",
+      "name": "NeoMath#571",
+      "weekly_xp": 43
+    },
+    {
+      "league_id": "plasma-league",
+      "user_id": "ghost-4fb3331e-63cf-43e4-94d5-65393c18b297",
+      "name": "Echo#249",
+      "weekly_xp": 83
     },
     {
       "league_id": "void-league",
-      "user_id": "ghost-3b8ec191-7bdc-47aa-b45c-768db819161b",
-      "name": "VoidRunner#54",
+      "user_id": "ghost-b23c98dc-96bd-4852-83c6-51a8ff95c106",
+      "name": "CyberBlade#767",
       "weekly_xp": 81
     },
     {
       "league_id": "void-league",
-      "user_id": "ghost-f27c075a-4638-4e56-b641-9c2f1f68afdb",
-      "name": "Quantum#241",
-      "weekly_xp": 91
+      "user_id": "ghost-f4749480-bd85-4735-9270-1b75f0c7b164",
+      "name": "CircuitLink#637",
+      "weekly_xp": 47
     },
     {
       "league_id": "void-league",
-      "user_id": "ghost-05238863-a15b-4cf5-8dbe-c2e05e57e7bc",
-      "name": "DeltaBot#845",
+      "user_id": "ghost-a72b107d-a9b2-4450-a112-5c4e6c5012bd",
+      "name": "Quantum#899",
       "weekly_xp": 88
     },
     {
       "league_id": "void-league",
-      "user_id": "ghost-66ff028b-096e-4dfb-8e5b-a20689bbe6ea",
-      "name": "CyberBlade#300",
-      "weekly_xp": 93
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-9ca64e8b-4c5a-48b7-9f26-32f22c26a0e0",
-      "name": "Zenith#385",
-      "weekly_xp": 64
-    },
-    {
-      "league_id": "apex-league",
-      "user_id": "ghost-f2d7b6a3-0b1b-4475-a508-fb19020a3d87",
-      "name": "CyberBlade#2",
-      "weekly_xp": 97
-    },
-    {
-      "league_id": "apex-league",
-      "user_id": "ghost-2a2e93e7-8029-4bed-94ab-04494772d844",
-      "name": "Echo#881",
+      "user_id": "ghost-451333db-1a24-4497-81ad-46ac2ce92dc2",
+      "name": "DeltaBot#147",
       "weekly_xp": 43
     },
     {
-      "league_id": "apex-league",
-      "user_id": "ghost-858e54d8-0d20-416c-af6c-f1ad2e88b43d",
-      "name": "DeltaBot#771",
-      "weekly_xp": 23
+      "league_id": "void-league",
+      "user_id": "ghost-c725b888-ea5a-4bb1-94ea-f613e215fac7",
+      "name": "VoidRunner#674",
+      "weekly_xp": 35
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-f4471db2-f133-497c-a3a2-01faf9eef2e6",
+      "name": "CircuitLink#21",
+      "weekly_xp": 25
     },
     {
       "league_id": "apex-league",
-      "user_id": "ghost-9039f545-f54a-4fbd-8637-e647a342b44f",
-      "name": "Zenith#687",
-      "weekly_xp": 32
-    },
-    {
-      "league_id": "apex-league",
-      "user_id": "ghost-5b00bf12-b024-4be6-aeab-ef43984d8360",
-      "name": "DeltaBot#116",
+      "user_id": "ghost-5cd8b095-2e91-4c41-b0fb-d284de0e1d66",
+      "name": "DeltaBot#796",
       "weekly_xp": 13
     },
     {
       "league_id": "apex-league",
-      "user_id": "ghost-13c44b21-5b05-47b5-a010-e0cf8a612be1",
-      "name": "CircuitLink#344",
-      "weekly_xp": 68
+      "user_id": "ghost-fffdc574-4c44-4a92-886f-c6bb3fdbb205",
+      "name": "CyberBlade#196",
+      "weekly_xp": 75
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-451a6a4a-22b6-4fa6-b991-cfbca0166c13",
+      "name": "VoidRunner#834",
+      "weekly_xp": 77
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-407c5b34-edd1-4e3d-bd71-73dfa43ddab9",
+      "name": "CyberBlade#644",
+      "weekly_xp": 2
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-016a9c19-01ff-409b-8ed6-4e6ba0b6392e",
+      "name": "DeltaBot#512",
+      "weekly_xp": 15
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-72df0775-86be-41de-89d9-94f0541a6914",
+      "name": "VoidRunner#515",
+      "weekly_xp": 7
     },
     {
       "league_id": "neon-league",
@@ -373,32 +994,373 @@
   ],
   "shop_items": [
     {
-      "id": "glow-cyan",
-      "name": "CYBER CYAN",
-      "cost": 500,
-      "description": "Exclusive cyan interface glow",
-      "type": "theme"
+      "id": "theme_caution",
+      "name": "Caution",
+      "description": "Industrial yellow and black hazard stripes.",
+      "type": "theme",
+      "rarity": "uncommon",
+      "price": 500,
+      "assetValue": "theme-caution"
     },
     {
-      "id": "glow-pink",
-      "name": "NEON PINK",
-      "cost": 750,
-      "description": "Vibrant pink interface glow",
-      "type": "theme"
+      "id": "theme_matrix",
+      "name": "The Matrix",
+      "description": "Old-school terminal green text on black.",
+      "type": "theme",
+      "rarity": "epic",
+      "price": 15000,
+      "assetValue": "theme-matrix"
     },
     {
-      "id": "glow-gold",
-      "name": "VOID GOLD",
-      "cost": 1500,
-      "description": "Legendary gold interface glow",
-      "type": "theme"
+      "id": "theme_synthwave",
+      "name": "Synthwave",
+      "description": "Hot pink and cyan neon gradients.",
+      "type": "theme",
+      "rarity": "epic",
+      "price": 15000,
+      "assetValue": "theme-synthwave"
     },
     {
-      "id": "rank-badge",
-      "name": "ALPHA BADGE",
-      "cost": 300,
-      "description": "Show off your veteran status",
-      "type": "badge"
+      "id": "theme_deep_space",
+      "name": "Deep Space",
+      "description": "OLED black with subtle white stars.",
+      "type": "theme",
+      "rarity": "epic",
+      "price": 15000,
+      "assetValue": "theme-deep-space"
+    },
+    {
+      "id": "particle_sparks",
+      "name": "Sparks",
+      "description": "Digital sparks fly off the cursor on type.",
+      "type": "particle",
+      "rarity": "rare",
+      "price": 2000,
+      "assetValue": "particle-sparks"
+    },
+    {
+      "id": "particle_glitch",
+      "name": "Glitch",
+      "description": "Screen glitches briefly on combos.",
+      "type": "particle",
+      "rarity": "legendary",
+      "price": 35000,
+      "assetValue": "particle-glitch"
+    },
+    {
+      "id": "font_press_start",
+      "name": "Press Start 2P",
+      "description": "Retro arcade pixel font.",
+      "type": "font",
+      "rarity": "epic",
+      "price": 8000,
+      "assetValue": "\"Press Start 2P\", monospace"
+    },
+    {
+      "id": "sound_clicky",
+      "name": "Mech-Clicky",
+      "description": "Loud, satisfying Cherry MX Blue clicks.",
+      "type": "sound",
+      "rarity": "epic",
+      "price": 8000,
+      "assetValue": "/sounds/mech-click.mp3"
+    },
+    {
+      "id": "sound_silencer",
+      "name": "Silencer",
+      "description": "Soft, thocky, muted sounds.",
+      "type": "sound",
+      "rarity": "epic",
+      "price": 12000,
+      "assetValue": "/sounds/silencer.mp3"
+    },
+    {
+      "id": "sound_scifi",
+      "name": "Sci-Fi",
+      "description": "Computer blips and chirps (LCARS style).",
+      "type": "sound",
+      "rarity": "rare",
+      "price": 25000,
+      "assetValue": "/sounds/scifi.mp3"
+    },
+    {
+      "id": "bgm_lofi",
+      "name": "Lo-Fi Beats",
+      "description": "Chill beats to study math to.",
+      "type": "bgm",
+      "rarity": "epic",
+      "price": 8000,
+      "assetValue": "/music/bgm_cozy_lofi.mp3"
+    },
+    {
+      "id": "bgm_darksynth",
+      "name": "Dark Synth",
+      "description": "Aggressive, fast-paced electronic.",
+      "type": "bgm",
+      "rarity": "rare",
+      "price": 2000,
+      "assetValue": "/music/bgm_synth_motivation.mp3"
+    },
+    {
+      "id": "bgm_binaural",
+      "name": "Neon Horizon",
+      "description": "Chill synthwave melodies.",
+      "type": "bgm",
+      "rarity": "epic",
+      "price": 8500,
+      "assetValue": "/music/bgm_deep_space.mp3"
+    },
+    {
+      "id": "title_high_scorer",
+      "name": "The High Scorer",
+      "description": "",
+      "type": "title",
+      "rarity": "common",
+      "price": 50,
+      "assetValue": "The High Scorer"
+    },
+    {
+      "id": "title_just_fun",
+      "name": "Just Here For Fun",
+      "description": "",
+      "type": "title",
+      "rarity": "common",
+      "price": 50,
+      "assetValue": "Just Here For Fun"
+    },
+    {
+      "id": "title_fast_fingers",
+      "name": "Certified Fast Fingers",
+      "description": "",
+      "type": "title",
+      "rarity": "uncommon",
+      "price": 300,
+      "assetValue": "Certified Fast Fingers"
+    },
+    {
+      "id": "title_accuracy_ace",
+      "name": "Accuracy Ace",
+      "description": "",
+      "type": "title",
+      "rarity": "uncommon",
+      "price": 300,
+      "assetValue": "Accuracy Ace"
+    },
+    {
+      "id": "title_wizard",
+      "name": "Math Wizard",
+      "description": "",
+      "type": "title",
+      "rarity": "rare",
+      "price": 1500,
+      "assetValue": "Keyboard Wizard"
+    },
+    {
+      "id": "title_turbo",
+      "name": "Turbo Times",
+      "description": "",
+      "type": "title",
+      "rarity": "rare",
+      "price": 1500,
+      "assetValue": "Turbo Typer"
+    },
+    {
+      "id": "title_zen",
+      "name": "Zen Master",
+      "description": "",
+      "type": "title",
+      "rarity": "epic",
+      "price": 8000,
+      "assetValue": "Zen Master"
+    },
+    {
+      "id": "title_unstoppable",
+      "name": "The Unstoppable",
+      "description": "",
+      "type": "title",
+      "rarity": "legendary",
+      "price": 30000,
+      "assetValue": "The Unstoppable"
+    },
+    {
+      "id": "title_pinnacle",
+      "name": "The Pinnacle",
+      "description": "",
+      "type": "title",
+      "rarity": "legendary",
+      "price": 50000,
+      "assetValue": "The Pinnacle"
+    },
+    {
+      "id": "frame_bronze",
+      "name": "The Bronze Border",
+      "description": "Simple, sturdy bronze.",
+      "type": "frame",
+      "rarity": "common",
+      "price": 100,
+      "assetValue": "frame-bronze"
+    },
+    {
+      "id": "frame_circuit",
+      "name": "Circuit Frame",
+      "description": "Green PCB traces.",
+      "type": "frame",
+      "rarity": "uncommon",
+      "price": 500,
+      "assetValue": "frame-circuit"
+    },
+    {
+      "id": "frame_camo",
+      "name": "Digital Camo",
+      "description": "Pixelated military vibes.",
+      "type": "frame",
+      "rarity": "uncommon",
+      "price": 500,
+      "assetValue": "frame-camo"
+    },
+    {
+      "id": "frame_glitch_ring",
+      "name": "Animated Glitch Ring",
+      "description": "Unstable reality.",
+      "type": "frame",
+      "rarity": "legendary",
+      "price": 35000,
+      "assetValue": "frame-glitch"
+    },
+    {
+      "id": "frame_gold_hex",
+      "name": "Golden Hexagon",
+      "description": "Pure luxury.",
+      "type": "frame",
+      "rarity": "legendary",
+      "price": 40000,
+      "assetValue": "frame-gold-hex"
+    },
+    {
+      "id": "frame_nebula",
+      "name": "Cosmic Nebula",
+      "description": "Starlight in a frame.",
+      "type": "frame",
+      "rarity": "epic",
+      "price": 12000,
+      "assetValue": "frame-nebula"
+    },
+    {
+      "id": "theme_red_alert",
+      "name": "Red Alert",
+      "description": "Empire vibes. Deep reds and smooth blacks.",
+      "type": "theme",
+      "rarity": "uncommon",
+      "price": 750,
+      "assetValue": "theme-red-alert"
+    },
+    {
+      "id": "theme_ice_cold",
+      "name": "Ice Cold",
+      "description": "Stay frosty. Cool blues and whites.",
+      "type": "theme",
+      "rarity": "rare",
+      "price": 3000,
+      "assetValue": "theme-ice-cold"
+    },
+    {
+      "id": "theme_sunset_drive",
+      "name": "Sunset Drive",
+      "description": "Cruising down the grid. Purple to Orange.",
+      "type": "theme",
+      "rarity": "epic",
+      "price": 15000,
+      "assetValue": "theme-sunset-drive"
+    },
+    {
+      "id": "particle_binary",
+      "name": "Binary Rain",
+      "description": "The code falls... waiting to be decrypted.",
+      "type": "particle",
+      "rarity": "rare",
+      "price": 2500,
+      "assetValue": "particle-binary"
+    },
+    {
+      "id": "particle_explosion",
+      "name": "Math Boom",
+      "description": "POW! Tiny explosions on every combo.",
+      "type": "particle",
+      "rarity": "epic",
+      "price": 12000,
+      "assetValue": "particle-explosion"
+    },
+    {
+      "id": "particle_vortex",
+      "name": "Vortex",
+      "description": "A swirling portal consumes the numbers.",
+      "type": "particle",
+      "rarity": "legendary",
+      "price": 45000,
+      "assetValue": "particle-vortex"
+    },
+    {
+      "id": "sound_typewriter",
+      "name": "Typewriter",
+      "description": "Classic heavy mechanical clack.",
+      "type": "sound",
+      "rarity": "uncommon",
+      "price": 800,
+      "assetValue": "/sounds/typewriter.mp3"
+    },
+    {
+      "id": "sound_8bit",
+      "name": "8-Bit Zap",
+      "description": "Retro jump sounds for every key.",
+      "type": "sound",
+      "rarity": "rare",
+      "price": 4000,
+      "assetValue": "/sounds/8bit.mp3"
+    },
+    {
+      "id": "title_human_calc",
+      "name": "Human Calculator",
+      "description": "",
+      "type": "title",
+      "rarity": "epic",
+      "price": 10000,
+      "assetValue": "Human Calculator"
+    },
+    {
+      "id": "frame_wanted",
+      "name": "Wanted Poster",
+      "description": "Reward: 1,000,000 Flux.",
+      "type": "frame",
+      "rarity": "uncommon",
+      "price": 1000,
+      "assetValue": "frame-wanted"
+    },
+    {
+      "id": "frame_hologram",
+      "name": "Hologram",
+      "description": "Unstable photonic containment.",
+      "type": "frame",
+      "rarity": "rare",
+      "price": 5000,
+      "assetValue": "frame-hologram"
+    },
+    {
+      "id": "frame_rainbow",
+      "name": "Rainbow Glitch",
+      "description": "Taste the spectrum error.",
+      "type": "frame",
+      "rarity": "epic",
+      "price": 20000,
+      "assetValue": "frame-rainbow"
+    },
+    {
+      "id": "frame_diamond",
+      "name": "Diamond",
+      "description": "Indestructible brilliance.",
+      "type": "frame",
+      "rarity": "legendary",
+      "price": 60000,
+      "assetValue": "frame-diamond"
     }
   ],
   "inventory": [
@@ -539,6 +1501,48 @@
       "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
       "item_id": "bgm_darksynth",
       "acquired_at": "2025-12-23T22:19:09.840Z"
+    },
+    {
+      "id": 1766610425248.0981,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "item_id": "particle_explosion",
+      "acquired_at": "2025-12-24T21:07:05.248Z"
+    },
+    {
+      "id": 1766610428403.878,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "item_id": "frame_wanted",
+      "acquired_at": "2025-12-24T21:07:08.403Z"
+    },
+    {
+      "id": 1766610616611.0986,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "item_id": "sound_typewriter",
+      "acquired_at": "2025-12-24T21:10:16.611Z"
+    },
+    {
+      "id": 1766610617510.8823,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "item_id": "particle_vortex",
+      "acquired_at": "2025-12-24T21:10:17.510Z"
+    },
+    {
+      "id": 1766610618951.726,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "item_id": "frame_hologram",
+      "acquired_at": "2025-12-24T21:10:18.951Z"
+    },
+    {
+      "id": 1766610902921.2302,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "item_id": "frame_rainbow",
+      "acquired_at": "2025-12-24T21:15:02.921Z"
+    },
+    {
+      "id": 1766610904147.509,
+      "user_id": "868035a7-e14b-4175-8adb-948c664326a3",
+      "item_id": "sound_8bit",
+      "acquired_at": "2025-12-24T21:15:04.147Z"
     }
   ]
 }

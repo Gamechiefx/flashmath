@@ -101,6 +101,8 @@ export async function equipItem(type: string, itemId: string) {
 
     revalidatePath("/", "layout"); // Update global theme
     revalidatePath("/locker");
+    revalidatePath("/league");
+    revalidatePath("/dashboard");
 
     return { success: true };
 }

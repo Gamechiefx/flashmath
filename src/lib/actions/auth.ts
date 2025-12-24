@@ -64,9 +64,26 @@ export async function loginUser(formData: FormData) {
         console.log("[ACTION] signIn successful for:", email);
     } catch (error) {
         if (error instanceof AuthError) {
+            // Check if it's our custom ban error (nested in cause usually)
+            const cause = error.cause?.err?.message || (error.cause as any)?.message;
+            if (cause && cause.includes("Account suspended")) {
+                return { error: cause };
+            }
+
             switch (error.type) {
                 case "CredentialsSignin":
                     return { error: "Invalid credentials" };
+                case "CallbackRouteError":
+                    // Sometimes the ban error comes through here if thrown in authorize
+                    if (error.message.includes("Account suspended")) {
+                        return { error: error.message };
+                    }
+                    // Fallback to trying to read the cause again just in case
+                    const deepCause = (error.cause?.err as Error)?.message;
+                    if (deepCause && deepCause.includes("Account suspended")) {
+                        return { error: deepCause };
+                    }
+                    return { error: "Authentication failed" };
                 default:
                     return { error: "Authentication failed" };
             }

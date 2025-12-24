@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw } from "lucide-react";
+import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { resetUserData, deleteUserAccount, updateUsername } from "@/lib/actions/settings";
@@ -11,6 +11,50 @@ import { signOut } from "next-auth/react";
 
 interface SettingsViewProps {
     user: any;
+}
+
+import { useAudioSettings } from "@/components/audio-settings-provider";
+
+function VolumeControl() {
+    const { bgmVolume, setBGMVolume, sfxVolume, setSFXVolume } = useAudioSettings();
+
+    return (
+        <div className="space-y-6">
+            {/* Music Volume */}
+            <div>
+                <div className="flex justify-between mb-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Music</label>
+                    <span className="text-xs font-mono text-primary">{Math.round(bgmVolume * 100)}%</span>
+                </div>
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={bgmVolume}
+                    onChange={(e) => setBGMVolume(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary hover:accent-primary/80"
+                />
+            </div>
+
+            {/* SFX Volume */}
+            <div>
+                <div className="flex justify-between mb-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Sound Effects</label>
+                    <span className="text-xs font-mono text-green-400">{Math.round(sfxVolume * 100)}%</span>
+                </div>
+                <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={sfxVolume}
+                    onChange={(e) => setSFXVolume(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-green-400 hover:accent-green-300"
+                />
+            </div>
+        </div>
+    );
 }
 
 export function SettingsView({ user }: SettingsViewProps) {
@@ -133,6 +177,18 @@ export function SettingsView({ user }: SettingsViewProps) {
                                     <div className="text-lg font-bold">{user?.email}</div>
                                 </div>
                             </div>
+                        </div>
+                    </GlassCard>
+
+                    {/* Audio Section */}
+                    <GlassCard className="p-6 space-y-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Volume2 size={20} className="text-green-400" />
+                            <h2 className="text-xl font-black uppercase tracking-tight">Audio</h2>
+                        </div>
+
+                        <div className="space-y-6">
+                            <VolumeControl />
                         </div>
                     </GlassCard>
 

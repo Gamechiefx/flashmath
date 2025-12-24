@@ -211,9 +211,9 @@ function PracticeContent() {
             const responseTime = Date.now() - problemStartTime;
             // performance logic... simple manual calc for now
             let perfType = "normal";
-            let xp = 10;
-            if (responseTime < 2000) { perfType = "fast"; xp = 20; }
-            else if (responseTime > 10000) { perfType = "slow"; xp = 5; }
+            let xp = 2; // Reduced from 10
+            if (responseTime < 2000) { perfType = "fast"; xp = 4; } // Reduced from 20
+            else if (responseTime > 10000) { perfType = "slow"; xp = 1; } // Reduced from 5
 
             const perf = { label: perfType === "fast" ? "FAST" : "", type: perfType, xp };
 
@@ -361,7 +361,7 @@ function PracticeContent() {
                                     <Zap size={12} />
                                     Active Simulation
                                 </div>
-                                <h1 className="text-6xl md:text-8xl font-black tracking-tighter uppercase leading-[0.85] flex flex-col items-center">
+                                <h1 className="text-[length:var(--hero-size-mobile)] md:text-[length:var(--hero-size-desktop)] font-black tracking-tighter uppercase leading-[0.85] flex flex-col items-center">
                                     <span>{selectedOp}</span>
                                     <span className="text-primary truncate">SPEED TRIAL</span>
                                 </h1>
@@ -371,7 +371,7 @@ function PracticeContent() {
                             </div>
 
                             <div className="flex gap-4 justify-center pt-8">
-                                <NeonButton onClick={startGame} className="px-12 py-6 text-xl w-full sm:w-auto">
+                                <NeonButton onClick={startGame} className="px-8 py-4 text-lg w-full sm:w-auto">
                                     START SIMULATION
                                 </NeonButton>
                             </div>

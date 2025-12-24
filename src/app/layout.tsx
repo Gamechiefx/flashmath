@@ -29,6 +29,8 @@ import { queryOne } from "@/lib/db";
 import { GlobalThemeManager } from "@/components/global-theme-manager";
 import { AuthProvider } from "@/components/auth-provider";
 import { ItemPreviewProvider } from "@/components/item-preview-provider";
+import { AudioSettingsProvider } from "@/components/audio-settings-provider";
+import { SessionGuard } from "@/components/session-guard";
 
 export default async function RootLayout({
   children,
@@ -51,18 +53,21 @@ export default async function RootLayout({
 
 
 
-        <AuthProvider>
-          <ItemPreviewProvider>
-            <ThemeProvider
-              attribute="class"
-              defaultTheme="dark"
-              enableSystem
-              disableTransitionOnChange
-            >
-              <GlobalThemeManager equippedItems={equippedItems} />
-              {children}
-            </ThemeProvider>
-          </ItemPreviewProvider>
+        <AuthProvider session={session}>
+          <AudioSettingsProvider>
+            <ItemPreviewProvider>
+              <ThemeProvider
+                attribute="class"
+                defaultTheme="dark"
+                enableSystem
+                disableTransitionOnChange
+              >
+                <GlobalThemeManager equippedItems={equippedItems} />
+                {/* <SessionGuard /> */}
+                {children}
+              </ThemeProvider>
+            </ItemPreviewProvider>
+          </AudioSettingsProvider>
         </AuthProvider>
       </body>
     </html>

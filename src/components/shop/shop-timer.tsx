@@ -35,12 +35,14 @@ export function ShopTimer() {
             const result = calculateTimeLeft();
             setTimeLeft(result.str);
 
-            // If timer hits exactly 0:00 (or close to it), refresh the page
-            if (result.totalSeconds <= 0) {
-                // Add a small delay/jitter so we don't refresh BEFORE the server clock ticks
-                setTimeout(() => {
-                    router.refresh();
-                }, 2000);
+            // If we just entered a new 5-minute block (minutes % 5 === 0 and seconds are low)
+            // Trigger refresh once.
+            const now = new Date();
+            if (now.getUTCMinutes() % 5 === 0 && now.getUTCSeconds() < 2) {
+                // Debounce? The interval is 1s, so this might fire twice.
+                // We can rely on Next.js routher.refresh() being cheap or add a ref.
+                console.log("Refreshing shop...");
+                router.refresh();
             }
         }, 1000);
 

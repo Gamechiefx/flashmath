@@ -13,8 +13,16 @@ import { BGMPlayer } from "./effects/bgm-player";
 import { ParticleEffects } from "./effects/particle-effects";
 import { Starfield } from "./effects/starfield";
 import { useItemPreview } from "./item-preview-provider";
+import { useAudioSettings } from "./audio-settings-provider";
 
 export function GlobalThemeManager({ equippedItems }: GlobalThemeManagerProps) {
+    const { sfxVolume } = useAudioSettings();
+
+    // Sync SFX Volume
+    useEffect(() => {
+        soundEngine.setVolume(sfxVolume);
+    }, [sfxVolume]);
+
     useEffect(() => {
         const root = document.documentElement;
 
@@ -39,14 +47,23 @@ export function GlobalThemeManager({ equippedItems }: GlobalThemeManagerProps) {
 
             // Special scaling for retro font - Apply to BODY to preserve REM layout
             if (fontItem.id === 'font_press_start') {
-                document.body.style.fontSize = '0.75em'; // Scale text down
-                document.body.style.lineHeight = '1.8';
+                root.style.setProperty('--font-pref', 'retro');
+                root.style.setProperty('--hero-size-mobile', '2.25rem'); // text-4xl
+                root.style.setProperty('--hero-size-desktop', '3rem'); // text-5xl
+                document.body.style.fontSize = '0.6em';
+                document.body.style.lineHeight = '2.0';
             } else {
+                root.style.setProperty('--font-pref', 'default');
+                root.style.setProperty('--hero-size-mobile', '3.75rem'); // text-6xl
+                root.style.setProperty('--hero-size-desktop', '6rem'); // text-8xl
                 document.body.style.fontSize = '';
                 document.body.style.lineHeight = '';
             }
         } else {
             root.style.removeProperty('--font-primary');
+            root.style.setProperty('--font-pref', 'default');
+            root.style.setProperty('--hero-size-mobile', '3.75rem'); // text-6xl (ensure defaults)
+            root.style.setProperty('--hero-size-desktop', '6rem'); // text-8xl
             document.body.style.fontSize = '';
             document.body.style.lineHeight = '';
         }

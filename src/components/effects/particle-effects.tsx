@@ -13,36 +13,45 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
     const particles = useRef<any[]>([]);
     const pathname = usePathname();
 
-    const spawnFragments = () => {
-        // 1. Determine spawn source
-        let baseRect: { left: number, top: number, width: number, height: number } | null = null;
+    const getTargetPosition = () => {
+        let x = window.innerWidth / 2;
+        let y = window.innerHeight / 2;
+        let width = 0;
+        let height = 0;
 
         if (previewRect) {
-            baseRect = previewRect;
+            x = previewRect.left + previewRect.width / 2;
+            y = previewRect.top + previewRect.height / 2;
+            width = previewRect.width;
+            height = previewRect.height;
         } else {
             // Gameplay fallback: Active Input
             const active = document.activeElement;
             if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-                baseRect = active.getBoundingClientRect();
+                const rect = active.getBoundingClientRect();
+                x = rect.left + rect.width / 2;
+                y = rect.top + rect.height / 2;
+                width = rect.width;
+                height = rect.height;
             }
         }
+        return { x, y, width, height };
+    };
 
-        let x = window.innerWidth / 2;
-        let y = window.innerHeight / 2;
+    const spawnFragments = () => {
+        const { x, y, width, height } = getTargetPosition();
+        // Spread a bit based on width/height
+        const spreadX = width ? width / 2 : 20;
 
-        if (baseRect) {
-            x = baseRect.left + baseRect.width / 2 + (Math.random() - 0.5) * baseRect.width;
-            y = baseRect.top + baseRect.height / 2;
-        }
-
-        for (let i = 0; i < 4; i++) { // Reduced from 6 to 4 for performance
+        for (let i = 0; i < 5; i++) {
             const speed = 1 + Math.random() * 3;
             particles.current.push({
                 type: 'fragment',
-                x, y,
+                x: x + (Math.random() - 0.5) * spreadX,
+                y: y,
                 vx: (Math.random() - 0.5) * speed,
-                vy: (Math.random() - 0.5) * speed - 1,
-                life: 0.8, // Reduced life from 1.0 to 0.8
+                vy: (Math.random() - 0.5) * speed - 2, // Upward kick
+                life: 0.8,
                 color: `rgba(${100 + Math.random() * 155}, ${100 + Math.random() * 155}, 255, 0.8)`,
                 size: 2 + Math.random() * 4
             });
@@ -50,45 +59,103 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
     };
 
     const spawnGlitch = () => {
-        // Spawn a few large graphical glitches
-        let x = Math.random() * window.innerWidth;
-        let y = Math.random() * window.innerHeight;
+        const { x: cx, y: cy, width, height } = getTargetPosition();
 
-        if (previewRect) {
-            x = previewRect.left + (Math.random() * previewRect.width);
-            y = previewRect.top + (Math.random() * previewRect.height);
-        }
-
+        // Spawn near target
         for (let i = 0; i < 3; i++) {
+            const w = 50 + Math.random() * 100;
+            const h = 5 + Math.random() * 20;
             particles.current.push({
                 type: 'glitch',
-                x: previewRect ? x : Math.random() * window.innerWidth,
-                y: previewRect ? y : Math.random() * window.innerHeight,
-                w: 50 + Math.random() * 200,
-                h: 5 + Math.random() * 30,
-                life: 0.2, // very short life
+                x: cx + (Math.random() - 0.5) * (width || 200),
+                y: cy + (Math.random() - 0.5) * (height || 100),
+                w, h,
+                life: 0.2,
                 color: `rgba(${Math.random() > 0.5 ? 255 : 0}, ${Math.random() * 255}, ${Math.random() > 0.5 ? 255 : 0}, 0.8)`
             });
         }
     };
 
+    const spawnBinary = () => {
+        const { x, y, width } = getTargetPosition();
+        const spreadX = width ? width / 2 : 50;
+
+        for (let i = 0; i < 4; i++) {
+            particles.current.push({
+                type: 'binary',
+                text: Math.random() > 0.5 ? '1' : '0',
+                x: x + (Math.random() - 0.5) * spreadX,
+                y: y,
+                vy: 2 + Math.random() * 3, // Falling down
+                life: 1.0,
+                color: '#22c55e', // Green-500
+                size: 14 + Math.random() * 6
+            });
+        }
+    };
+
+    const spawnExplosion = () => {
+        const { x, y } = getTargetPosition();
+        // Math symbols instead of BAM POW
+        const symbols = ["+", "-", "×", "÷", "=", "√", "%"];
+        const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+
+        particles.current.push({
+            type: 'text_boom',
+            text: symbol,
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6 - 3,
+            life: 1.0,
+            angle: (Math.random() - 0.5) * 1, // Random rotation
+            color: '#fbbf24', // Amber
+            size: 32 + Math.random() * 16
+        });
+    };
+
+    const spawnVortex = () => {
+        const { x, y } = getTargetPosition();
+
+        for (let i = 0; i < 6; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 60 + Math.random() * 40;
+            particles.current.push({
+                type: 'vortex',
+                cx: x,
+                cy: y,
+                angle,
+                dist,
+                speed: 0.08 + Math.random() * 0.05,
+                life: 1.0,
+                color: '#a855f7', // Purple-500
+                size: 3 + Math.random() * 3
+            });
+        }
+    };
+
+    // 1. INPUT LISTENER EFFECT
     useEffect(() => {
-        // Only active on gameplay pages OR shop/locker for preview
         const allowedPaths = ['/practice', '/placement', '/shop', '/locker'];
         if (effectType === 'default' || !allowedPaths.some(p => pathname.includes(p))) return;
 
         const handleInput = (e: Event) => {
-            if (effectType.includes('sparks')) {
-                spawnFragments();
-            }
-            if (effectType.includes('glitch')) {
-                spawnGlitch();
-            }
+            // Check keydown event for actual typing
+            if (effectType.includes('sparks')) spawnFragments();
+            if (effectType.includes('glitch')) spawnGlitch();
+            if (effectType.includes('binary')) spawnBinary();
+            if (effectType.includes('explosion')) spawnExplosion();
+            if (effectType.includes('vortex')) spawnVortex();
         };
 
         window.addEventListener('keydown', handleInput);
+        return () => window.removeEventListener('keydown', handleInput);
+    }, [effectType, pathname, previewRect]);
 
+    // 2. ANIMATION LOOP
+    useEffect(() => {
         let animationId: number;
+
         const render = () => {
             const canvas = canvasRef.current;
             if (!canvas) return;
@@ -97,50 +164,82 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Update particles
-            particles.current.forEach((p) => {
-                if (p.type === 'spark') {
-                    p.x += p.vx;
-                    p.y += p.vy;
-                    p.life -= 0.03;
-                    p.vy += 0.2; // gravity
+            if (particles.current.length > 0) {
+                particles.current.forEach((p) => {
+                    // --- FRAGMENTS ---
+                    if (p.type === 'fragment') {
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.life -= 0.03;
+                        p.vy += 0.2; // Gravity
 
-                    ctx.fillStyle = p.color;
-                    ctx.globalAlpha = p.life;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
-                } else if (p.type === 'fragment') {
-                    p.x += p.vx;
-                    p.y += p.vy;
-                    p.life -= 0.03;
+                        ctx.fillStyle = p.color;
+                        ctx.globalAlpha = p.life;
+                        ctx.fillRect(p.x, p.y, p.size, p.size);
+                    }
+                    // --- GLITCH ---
+                    else if (p.type === 'glitch') {
+                        p.life -= 0.08;
+                        ctx.fillStyle = p.color;
+                        ctx.globalAlpha = p.life;
+                        ctx.fillRect(p.x, p.y, p.w, p.h);
+                    }
+                    // --- BINARY ---
+                    else if (p.type === 'binary') {
+                        p.y += p.vy;
+                        p.life -= 0.02;
 
-                    ctx.fillStyle = p.color;
-                    ctx.globalAlpha = p.life;
-                    ctx.fillRect(p.x, p.y, p.size, p.size); // Square particles
-                } else if (p.type === 'glitch') {
-                    p.life -= 0.05;
-                    ctx.fillStyle = p.color;
-                    ctx.globalAlpha = p.life;
-                    ctx.fillRect(p.x, p.y, p.w, p.h);
-                }
-            });
+                        ctx.fillStyle = p.color;
+                        ctx.font = `bold ${p.size}px monospace`;
+                        ctx.globalAlpha = p.life;
+                        ctx.fillText(p.text, p.x, p.y);
+                    }
+                    // --- TEXT BOOM / MATH ---
+                    else if (p.type === 'text_boom') {
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.vy += 0.1; // Slight gravity
+                        p.life -= 0.02;
+                        p.angle += 0.02;
+                        const scale = 1 + (1 - p.life) * 0.5;
 
-            // Hard limit on particles for performance
-            if (particles.current.length > 50) {
-                particles.current = particles.current.slice(particles.current.length - 50);
+                        ctx.save();
+                        ctx.translate(p.x, p.y);
+                        ctx.rotate(p.angle);
+                        ctx.fillStyle = p.color;
+                        ctx.font = `800 ${p.size * scale}px "Inter", sans-serif`;
+
+                        ctx.globalAlpha = p.life;
+                        ctx.fillText(p.text, -p.size / 2, p.size / 2);
+                        ctx.restore();
+                    }
+                    // --- VORTEX ---
+                    else if (p.type === 'vortex') {
+                        p.angle += p.speed;
+                        p.dist -= 1.5; // Suck in
+                        p.life -= 0.02;
+
+                        const px = p.cx + Math.cos(p.angle) * p.dist;
+                        const py = p.cy + Math.sin(p.angle) * p.dist;
+
+                        ctx.fillStyle = p.color;
+                        ctx.globalAlpha = p.life;
+                        ctx.beginPath();
+                        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+
+                // Cleanup
+                particles.current = particles.current.filter(p => p.life > 0);
             }
 
-            particles.current = particles.current.filter(p => p.life > 0);
             animationId = requestAnimationFrame(render);
         };
-        render();
 
-        return () => {
-            window.removeEventListener('keydown', handleInput);
-            cancelAnimationFrame(animationId);
-        };
-    }, [effectType, pathname, previewRect]); // Added previewRect dependency
+        render();
+        return () => cancelAnimationFrame(animationId);
+    }, []);
 
     // Handle resize
     useEffect(() => {
@@ -155,13 +254,15 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
         return () => window.removeEventListener('resize', resize);
     }, []);
 
-    // Auto-spawn on effect change for preview (Shop/Locker)
+    // Auto-spawn on effect change (Preview)
     useEffect(() => {
         const isPreviewPage = ['/shop', '/locker'].some(p => pathname.includes(p));
-        // ONLY spawn for previews if we have a valid rect (meaning an item is actually being hovered)
         if (isPreviewPage && effectType !== 'default' && previewRect) {
             if (effectType.includes('sparks')) spawnFragments();
             if (effectType.includes('glitch')) spawnGlitch();
+            if (effectType.includes('binary')) spawnBinary();
+            if (effectType.includes('explosion')) spawnExplosion();
+            if (effectType.includes('vortex')) spawnVortex();
         }
     }, [effectType, pathname, previewRect]);
 

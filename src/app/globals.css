@@ -94,7 +94,7 @@ body {
 }
 
 .theme-deep-space {
-  --background: #000000;
+  --background: transparent;
   --foreground: #e2e8f0;
   --card: #0f172a;
   --card-foreground: #e2e8f0;
@@ -126,6 +126,48 @@ body {
   --glass-border: rgba(245, 158, 11, 0.2);
   --muted-foreground: #a16207;
   /* Yellow-brown */
+}
+
+.theme-red-alert {
+  --background: #1a0505;
+  --foreground: #fca5a5;
+  --card: #2b0b0b;
+  --card-foreground: #fecaca;
+  --primary: #ef4444;
+  --primary-foreground: #000000;
+  --accent: #b91c1c;
+  --accent-glow: rgba(239, 68, 68, 0.5);
+  --glass-bg: rgba(43, 11, 11, 0.9);
+  --glass-border: rgba(239, 68, 68, 0.3);
+  --muted-foreground: #7f1d1d;
+}
+
+.theme-ice-cold {
+  --background: #082f49;
+  --foreground: #e0f2fe;
+  --card: #0c4a6e;
+  --card-foreground: #f0f9ff;
+  --primary: #38bdf8;
+  --primary-foreground: #082f49;
+  --accent: #7dd3fc;
+  --accent-glow: rgba(56, 189, 248, 0.5);
+  --glass-bg: rgba(8, 47, 73, 0.8);
+  --glass-border: rgba(56, 189, 248, 0.3);
+  --muted-foreground: #0ea5e9;
+}
+
+.theme-sunset-drive {
+  --background: #2e1065;
+  --foreground: #f0abfc;
+  --card: #4c1d95;
+  --card-foreground: #fae8ff;
+  --primary: #f97316;
+  --primary-foreground: #ffffff;
+  --accent: #ec4899;
+  --accent-glow: rgba(249, 115, 22, 0.5);
+  --glass-bg: rgba(46, 16, 101, 0.8);
+  --glass-border: rgba(236, 72, 153, 0.3);
+  --muted-foreground: #c084fc;
 }
 
 @layer utilities {
@@ -213,5 +255,64 @@ body {
 
   100% {
     filter: hue-rotate(360deg);
+  }
+}
+
+@keyframes spin-infinite {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.frame-rainbow {
+  position: relative;
+  border: 4px solid transparent;
+  border-radius: 9999px;
+  background: conic-gradient(red, orange, yellow, green, blue, indigo, violet, red) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: spin-infinite 2s linear infinite;
+}
+
+.frame-wanted {
+  border: 4px solid #78350f;
+  border-radius: 8px;
+  box-shadow: 0 0 0 2px #fcd34d;
+  background-image: repeating-linear-gradient(45deg, transparent 0, transparent 10px, rgba(0, 0, 0, 0.05) 10px, rgba(0, 0, 0, 0.05) 12px);
+}
+
+.frame-hologram {
+  border: 2px solid #60a5fa;
+  border-radius: 9999px;
+  box-shadow: 0 0 15px #3b82f6, inset 0 0 10px #3b82f6;
+  animation: hologram-flicker 2s infinite;
+}
+
+.frame-diamond {
+  border: 3px solid #e0f2fe;
+  border-radius: 9999px;
+  box-shadow: 0 0 10px white, inset 0 0 5px white;
+  filter: drop-shadow(0 0 5px cyan);
+}
+
+.frame-red-alert {
+  border: 3px solid red;
+  box-shadow: 0 0 10px red, inset 0 0 10px darkred;
+  border-radius: 9999px;
+}
+
+@keyframes hologram-flicker {
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 15px #3b82f6, inset 0 0 10px #3b82f6;
+  }
+
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 5px #3b82f6, inset 0 0 2px #3b82f6;
   }
 }

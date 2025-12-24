@@ -79,8 +79,37 @@ export const ITEMS: Item[] = [
         type: ItemType.THEME,
         rarity: Rarity.LEGENDARY,
         price: 50000,
-        assetValue: 'theme-deep-space',
         icon: Hexagon
+    },
+    {
+        id: 'theme_red_alert',
+        name: 'Red Alert',
+        description: 'Empire vibes. Deep reds and smooth blacks.',
+        type: ItemType.THEME,
+        rarity: Rarity.UNCOMMON,
+        price: 750,
+        assetValue: 'theme-red-alert',
+        icon: Shield
+    },
+    {
+        id: 'theme_ice_cold',
+        name: 'Ice Cold',
+        description: 'Stay frosty. Cool blues and whites.',
+        type: ItemType.THEME,
+        rarity: Rarity.RARE,
+        price: 3000,
+        assetValue: 'theme-ice-cold',
+        icon: Hexagon
+    },
+    {
+        id: 'theme_sunset_drive',
+        name: 'Sunset Drive',
+        description: 'Cruising down the grid. Purple to Orange.',
+        type: ItemType.THEME,
+        rarity: Rarity.EPIC,
+        price: 15000,
+        assetValue: 'theme-sunset-drive',
+        icon: Zap
     },
 
     // --- 2. Particle Effects ---
@@ -101,8 +130,37 @@ export const ITEMS: Item[] = [
         type: ItemType.PARTICLE,
         rarity: Rarity.LEGENDARY,
         price: 35000,
-        assetValue: 'particle-glitch',
         icon: Zap
+    },
+    {
+        id: 'particle_binary',
+        name: 'Binary Rain',
+        description: 'The code falls... waiting to be decrypted.',
+        type: ItemType.PARTICLE,
+        rarity: Rarity.RARE,
+        price: 2500,
+        assetValue: 'particle-binary',
+        icon: Monitor
+    },
+    {
+        id: 'particle_explosion',
+        name: 'Comic Boom',
+        description: 'POW! Tiny explosions on every combo.',
+        type: ItemType.PARTICLE,
+        rarity: Rarity.EPIC,
+        price: 12000,
+        assetValue: 'particle-explosion',
+        icon: Flame
+    },
+    {
+        id: 'particle_vortex',
+        name: 'Vortex',
+        description: 'A swirling portal consumes the numbers.',
+        type: ItemType.PARTICLE,
+        rarity: Rarity.LEGENDARY,
+        price: 45000,
+        assetValue: 'particle-vortex',
+        icon: Sparkles
     },
 
     // --- 3. Fonts ---
@@ -145,8 +203,27 @@ export const ITEMS: Item[] = [
         type: ItemType.SOUND,
         rarity: Rarity.EPIC,
         price: 9000,
-        assetValue: '/sounds/scifi.mp3',
         icon: Monitor
+    },
+    {
+        id: 'sound_typewriter',
+        name: 'Typewriter',
+        description: 'Classic heavy mechanical clack.',
+        type: ItemType.SOUND,
+        rarity: Rarity.UNCOMMON,
+        price: 800,
+        assetValue: '/sounds/typewriter.mp3',
+        icon: Keyboard
+    },
+    {
+        id: 'sound_8bit',
+        name: '8-Bit Zap',
+        description: 'Retro jump sounds for every key.',
+        type: ItemType.SOUND,
+        rarity: Rarity.RARE,
+        price: 4000,
+        assetValue: '/sounds/8bit.mp3',
+        icon: Zap
     },
 
     // --- 5. BGM Loops ---
@@ -195,6 +272,7 @@ export const ITEMS: Item[] = [
 
     { id: 'title_unstoppable', name: 'The Unstoppable', description: '', type: ItemType.TITLE, rarity: Rarity.LEGENDARY, price: 30000, assetValue: 'The Unstoppable', icon: Trophy },
     { id: 'title_pinnacle', name: 'The Pinnacle', description: '', type: ItemType.TITLE, rarity: Rarity.LEGENDARY, price: 50000, assetValue: 'The Pinnacle', icon: Trophy },
+    { id: 'title_human_calc', name: 'Human Calculator', description: '', type: ItemType.TITLE, rarity: Rarity.EPIC, price: 10000, assetValue: 'Human Calculator', icon: Monitor },
 
     // --- 7. Avatar Frames ---
     { id: 'frame_bronze', name: 'The Bronze Border', description: 'Simple, sturdy bronze.', type: ItemType.FRAME, rarity: Rarity.COMMON, price: 100, assetValue: 'frame-bronze', icon: Shield },
@@ -203,4 +281,8 @@ export const ITEMS: Item[] = [
     { id: 'frame_glitch_ring', name: 'Animated Glitch Ring', description: 'Unstable reality.', type: ItemType.FRAME, rarity: Rarity.EPIC, price: 12000, assetValue: 'frame-glitch', icon: Zap },
     { id: 'frame_gold_hex', name: 'Golden Hexagon', description: 'Pure luxury.', type: ItemType.FRAME, rarity: Rarity.LEGENDARY, price: 40000, assetValue: 'frame-gold-hex', icon: Hexagon },
     { id: 'frame_nebula', name: 'Cosmic Nebula', description: 'Starlight in a frame.', type: ItemType.FRAME, rarity: Rarity.LEGENDARY, price: 45000, assetValue: 'frame-nebula', icon: Sparkles },
+    { id: 'frame_wanted', name: 'Wanted Poster', description: 'Reward: 1,000,000 Flux.', type: ItemType.FRAME, rarity: Rarity.UNCOMMON, price: 1000, assetValue: 'frame-wanted', icon: Shield },
+    { id: 'frame_hologram', name: 'Hologram', description: 'Unstable photonic containment.', type: ItemType.FRAME, rarity: Rarity.RARE, price: 5000, assetValue: 'frame-hologram', icon: Monitor },
+    { id: 'frame_rainbow', name: 'Rainbow Glitch', description: 'Taste the spectrum error.', type: ItemType.FRAME, rarity: Rarity.EPIC, price: 20000, assetValue: 'frame-rainbow', icon: Zap },
+    { id: 'frame_diamond', name: 'Diamond', description: 'Indestructible brilliance.', type: ItemType.FRAME, rarity: Rarity.LEGENDARY, price: 60000, assetValue: 'frame-diamond', icon: Hexagon },
 ];

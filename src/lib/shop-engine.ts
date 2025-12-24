@@ -1,8 +1,8 @@
 
-import { Item, ItemType, Rarity } from "./items";
+import { Item, ItemType, Rarity, ITEMS } from "./items";
 import seedrandom from "seedrandom";
 // Import db query logic - we need to read from the live DB now
-import { loadData } from "./db";
+import { loadData, initSchema } from "./db";
 
 // Pricing/Rarity Weights for Selection
 // We want to ensure the shop has a mix of items.
@@ -38,10 +38,23 @@ export function getDailyShopSelection(): Item[] {
 
     // --- CHANGED: Fetch from DB instead of static ITEMS ---
     const db = loadData();
-    const dbItems = db.shop_items as Item[];
+    let dbItems = db.shop_items as Item[];
 
     // Fallback if DB is empty (shouldn't happen with initSchema, but safety first)
-    if (!dbItems || dbItems.length === 0) return [];
+    if (!dbItems || dbItems.length === 0) {
+        console.warn("[ShopEngine] DB items empty. Attempting to seed...");
+        initSchema(); // Force seed
+        const freshDb = loadData(); // Reload
+        dbItems = freshDb.shop_items as Item[];
+
+        // Final fallback if still empty
+        if (!dbItems || dbItems.length === 0) {
+            console.warn("[ShopEngine] Seeding failed, using static fallback.");
+            dbItems = ITEMS;
+        }
+    }
+
+    console.log(`[ShopEngine] Selecting from ${dbItems.length} items. Seed: ${minutes}`);
 
     const slots = [
         ItemType.THEME,
@@ -55,7 +68,11 @@ export function getDailyShopSelection(): Item[] {
     slots.forEach((slotType, index) => {
         // Filter items by type from DB list
         const candidates = dbItems.filter(i => i.type === slotType);
-        if (candidates.length === 0) return;
+        // console.log(`[ShopEngine] Slot ${slotType}: ${candidates.length} candidates`); // Debug log
+        if (candidates.length === 0) {
+            console.log(`[ShopEngine] No candidates for slot ${slotType}`);
+            return;
+        }
 
         // Deterministic Cycle:
         // Use the seed (minutes/5) as an incremental counter.

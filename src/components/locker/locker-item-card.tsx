@@ -7,13 +7,13 @@ import { EquipButton } from "./equip-button";
 import { useItemPreview } from "@/components/item-preview-provider";
 
 interface LockerItemCardProps {
-    itemId: string;
+    item: Item;
     isEquipped: boolean;
     type: string;
 }
 
-export function LockerItemCard({ itemId, isEquipped, type }: LockerItemCardProps) {
-    const item = ITEMS.find(i => i.id === itemId);
+export function LockerItemCard({ item, isEquipped, type }: LockerItemCardProps) {
+    // const item = ITEMS.find(i => i.id === itemId); // REMOVED static lookup
     const { setPreviewItem } = useItemPreview();
 
     if (!item) return null;

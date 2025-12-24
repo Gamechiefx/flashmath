@@ -8,7 +8,10 @@ interface BGMPlayerProps {
     enabled: boolean;
 }
 
+import { useAudioSettings } from "@/components/audio-settings-provider";
+
 export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
+    const { bgmVolume } = useAudioSettings();
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [userMuted, setUserMuted] = useState(false); // Local toggle for BGM specifically if desired
@@ -23,7 +26,7 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
             // Standard Audio Playback
             const audio = new Audio(src);
             audio.loop = true;
-            audio.volume = 0.4; // Reasonable background level
+            audio.volume = bgmVolume; // Use global volume
 
             const playPromise = audio.play();
             if (playPromise !== undefined) {
@@ -40,6 +43,18 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
                 audioRef.current = null;
             };
         }
+    }, [src, enabled]); // Only re-run if src changes. Volume handled separately.
+
+    // Dynamic Volume Update for FILE playback
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = bgmVolume;
+        }
+    }, [bgmVolume]);
+
+    useEffect(() => {
+        if (!enabled || src === 'default' || !src) return;
+        if (src.startsWith('/') || src.includes('.')) return; // Handled above
 
         // ... OTHERWISE USE PROCEDURAL ENGINE ...
 
@@ -65,7 +80,7 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
         const playDrone = (freqs: number[], type: OscillatorType, volume: number) => {
             if (isCleanedUp) return;
             const masterGain = ctx.createGain();
-            masterGain.gain.value = 0.1; // Low volume background
+            masterGain.gain.value = 0.1 * bgmVolume; // Apply global volume
             masterGain.connect(ctx.destination);
             gainNodes.push(masterGain);
 
@@ -119,8 +134,8 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
                 const gain = ctx.createGain();
                 osc.frequency.setValueAtTime(120, time); // Softer kick
                 osc.frequency.exponentialRampToValueAtTime(0.01, time + 0.5);
-                gain.gain.setValueAtTime(0.5, time); // Quieter
-                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+                gain.gain.setValueAtTime(0.5 * bgmVolume, time); // Quieter
+                gain.gain.exponentialRampToValueAtTime(0.001 * bgmVolume, time + 0.5);
                 osc.connect(gain);
                 gain.connect(ctx.destination);
                 osc.start(time);
@@ -142,8 +157,8 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
                 filter.type = 'lowpass';
                 filter.frequency.value = 800;
 
-                gain.gain.setValueAtTime(0.2, time);
-                gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+                gain.gain.setValueAtTime(0.2 * bgmVolume, time);
+                gain.gain.exponentialRampToValueAtTime(0.01 * bgmVolume, time + 0.2);
 
                 noise.connect(filter);
                 filter.connect(gain);
@@ -163,7 +178,7 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
                 filter.frequency.setValueAtTime(500, time);
                 filter.frequency.linearRampToValueAtTime(100, time + sixteenth * 3);
 
-                gain.gain.setValueAtTime(0.3, time);
+                gain.gain.setValueAtTime(0.3 * bgmVolume, time);
                 gain.gain.linearRampToValueAtTime(0, time + sixteenth * 3);
 
                 osc.connect(filter);
@@ -179,8 +194,8 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
                 const gain = ctx.createGain();
                 osc.frequency.setValueAtTime(freq, time);
 
-                gain.gain.setValueAtTime(0.05, time);
-                gain.gain.exponentialRampToValueAtTime(0.01, time + sixteenth);
+                gain.gain.setValueAtTime(0.05 * bgmVolume, time);
+                gain.gain.exponentialRampToValueAtTime(0.01 * bgmVolume, time + sixteenth);
 
                 // Delay effect! (Simulated via simple extra notes? No, keep it simple)
                 osc.connect(gain);
@@ -260,7 +275,7 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
         else playLofi();
 
         return cleanup;
-    }, [src, enabled]);
+    }, [src, enabled, bgmVolume]);
 
 
     // Icon to show it's "playing" (optional, but requested feedback)

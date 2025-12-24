@@ -236,6 +236,13 @@ export const execute = (text: string, params: any[] = []) => {
                 user.math_tiers = params[0];
             } else if (lowerText.includes('equipped_items = ?')) {
                 user.equipped_items = params[0];
+            } else if (lowerText.includes('banned_until = ?')) {
+                user.banned_until = params[0]; // ISO string or null
+                // Also sync is_banned boolean for backward compat/easy checks
+                user.is_banned = !!params[0];
+            } else if (lowerText.includes('is_banned = ?')) {
+                user.is_banned = !!params[0];
+                if (!user.is_banned) user.banned_until = null;
             }
         }
     }

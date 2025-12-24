@@ -94,6 +94,11 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
                                             <div className={cn("text-sm font-bold uppercase tracking-tight", isUser && "text-primary")}>
                                                 {p.name} {isUser && "(YOU)"}
                                             </div>
+                                            {p.titleName && (
+                                                <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                                                    {p.titleName}
+                                                </div>
+                                            )}
                                             {isPromotion && <div className="text-[10px] font-bold text-green-400 uppercase tracking-widest flex items-center gap-1"><ChevronUp size={10} /> Promotion Zone</div>}
                                             {isDemotion && <div className="text-[10px] font-bold text-red-400 uppercase tracking-widest flex items-center gap-1"><ChevronDown size={10} /> Risk of Demotion</div>}
                                         </div>

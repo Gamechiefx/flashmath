@@ -40,7 +40,9 @@ export function Starfield() {
 
         const render = () => {
             time += 0.05;
-            ctx.clearRect(0, 0, width, height);
+            // Draw background
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, width, height);
 
             // Draw Stars
             seeds.forEach(star => {
