@@ -3,7 +3,7 @@
 import { query, queryOne, execute, saveData } from "./db";
 import { v4 as uuid } from "uuid";
 
-const LEAGUE_DURATION_MS = 5 * 60 * 1000; // 5 mins for testing
+const LEAGUE_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (weekly cycle)
 const TIERS = ['neon-league', 'cobalt-league', 'plasma-league', 'void-league', 'apex-league'];
 
 /**
@@ -81,8 +81,19 @@ async function processLeagueReset() {
         execute('DELETE FROM league_participants WHERE league_id = ?', [tierId]);
     }
 
-    // Set new end time
-    const newEndTime = new Date(Date.now() + LEAGUE_DURATION_MS).toISOString();
+    // Set new end time to next Monday midnight Eastern
+    const getNextMondayMidnight = () => {
+        const now = new Date();
+        const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        const dayOfWeek = eastern.getDay();
+        const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek); // if Sunday, next day; otherwise days to next Monday
+        const nextMonday = new Date(eastern);
+        nextMonday.setDate(eastern.getDate() + daysUntilMonday);
+        nextMonday.setHours(0, 0, 0, 0);
+        return nextMonday.toISOString();
+    };
+
+    const newEndTime = getNextMondayMidnight();
     for (const tierId of TIERS) {
         execute('UPDATE leagues SET end_time = ? WHERE id = ?', [newEndTime, tierId]);
     }

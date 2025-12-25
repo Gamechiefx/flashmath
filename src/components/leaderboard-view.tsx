@@ -121,7 +121,7 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
             <div className="bg-primary/10 border border-primary/20 rounded-2xl p-6 text-center">
                 <p className="text-sm font-medium text-primary">
                     <Trophy size={16} className="inline mr-2 -translate-y-0.5" />
-                    Finish in the **Top 3** to advance to the next league and earn **250 Neural Credits**!
+                    Finish in the **Top 3** to advance to the next league and earn **250 Flux Coins**!
                 </p>
             </div>
         </div>

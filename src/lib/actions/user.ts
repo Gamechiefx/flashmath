@@ -126,14 +126,21 @@ export async function getDashboardStats() {
         if (item) equippedTitle = item.name || item.assetValue;
     }
 
+    // Calculate user's league rank
+    const leagueId = user?.current_league_id || 'neon-league';
+    const leagueParticipants = db.league_participants.filter((p: any) => p.league_id === leagueId);
+    const sortedParticipants = [...leagueParticipants].sort((a: any, b: any) => b.weekly_xp - a.weekly_xp);
+    const userRank = sortedParticipants.findIndex((p: any) => p.user_id === userId) + 1;
+
     return {
         accuracy: totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0,
         avgSpeed: avgSpeed.toFixed(2) + "s",
         totalXP: user?.total_xp || 0,
         coins: user?.coins || 0,
         level: user?.level || 1,
-        leagueId: user?.current_league_id || 'neon-league',
-        equippedTitle, // Added
+        leagueId: leagueId,
+        equippedTitle,
+        userRank: userRank > 0 ? userRank : null, // null if not in league yet
         recentSessions: userSessions.slice(-5).reverse(), // Limit to last 5
         masteryMap,
         careerStats: {
