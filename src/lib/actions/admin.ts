@@ -1,11 +1,8 @@
 "use server";
 
-import { execute, loadData, saveData } from "@/lib/db";
+import { getDatabase } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
-
-// We should probably check if user is admin, but for now we'll just check if they are logged in.
-// In a real app we'd have a role field.
 
 export async function updateItem(itemId: string, data: { name: string; rarity: string; price: number }) {
     const session = await auth();
@@ -13,21 +10,24 @@ export async function updateItem(itemId: string, data: { name: string; rarity: s
 
     try {
         console.log(`[ADMIN] Updating item ${itemId}:`, data);
-        const db = loadData();
+        const db = getDatabase();
 
-        const existingItem = db.shop_items.find((i: any) => i.id === itemId);
+        // Check if item exists
+        const existingItem = db.prepare('SELECT id FROM shop_items WHERE id = ?').get(itemId);
         if (!existingItem) return { error: "Item not found" };
 
-        // STATIC ID UPDATE Strategy
-        // We only update the properties, NEVER the ID.
-        existingItem.name = data.name;
-        existingItem.rarity = data.rarity;
-        existingItem.price = data.price;
+        // Update using SQLite
+        db.prepare(`
+            UPDATE shop_items 
+            SET name = ?, rarity = ?, price = ?
+            WHERE id = ?
+        `).run(data.name, data.rarity, data.price, itemId);
 
-        saveData(); // Persist to JSON
+        console.log(`[ADMIN] Successfully updated item ${itemId}`);
 
         revalidatePath("/shop");
         revalidatePath("/admin");
+        revalidatePath("/locker");
         return { success: true };
     } catch (error) {
         console.error("Failed to update item:", error);
