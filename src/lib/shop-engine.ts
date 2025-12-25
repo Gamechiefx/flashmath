@@ -23,14 +23,13 @@ const RARITY_WEIGHTS = {
 };
 
 export function getDailyShopSelection(): Item[] {
-    // 1. Generate Seed from Date (Eastern Time YYYY-MM-DD-HH-mm/5)
-    // User requested 5 minute rotation in Eastern timezone.
+    // 1. Generate Seed from Date (Eastern Time YYYY-MM-DD)
+    // Shop rotates daily at midnight Eastern timezone.
     const now = new Date();
 
     // Convert to Eastern Time
     const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    const minutes = Math.floor(eastern.getMinutes() / 5);
-    const seed = `${eastern.getFullYear()}-${eastern.getMonth() + 1}-${eastern.getDate()}-${eastern.getHours()}-${minutes}`;
+    const seed = `${eastern.getFullYear()}-${eastern.getMonth() + 1}-${eastern.getDate()}`;
     const rng = seedrandom(seed);
 
     // 2. Select Items: One per Category, Cycling through available items
@@ -57,7 +56,9 @@ export function getDailyShopSelection(): Item[] {
         }
     }
 
-    console.log(`[ShopEngine] Selecting from ${dbItems.length} items. Seed: ${minutes}`);
+    // Calculate day index for cycling (days since epoch)
+    const dayIndex = Math.floor(eastern.getTime() / (24 * 60 * 60 * 1000));
+    console.log(`[ShopEngine] Selecting from ${dbItems.length} items. Day: ${seed}`);
 
     const slots = [
         ItemType.THEME,
@@ -72,28 +73,18 @@ export function getDailyShopSelection(): Item[] {
     slots.forEach((slotType, index) => {
         // Filter items by type from DB list
         const candidates = dbItems.filter(i => i.type === slotType);
-        // console.log(`[ShopEngine] Slot ${slotType}: ${candidates.length} candidates`); // Debug log
         if (candidates.length === 0) {
             console.log(`[ShopEngine] No candidates for slot ${slotType}`);
             return;
         }
 
-        // Deterministic Cycle:
-        // Use the seed (minutes/5) as an incremental counter.
-        // We add an offset based on the slot index so they don't all cycle in sync (if counts are same)
-        // Actually, just using rng() gives us a stable random float for this seed.
-        // But pure random might repeat.
-        // User wants "Cycled". "Cycled" implies A -> B -> C -> A.
-        // Let's use the raw time components from the seed construction logic to create a counter.
-
-        const now = new Date();
-        const globalCycleIndex = Math.floor(now.getTime() / (5 * 60 * 1000)); // Number of 5-min intervals since Epoch
-
+        // Deterministic Daily Cycle:
+        // Use the day index to cycle through items
         // Add a slot-specific offset to scramble the starting positions
         const slotOffset = index * 7;
 
         // Pick index
-        const itemIndex = (globalCycleIndex + slotOffset) % candidates.length;
+        const itemIndex = (dayIndex + slotOffset) % candidates.length;
 
         selection.push(candidates[itemIndex]);
     });
