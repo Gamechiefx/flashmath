@@ -23,11 +23,14 @@ const RARITY_WEIGHTS = {
 };
 
 export function getDailyShopSelection(): Item[] {
-    // 1. Generate Seed from Date (UTC YYYY-MM-DD-HH-mm/5)
-    // User requested 5 minute rotation.
+    // 1. Generate Seed from Date (Eastern Time YYYY-MM-DD-HH-mm/5)
+    // User requested 5 minute rotation in Eastern timezone.
     const now = new Date();
-    const minutes = Math.floor(now.getUTCMinutes() / 5);
-    const seed = `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}-${now.getUTCHours()}-${minutes}`;
+
+    // Convert to Eastern Time
+    const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const minutes = Math.floor(eastern.getMinutes() / 5);
+    const seed = `${eastern.getFullYear()}-${eastern.getMonth() + 1}-${eastern.getDate()}-${eastern.getHours()}-${minutes}`;
     const rng = seedrandom(seed);
 
     // 2. Select Items: One per Category, Cycling through available items
