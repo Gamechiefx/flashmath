@@ -230,6 +230,9 @@ export const execute = (text: string, params: any[] = []) => {
                 user.total_xp = xp;
                 user.level = level;
                 user.coins = coins;
+            } else if (lowerText.includes('set coins = ?') && !lowerText.includes('total_xp')) {
+                // Handle simple "UPDATE users SET coins = ? WHERE id = ?"
+                user.coins = params[0];
             } else if (lowerText.includes('current_league_id = ?')) {
                 user.current_league_id = params[0];
             } else if (lowerText.includes('math_tiers = ?')) {

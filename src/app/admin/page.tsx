@@ -20,10 +20,13 @@ import { SeedButton } from "@/components/admin/seed-button"; // Separate file to
 
 export default async function AdminPage() {
     const session = await auth();
-    // In real app, check role.
-    if (!session?.user || session.user.email !== 'math@gmail.com') return <div className="p-10 text-center">Unauthorized: Admins Only</div>;
+    if (!session?.user) return <div className="p-10 text-center">Unauthorized: Please log in</div>;
 
+    // Check for admin flag in database
     const data = loadData();
+    const user = data.users.find((u: any) => u.id === (session.user as any).id);
+    if (!user?.is_admin) return <div className="p-10 text-center">Unauthorized: Admins Only</div>;
+
     // Sort by type then rarity
     const items = (data.shop_items as Item[]).sort((a, b) => a.type.localeCompare(b.type));
 
