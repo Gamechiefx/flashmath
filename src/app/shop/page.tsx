@@ -86,7 +86,6 @@ export default async function ShopPage() {
                 <div className="w-full p-3 rounded-lg bg-white/5 border border-white/10 flex justify-center items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                     <RefreshCw size={12} className="animate-spin-slow" />
                     Restock in: <ShopTimer />
-                    (Global 5-Min Rotation)
                 </div>
 
 
