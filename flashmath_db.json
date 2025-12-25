@@ -18,8 +18,8 @@
       "total_xp": 1237,
       "created_at": "2025-12-23T17:38:05.872Z",
       "equipped_items": {
-        "theme": "theme_matrix",
-        "particle": "particle_binary",
+        "theme": "theme_sunset_drive",
+        "particle": "particle_vortex",
         "font": "default",
         "sound": "sound_8bit",
         "bgm": "default",
@@ -1000,31 +1000,31 @@
       "id": "neon-league",
       "name": "NEON",
       "min_rank": 1,
-      "end_time": "2025-12-25T17:55:52.497Z"
+      "end_time": "2025-12-25T19:11:55.637Z"
     },
     {
       "id": "cobalt-league",
       "name": "COBALT",
       "min_rank": 2,
-      "end_time": "2025-12-25T17:55:52.497Z"
+      "end_time": "2025-12-25T19:11:55.637Z"
     },
     {
       "id": "plasma-league",
       "name": "PLASMA",
       "min_rank": 3,
-      "end_time": "2025-12-25T17:55:52.497Z"
+      "end_time": "2025-12-25T19:11:55.637Z"
     },
     {
       "id": "void-league",
       "name": "VOID",
       "min_rank": 4,
-      "end_time": "2025-12-25T17:55:52.497Z"
+      "end_time": "2025-12-25T19:11:55.637Z"
     },
     {
       "id": "apex-league",
       "name": "APEX",
       "min_rank": 5,
-      "end_time": "2025-12-25T17:55:52.497Z"
+      "end_time": "2025-12-25T19:11:55.637Z"
     }
   ],
   "league_participants": [
@@ -1036,183 +1036,183 @@
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-4dcae27c-e65a-4a60-8f1d-7e631047d9c1",
-      "name": "CyberBlade#155",
-      "weekly_xp": 56
+      "user_id": "ghost-2d08430f-a9ce-4a91-8967-e7aba1f32c31",
+      "name": "Echo#729",
+      "weekly_xp": 39
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-8d558bc8-6600-4cbb-8f52-05661d73a612",
-      "name": "CircuitLink#259",
-      "weekly_xp": 92
+      "user_id": "ghost-cff654f2-3fb8-476f-a0a2-95aa2b0ae2ba",
+      "name": "CircuitLink#782",
+      "weekly_xp": 77
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-5b7d8456-5682-4d4b-8675-d4a0a919e920",
-      "name": "Zenith#745",
-      "weekly_xp": 80
+      "user_id": "ghost-4758c97f-0024-44be-9af2-ab29d359d97c",
+      "name": "CircuitLink#946",
+      "weekly_xp": 71
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-4e295738-714f-4599-a897-900dd6cfafd7",
-      "name": "VoidRunner#699",
-      "weekly_xp": 15
+      "user_id": "ghost-086e8957-0c8d-411e-9420-97a52281b2d3",
+      "name": "CyberBlade#365",
+      "weekly_xp": 37
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-10c48e09-8d1d-4a45-9a3a-2607ee2ba42a",
-      "name": "Echo#574",
-      "weekly_xp": 49
+      "user_id": "ghost-101d0aa8-f2b7-4811-b180-fe4bf6e535ea",
+      "name": "Quantum#590",
+      "weekly_xp": 16
     },
     {
       "league_id": "neon-league",
-      "user_id": "ghost-f661bdf3-3c55-44d4-b34c-b9bd564aaa0a",
-      "name": "VoidRunner#266",
-      "weekly_xp": 70
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-a94df97f-f29c-4733-bcb9-a04fd50dbd79",
-      "name": "Echo#987",
-      "weekly_xp": 43
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-3a2a5861-b0b3-4bc8-9f6a-c08270678307",
-      "name": "CyberBlade#258",
-      "weekly_xp": 76
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-1dddbdb2-a524-4e77-b9b0-0403a9cd268d",
-      "name": "VoidRunner#53",
-      "weekly_xp": 56
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-29a5aa7e-d152-4843-a305-85b662068bf3",
-      "name": "Echo#422",
-      "weekly_xp": 67
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-46ed96ac-e04d-49cd-804c-c2d18484bbde",
-      "name": "NeoMath#876",
-      "weekly_xp": 70
-    },
-    {
-      "league_id": "cobalt-league",
-      "user_id": "ghost-c89c1783-a976-48a7-94b5-6c7f4a23740c",
-      "name": "CyberBlade#172",
-      "weekly_xp": 67
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-3096bd53-32dd-48af-92bb-f24d868a8446",
-      "name": "CircuitLink#71",
-      "weekly_xp": 94
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-04c1c481-7acf-4285-bebe-1ee78d12a3bb",
-      "name": "Quantum#735",
+      "user_id": "ghost-143512fe-38b8-48e2-b93d-a272edb5a4c2",
+      "name": "CircuitLink#248",
       "weekly_xp": 8
     },
     {
-      "league_id": "plasma-league",
-      "user_id": "ghost-f063b7e9-26bc-4fc8-892b-d34600a52aff",
-      "name": "CyberBlade#763",
-      "weekly_xp": 69
+      "league_id": "cobalt-league",
+      "user_id": "ghost-a87e07d7-b130-4731-a1fb-322e06a7aaea",
+      "name": "CyberBlade#808",
+      "weekly_xp": 73
     },
     {
-      "league_id": "plasma-league",
-      "user_id": "ghost-17dd8746-8f4a-4ee0-92a6-7f085e64b915",
-      "name": "Quantum#512",
-      "weekly_xp": 34
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-b742f6d0-d1ac-418e-a9de-6780a735f1d6",
-      "name": "Quantum#167",
-      "weekly_xp": 34
-    },
-    {
-      "league_id": "plasma-league",
-      "user_id": "ghost-89ea3798-c19b-443f-8809-5dbff5660cb4",
-      "name": "Echo#202",
-      "weekly_xp": 50
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-ee985414-8cc0-43a9-82fd-4aad3639f9b6",
-      "name": "Zenith#706",
-      "weekly_xp": 24
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-110df9a8-cfaa-40dd-a198-66e78d6c6bce",
-      "name": "CircuitLink#979",
-      "weekly_xp": 66
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-47e64db8-07e6-4d3b-a225-976721540821",
-      "name": "Echo#62",
-      "weekly_xp": 65
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-5ea1b110-3a71-49ad-86c6-e9a9d47219b3",
-      "name": "VoidRunner#576",
-      "weekly_xp": 87
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-d32d719e-87e8-4aa0-8903-ad702d4d9bd9",
-      "name": "NeoMath#927",
-      "weekly_xp": 35
-    },
-    {
-      "league_id": "void-league",
-      "user_id": "ghost-b12a0b7d-c979-48a0-b5d5-44ae879093f1",
-      "name": "Zenith#369",
-      "weekly_xp": 13
-    },
-    {
-      "league_id": "apex-league",
-      "user_id": "ghost-c888185e-2f5f-460a-a3e7-5dc9d61a7232",
-      "name": "VoidRunner#743",
+      "league_id": "cobalt-league",
+      "user_id": "ghost-89598eaf-d350-4e17-997c-02c7eb95bd98",
+      "name": "Quantum#495",
       "weekly_xp": 83
     },
     {
-      "league_id": "apex-league",
-      "user_id": "ghost-e87aeb82-63ad-4e9e-8ab9-85783844e249",
-      "name": "Zenith#375",
-      "weekly_xp": 51
+      "league_id": "cobalt-league",
+      "user_id": "ghost-18f90da5-b5cb-404a-886e-e43032ad4e49",
+      "name": "NeoMath#452",
+      "weekly_xp": 49
     },
     {
-      "league_id": "apex-league",
-      "user_id": "ghost-04891d0d-bb87-4f09-a21e-90d40bff9520",
-      "name": "CyberBlade#953",
-      "weekly_xp": 14
+      "league_id": "cobalt-league",
+      "user_id": "ghost-427fd4d5-dc84-4944-8409-6aff28f51122",
+      "name": "CircuitLink#64",
+      "weekly_xp": 29
     },
     {
-      "league_id": "apex-league",
-      "user_id": "ghost-82432f7e-b559-4ccd-a006-a8424d71bcbf",
-      "name": "NeoMath#596",
-      "weekly_xp": 88
+      "league_id": "cobalt-league",
+      "user_id": "ghost-8e7e25ba-3e1a-4ab7-948e-d7b6bb0754a9",
+      "name": "Echo#156",
+      "weekly_xp": 94
     },
     {
-      "league_id": "apex-league",
-      "user_id": "ghost-59d3c280-8e39-460a-9c2a-9c353bc0871b",
-      "name": "DeltaBot#806",
-      "weekly_xp": 89
+      "league_id": "cobalt-league",
+      "user_id": "ghost-76c45608-f2d6-41ae-80ef-a85f9f842e06",
+      "name": "VoidRunner#460",
+      "weekly_xp": 68
     },
     {
-      "league_id": "apex-league",
-      "user_id": "ghost-1144802a-bd3a-4eda-920f-4fa8b4f736d9",
-      "name": "Zenith#224",
+      "league_id": "plasma-league",
+      "user_id": "ghost-3e15a4b8-e2e3-4d97-a412-54da60e602ee",
+      "name": "CircuitLink#973",
+      "weekly_xp": 81
+    },
+    {
+      "league_id": "plasma-league",
+      "user_id": "ghost-61cc17f1-aebd-4a2c-b016-fa7e95d013a1",
+      "name": "NeoMath#9",
+      "weekly_xp": 28
+    },
+    {
+      "league_id": "plasma-league",
+      "user_id": "ghost-5d0360a8-c453-4eaa-a736-acd91dbc5c25",
+      "name": "Zenith#13",
+      "weekly_xp": 62
+    },
+    {
+      "league_id": "plasma-league",
+      "user_id": "ghost-c570a344-8dd7-4e5e-8ad5-bc447e9bc07e",
+      "name": "Quantum#99",
       "weekly_xp": 35
+    },
+    {
+      "league_id": "plasma-league",
+      "user_id": "ghost-3541149f-4ccd-45f1-b828-5cbfdc7dd92c",
+      "name": "Zenith#708",
+      "weekly_xp": 87
+    },
+    {
+      "league_id": "plasma-league",
+      "user_id": "ghost-bb051e6f-7732-4671-82d9-0761d3ecff49",
+      "name": "NeoMath#948",
+      "weekly_xp": 96
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-94ba0bac-14e3-4ea3-8e41-38d39003e67a",
+      "name": "Quantum#272",
+      "weekly_xp": 38
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-e0aeb78f-f92f-4fe4-8746-4c1301e7fa7e",
+      "name": "VoidRunner#169",
+      "weekly_xp": 7
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-19c01b88-795a-4307-b72c-0e6b49d7d49e",
+      "name": "CircuitLink#70",
+      "weekly_xp": 59
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-c80ab4d9-293d-497f-97d2-00661266b149",
+      "name": "CyberBlade#105",
+      "weekly_xp": 5
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-92a0b481-6cad-448c-83c1-6b5e9321abc7",
+      "name": "Echo#19",
+      "weekly_xp": 43
+    },
+    {
+      "league_id": "void-league",
+      "user_id": "ghost-441631a4-3701-4935-8504-a22ab9ca04ce",
+      "name": "Zenith#729",
+      "weekly_xp": 28
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-88f98ea0-cd52-4fd5-b988-baf97b218f03",
+      "name": "CircuitLink#597",
+      "weekly_xp": 15
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-b20a2b47-e815-4b2c-b477-5cccbadbe4e4",
+      "name": "DeltaBot#213",
+      "weekly_xp": 9
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-60598ec9-b1a1-442d-83eb-cbe6ddbd5b2f",
+      "name": "Zenith#813",
+      "weekly_xp": 73
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-8c644669-0455-49a0-a0e6-e4eb7b0e10d2",
+      "name": "NeoMath#239",
+      "weekly_xp": 53
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-4135a7b9-a790-4199-adaa-4fc5535504e1",
+      "name": "Echo#61",
+      "weekly_xp": 82
+    },
+    {
+      "league_id": "apex-league",
+      "user_id": "ghost-080293ff-0dc1-44d7-9c1f-e4b1475a4a03",
+      "name": "VoidRunner#475",
+      "weekly_xp": 98
     }
   ],
   "shop_items": [
