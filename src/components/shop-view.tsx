@@ -4,7 +4,7 @@ import { useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 import { ShoppingBag, Coins, CheckCircle2, Lock } from "lucide-react";
-import { buyItem } from "@/lib/actions/shop";
+import { purchaseItem } from "@/lib/actions/shop";
 import { cn } from "@/lib/utils";
 
 interface ShopViewProps {
@@ -18,7 +18,7 @@ export function ShopView({ data }: ShopViewProps) {
     const handlePurchase = async (itemId: string) => {
         setLoading(itemId);
         setMessage(null);
-        const result = await buyItem(itemId);
+        const result = await purchaseItem(itemId);
         if (result.error) {
             setMessage({ text: result.error, type: 'error' });
         } else {
