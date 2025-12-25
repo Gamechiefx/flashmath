@@ -77,13 +77,11 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                         <div className="text-right hidden sm:block">
                             <div className="text-[10px] font-bold uppercase tracking-widest text-primary line-clamp-1">{session.user?.name}</div>
                             {(() => {
-                                const { loadData } = require("@/lib/db");
-                                const db = loadData();
+                                const { ITEMS } = require("@/lib/items");
                                 const titleId = (session.user as any)?.equipped_items?.title;
-                                const titleItem = db.shop_items.find((i: any) => i.id === titleId);
+                                const titleItem = ITEMS.find((i: any) => i.id === titleId);
                                 if (titleItem && titleId !== 'default') {
-                                    // Use name from database (editable by admin), fallback to assetValue
-                                    return <div className="text-[8px] font-black uppercase tracking-widest text-accent mb-0.5">{titleItem.name || titleItem.assetValue}</div>
+                                    return <div className="text-[8px] font-black uppercase tracking-widest text-accent mb-0.5">{titleItem.name}</div>
                                 }
                                 return null;
                             })()}
