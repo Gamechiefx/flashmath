@@ -9,4 +9,3 @@ docker-compose.yml
 flashmath_db.json
 README.md
 *.md
-package-lock.json
