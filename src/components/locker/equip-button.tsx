@@ -7,6 +7,8 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
+import { useSession } from "next-auth/react";
+
 interface EquipButtonProps {
     type: string;
     itemId: string;
@@ -16,12 +18,14 @@ interface EquipButtonProps {
 export function EquipButton({ type, itemId, isEquipped }: EquipButtonProps) {
     const [loading, setLoading] = useState(false);
     const router = useRouter();
+    const { update } = useSession();
 
     const handleEquip = async () => {
         setLoading(true);
         try {
             const result = await equipItem(type, itemId);
             if (result.success) {
+                await update();
                 router.refresh();
             }
         } catch (err) {

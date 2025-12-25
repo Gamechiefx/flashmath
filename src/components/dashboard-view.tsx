@@ -29,14 +29,18 @@ interface DashboardViewProps {
     userName: string;
 }
 
+import { useSession } from "next-auth/react";
+
 export function DashboardView({ stats, userName }: DashboardViewProps) {
     const [isOperationsOpen, setIsOperationsOpen] = useState(true); // Default open?
     const [selectedOp, setSelectedOp] = useState<string | null>(null);
     const [showPlacementTest, setShowPlacementTest] = useState(false);
     const router = useRouter();
+    const { update } = useSession();
 
     const handlePlacementComplete = async () => {
         setShowPlacementTest(false);
+        await update();
         router.refresh();
     };
 

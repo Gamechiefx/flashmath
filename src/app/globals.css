@@ -234,12 +234,9 @@ body {
 }
 
 .frame-gold-hex {
-  /* Hexagon border logic handled via pseudo-elements or specific layout usually, 
-     but for a simple overlay: */
+  /* Hexagon border logic */
   background: linear-gradient(to bottom, #fcd34d, #b45309);
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-  /* Hexagon border trick requires a slightly larger hex behind it */
-  z-index: -1 !important;
 }
 
 .frame-nebula {

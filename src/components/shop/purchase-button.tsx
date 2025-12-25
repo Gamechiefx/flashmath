@@ -13,10 +13,13 @@ interface PurchaseButtonProps {
     userCoins: number;
 }
 
+import { useSession } from "next-auth/react";
+
 export function PurchaseButton({ itemId, price, userCoins }: PurchaseButtonProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const router = useRouter();
+    const { update } = useSession();
 
     const handlePurchase = async () => {
         if (userCoins < price) return;
@@ -29,6 +32,7 @@ export function PurchaseButton({ itemId, price, userCoins }: PurchaseButtonProps
                 setError(result.error);
             } else {
                 // Success
+                await update();
                 router.refresh();
             }
         } catch (err) {

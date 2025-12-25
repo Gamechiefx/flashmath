@@ -14,7 +14,7 @@ interface AuthHeaderProps {
 
 export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
     const { data: clientSession } = useSession();
-    const session = initialSession || clientSession;
+    const session = clientSession || initialSession;
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
     const { theme, setTheme } = useTheme();
@@ -87,7 +87,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                             })()}
                             <div className="text-[8px] font-mono text-white/40 uppercase tracking-tighter">LVL {(session.user as any)?.level || 1} • § {(session.user as any)?.coins || 0}</div>
                         </div>
-                        <UserAvatar user={session.user} size="sm" />
+                        <UserAvatar user={session.user} size="sm" key={session.user?.equipped_items?.frame || 'default'} />
                     </div>
 
                     {/* Dropdown Menu */}
