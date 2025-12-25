@@ -4,10 +4,11 @@ on:
   push:
     branches:
       - main
+      - dev
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest # Or your custom runner label
+    runs-on: self-hosted # Or your custom runner label
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
