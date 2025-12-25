@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
-
 import { useRouter } from "next/navigation";
 
 export function ShopTimer() {
@@ -10,43 +8,40 @@ export function ShopTimer() {
     const router = useRouter();
 
     useEffect(() => {
-        const calculateTimeLeft = () => {
+        const calculateTimeUntilMidnightET = () => {
             const now = new Date();
-            const minutes = now.getUTCMinutes();
-            const seconds = now.getUTCSeconds();
 
-            // We rotate every 5 minutes (0, 5, 10...)
-            const currentBlock = Math.floor(minutes / 5);
-            const nextBlock = currentBlock + 1;
-            const nextRotationMinutes = nextBlock * 5;
+            // Get current time in Eastern timezone
+            const easternNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
 
-            let diffMinutes = nextRotationMinutes - minutes - 1;
-            let diffSeconds = 60 - seconds;
+            // Calculate midnight Eastern (tomorrow)
+            const midnightET = new Date(easternNow);
+            midnightET.setDate(midnightET.getDate() + 1);
+            midnightET.setHours(0, 0, 0, 0);
 
-            if (diffSeconds === 60) {
-                diffSeconds = 0;
-                diffMinutes += 1;
-            }
+            // Get the difference in milliseconds
+            const diffMs = midnightET.getTime() - easternNow.getTime();
 
-            return { str: `${diffMinutes}:${diffSeconds.toString().padStart(2, '0')}`, totalSeconds: diffMinutes * 60 + diffSeconds };
+            const hours = Math.floor(diffMs / (1000 * 60 * 60));
+            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diffMs % (1000 * 60)) / 1000);
+
+            return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         };
 
         const timer = setInterval(() => {
-            const result = calculateTimeLeft();
-            setTimeLeft(result.str);
+            setTimeLeft(calculateTimeUntilMidnightET());
 
-            // If we just entered a new 5-minute block (minutes % 5 === 0 and seconds are low)
-            // Trigger refresh once.
+            // Refresh at midnight Eastern
             const now = new Date();
-            if (now.getUTCMinutes() % 5 === 0 && now.getUTCSeconds() < 2) {
-                // Debounce? The interval is 1s, so this might fire twice.
-                // We can rely on Next.js routher.refresh() being cheap or add a ref.
-                console.log("Refreshing shop...");
+            const easternNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+            if (easternNow.getHours() === 0 && easternNow.getMinutes() === 0 && easternNow.getSeconds() < 2) {
+                console.log("Refreshing shop at midnight...");
                 router.refresh();
             }
         }, 1000);
 
-        setTimeLeft(calculateTimeLeft().str);
+        setTimeLeft(calculateTimeUntilMidnightET());
 
         return () => clearInterval(timer);
     }, [router]);
