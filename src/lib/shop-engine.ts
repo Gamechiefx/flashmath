@@ -62,6 +62,7 @@ export function getDailyShopSelection(): Item[] {
         ItemType.FONT,
         ItemType.SOUND,
         ItemType.BGM,
+        ItemType.TITLE,
         ItemType.FRAME
     ];
 
