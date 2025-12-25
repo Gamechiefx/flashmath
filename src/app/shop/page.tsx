@@ -63,7 +63,7 @@ export default async function ShopPage() {
                             The Shop
                         </h1>
                         <p className="text-muted-foreground mt-2 max-w-lg">
-                            New shipments arrive daily at 00:00 UTC. Acquiring rare tech improves your pilot status.
+                            New shipments arrive daily at midnight ET. Acquiring rare tech improves your pilot status.
                         </p>
                     </div>
 
