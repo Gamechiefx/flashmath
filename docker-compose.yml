@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  flashmath:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flashmath
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./flashmath_db.json:/app/flashmath_db.json
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_URL=http://localhost:3000
+      - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
+    restart: always

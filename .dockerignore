@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.gitignore
+.env
+.dockerignore
+Dockerfile
+docker-compose.yml
+flashmath_db.json
+README.md
+*.md
+package-lock.json

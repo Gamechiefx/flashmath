@@ -1,0 +1,28 @@
+name: Deploy FlashMath to Prod
+
+on:
+  push:
+    branches:
+      - main
+      - dev # Adding dev for testing if you want, usually just main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest # Or your custom runner label
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build and Start Container
+        run: |
+          # If flashmath_db.json doesn't exist, create an empty one to avoid volume mount issues
+          if [ ! -f flashmath_db.json ]; then
+            echo "{}" > flashmath_db.json
+          fi
+          
+          # Pull latest (if using registry) or just build
+          docker-compose build
+          docker-compose up -d
+          
+          # Cleanup old images
+          docker image prune -f
