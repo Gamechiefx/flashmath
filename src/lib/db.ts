@@ -168,6 +168,27 @@ export const execute = (text: string, params: any[] = []): { changes: number } =
         return { changes: 1 };
     }
 
+    // INSERT INTO sessions (practice mode stats)
+    if (lowerText.includes('insert into sessions')) {
+        const [userId, operation, correctCount, totalCount, avgSpeed, xpEarned] = params;
+        database.prepare(`
+            INSERT INTO sessions (id, user_id, token, operation, correct_count, total_count, avg_speed, xp_earned, expires_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            generateId(),
+            userId,
+            generateId(), // token placeholder
+            operation,
+            correctCount,
+            totalCount,
+            avgSpeed,
+            xpEarned,
+            new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // expires_at
+            now()
+        );
+        return { changes: 1 };
+    }
+
     // UPDATE users
     if (lowerText.includes('update users')) {
         const id = params[params.length - 1];
