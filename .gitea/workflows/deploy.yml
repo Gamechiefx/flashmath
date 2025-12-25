@@ -16,12 +16,13 @@ jobs:
         env:
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
         run: |
-          # If flashmath_db.json doesn't exist, create an empty one to avoid volume mount issues
-          if [ ! -f flashmath_db.json ]; then
-            echo "{}" > flashmath_db.json
-          fi
+          # Remove existing database to force fresh seed with admin account
+          rm -f flashmath_db.json
           
-          # Pull latest (if using registry) or just build
+          # Create empty database file for volume mount
+          echo "{}" > flashmath_db.json
+          
+          # Build and start container
           docker compose build
           docker compose up -d
           

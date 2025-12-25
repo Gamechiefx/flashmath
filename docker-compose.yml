@@ -12,6 +12,6 @@ services:
       - ./flashmath_db.json:/app/flashmath_db.json
     environment:
       - NODE_ENV=production
-      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_URL=https://flashmath.io
       - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
     restart: always

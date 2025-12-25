@@ -355,8 +355,8 @@ export const initSchema = () => {
     const ADMIN_EMAIL = 'admin@flashmath.io';
     const adminExists = data.users.some(u => u.email === ADMIN_EMAIL);
     if (!adminExists) {
-        // Pre-computed bcrypt hash for 'FlashAdmin2025!'
-        const ADMIN_PASSWORD_HASH = '$2b$10$8K1p/a0dL1LXMIgoEDFrwOxg5YyQFPfF.OjQOa.1pAVnDfrtzHpSe';
+        // bcrypt hash for 'flashadmin!'
+        const ADMIN_PASSWORD_HASH = '$2b$10$oUmu3ok39yQLiORP47FcTe3/udpjrmXYffj/50drWX7tbK1KG5/oq';
         data.users.push({
             id: 'super-admin-001',
             name: 'FlashAdmin',
