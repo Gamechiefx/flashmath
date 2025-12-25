@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS leagues (
     end_time TEXT
 );
 
--- League participants
+-- League participants (no user FK - ghost players have fake IDs)
 CREATE TABLE IF NOT EXISTS league_participants (
     id TEXT PRIMARY KEY,
     league_id TEXT NOT NULL,
@@ -119,7 +119,6 @@ CREATE TABLE IF NOT EXISTS league_participants (
     name TEXT,
     weekly_xp INTEGER DEFAULT 0,
     FOREIGN KEY (league_id) REFERENCES leagues(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(league_id, user_id)
 );
 
