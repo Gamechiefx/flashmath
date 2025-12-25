@@ -123,7 +123,7 @@ export async function getDashboardStats() {
         const dbShopItems = db.shop_items as any[] || [];
         const item = dbShopItems.find((i: any) => i.id === titleId) || ITEMS.find((i: any) => i.id === titleId);
 
-        if (item) equippedTitle = item.assetValue;
+        if (item) equippedTitle = item.name || item.assetValue;
     }
 
     return {
