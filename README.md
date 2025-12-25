@@ -16,11 +16,10 @@ FlashMath is a futuristic, high-velocity arithmetic training platform designed t
 ### 🏆 Competitive Leagues
 - **Weekly Leaderboards**: Compete against other "Pilots" in a 5-tier league system (Neon -> Cobalt -> Plasma -> Void -> Apex).
 - **Promotion & Relegation**: Fight to stay in the promotion zone or risk falling back.
-- **Ghost Data**: Simulate a living world with intelligent bot activity.
 
 ### 🛍️ The Shop & Locker
 - **Global Shop**: Spend your hard-earned **Flux Coins (§)** on exclusive cosmetic upgrades.
-- **Cyberpunk Aesthetics**:
+- **Aesthetics**:
   - **Themes**: Switch your UI between *Dark Mode*, *Synthwave*, *Matrix*, *Deep Space*, and more.
   - **Particles**: Unlock explosive visual effects like *Math Boom*, *Glitch*, and *Vortex*.
   - **Audio Packs**: Change the soundscape with *8-Bit*, *Typewriter*, or *Futuristic* SFX.
