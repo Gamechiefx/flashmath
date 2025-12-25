@@ -22,8 +22,8 @@ jobs:
           fi
           
           # Pull latest (if using registry) or just build
-          docker-compose build
-          docker-compose up -d
+          docker compose build
+          docker compose up -d
           
           # Cleanup old images
           docker image prune -f
