@@ -351,6 +351,43 @@ export const initSchema = () => {
         console.log(`[DB] Seeded ${data.shop_items.length} items into database.`);
     }
 
+    // Seed Super Admin if not exists
+    const ADMIN_EMAIL = 'admin@flashmath.io';
+    const adminExists = data.users.some(u => u.email === ADMIN_EMAIL);
+    if (!adminExists) {
+        // Pre-computed bcrypt hash for 'FlashAdmin2025!'
+        const ADMIN_PASSWORD_HASH = '$2b$10$8K1p/a0dL1LXMIgoEDFrwOxg5YyQFPfF.OjQOa.1pAVnDfrtzHpSe';
+        data.users.push({
+            id: 'super-admin-001',
+            name: 'FlashAdmin',
+            email: ADMIN_EMAIL,
+            password_hash: ADMIN_PASSWORD_HASH,
+            theme_preferences: 'dark',
+            level: 99,
+            total_xp: 999999,
+            coins: 999999999,
+            current_league_id: 'apex-league',
+            is_admin: true,
+            math_tiers: {
+                addition: 4,
+                subtraction: 4,
+                multiplication: 4,
+                division: 4
+            },
+            equipped_items: {
+                theme: 'default',
+                particle: 'default',
+                font: 'default',
+                sound: 'default',
+                bgm: 'default',
+                title: 'default',
+                frame: 'default'
+            },
+            created_at: new Date().toISOString()
+        });
+        console.log(`[DB] Seeded super admin account: ${ADMIN_EMAIL}`);
+    }
+
     saveData();
 };
 
