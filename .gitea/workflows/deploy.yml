@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - dev # Adding dev for testing if you want, usually just main
 
 jobs:
   deploy:
