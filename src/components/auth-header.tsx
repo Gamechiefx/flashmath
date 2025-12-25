@@ -76,15 +76,11 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                     <div className="flex items-center gap-3 pl-2 cursor-pointer">
                         <div className="text-right hidden sm:block">
                             <div className="text-[10px] font-bold uppercase tracking-widest text-primary line-clamp-1">{session.user?.name}</div>
-                            {(() => {
-                                const { ITEMS } = require("@/lib/items");
-                                const titleId = (session.user as any)?.equipped_items?.title;
-                                const titleItem = ITEMS.find((i: any) => i.id === titleId);
-                                if (titleItem && titleId !== 'default') {
-                                    return <div className="text-[8px] font-black uppercase tracking-widest text-accent mb-0.5">{titleItem.name}</div>
-                                }
-                                return null;
-                            })()}
+                            {(session.user as any)?.equippedTitleName && (
+                                <div className="text-[8px] font-black uppercase tracking-widest text-accent mb-0.5">
+                                    {(session.user as any).equippedTitleName}
+                                </div>
+                            )}
                             <div className="text-[8px] font-mono text-white/40 uppercase tracking-tighter">LVL {(session.user as any)?.level || 1} • § {(session.user as any)?.coins || 0}</div>
                         </div>
                         <UserAvatar user={session.user} size="sm" key={session.user?.equipped_items?.frame || 'default'} />

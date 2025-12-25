@@ -78,6 +78,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         (session.user as any).level = user.level;
                         (session.user as any).coins = user.coins;
                         (session.user as any).equipped_items = user.equipped_items;
+
+                        // Lookup equipped title name from database
+                        const titleId = user.equipped_items?.title;
+                        if (titleId && titleId !== 'default') {
+                            const db = loadData();
+                            const titleItem = db.shop_items.find((i: any) => i.id === titleId);
+                            (session.user as any).equippedTitleName = titleItem?.name || null;
+                        } else {
+                            (session.user as any).equippedTitleName = null;
+                        }
                     } else {
                         console.log("[SESSION] User not found for token:", token.id, "Invalidating.");
                         // User was deleted/not found - invalidate session
