@@ -81,19 +81,24 @@ async function processLeagueReset() {
         execute('DELETE FROM league_participants WHERE league_id = ?', [tierId]);
     }
 
-    // Set new end time to next Monday midnight Eastern
-    const getNextMondayMidnight = () => {
+    // Set new end time to next Sunday midnight Eastern
+    const getNextSundayMidnight = () => {
         const now = new Date();
         const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-        const dayOfWeek = eastern.getDay();
-        const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek); // if Sunday, next day; otherwise days to next Monday
-        const nextMonday = new Date(eastern);
-        nextMonday.setDate(eastern.getDate() + daysUntilMonday);
-        nextMonday.setHours(0, 0, 0, 0);
-        return nextMonday.toISOString();
+        const dayOfWeek = eastern.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        // Days until Sunday: if Sunday (0) = 7 days (next Sunday), otherwise 7 - dayOfWeek
+        const daysUntilSunday = dayOfWeek === 0 ? 7 : (7 - dayOfWeek);
+        const nextSunday = new Date(eastern);
+        nextSunday.setDate(eastern.getDate() + daysUntilSunday);
+        nextSunday.setHours(0, 0, 0, 0);
+        // Convert Eastern midnight to UTC (add 5 hours for EST, 4 for EDT)
+        // Using toISOString will give local time, we need to adjust for ET
+        const utcHours = 5; // EST offset (winter)
+        nextSunday.setHours(utcHours, 0, 0, 0);
+        return nextSunday.toISOString();
     };
 
-    const newEndTime = getNextMondayMidnight();
+    const newEndTime = getNextSundayMidnight();
     for (const tierId of TIERS) {
         execute('UPDATE leagues SET end_time = ? WHERE id = ?', [newEndTime, tierId]);
     }
