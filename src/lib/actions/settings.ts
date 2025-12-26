@@ -24,13 +24,17 @@ export async function resetUserData() {
         // Remove user from league participants
         db.prepare('DELETE FROM league_participants WHERE user_id = ?').run(userId);
 
-        // Reset user's total XP, level, coins, and math_tiers
+        // Delete all inventory items for this user
+        db.prepare('DELETE FROM inventory WHERE user_id = ?').run(userId);
+
+        // Reset user's total XP, level, coins, math_tiers, and equipped_items
         db.prepare(`
             UPDATE users SET 
                 total_xp = 0, 
                 level = 1, 
                 coins = 0, 
                 math_tiers = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
+                equipped_items = '{"theme":"default","particle":"default","font":"default","sound":"default","bgm":"default","title":"default","frame":"default"}',
                 updated_at = ?
             WHERE id = ?
         `).run(now(), userId);
@@ -41,6 +45,8 @@ export async function resetUserData() {
         revalidatePath("/dashboard");
         revalidatePath("/practice");
         revalidatePath("/leaderboard");
+        revalidatePath("/locker");
+        revalidatePath("/shop");
         revalidatePath("/stats/[op]", "page");
         revalidatePath("/", "layout");
 
