@@ -25,6 +25,7 @@ export function UserManager({ users }: { users: User[] }) {
     // Gift modal state
     const [giftModalUser, setGiftModalUser] = useState<User | null>(null);
     const [giftType, setGiftType] = useState<"coins" | "xp">("coins");
+    const [giftMode, setGiftMode] = useState<"give" | "take">("give");
     const [giftAmount, setGiftAmount] = useState<string>("100");
 
     const filteredUsers = users.filter(u =>
@@ -88,22 +89,26 @@ export function UserManager({ users }: { users: User[] }) {
             return;
         }
 
+        // Apply negative sign for "take" mode
+        const finalAmount = giftMode === "take" ? -amount : amount;
+
         setProcessingId(giftModalUser.id);
         setGiftModalUser(null);
 
         if (giftType === "coins") {
-            await giveUserCoins(giftModalUser.id, amount);
+            await giveUserCoins(giftModalUser.id, finalAmount);
         } else {
-            await giveUserXP(giftModalUser.id, amount);
+            await giveUserXP(giftModalUser.id, finalAmount);
         }
 
         setProcessingId(null);
         window.location.reload(); // Refresh to show updated values
     };
 
-    const openGiftModal = (user: User, type: "coins" | "xp") => {
+    const openGiftModal = (user: User, type: "coins" | "xp", mode: "give" | "take" = "give") => {
         setGiftModalUser(user);
         setGiftType(type);
+        setGiftMode(mode);
         setGiftAmount(type === "coins" ? "100" : "500");
     };
 
@@ -173,11 +178,28 @@ export function UserManager({ users }: { users: User[] }) {
             {/* GIFT MODAL OVERLAY */}
             {giftModalUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-                    <GlassCard className="w-full max-w-md p-6 space-y-4 border border-primary/30">
-                        <h3 className="text-xl font-bold text-primary flex items-center gap-2">
+                    <GlassCard className={`w-full max-w-md p-6 space-y-4 border ${giftMode === 'take' ? 'border-red-500/30' : 'border-primary/30'}`}>
+                        <h3 className={`text-xl font-bold flex items-center gap-2 ${giftMode === 'take' ? 'text-red-400' : 'text-primary'}`}>
                             {giftType === "coins" ? <Coins /> : <Zap />}
-                            Give {giftType === "coins" ? "Coins" : "XP"} to: {giftModalUser.name}
+                            {giftMode === 'give' ? 'Give' : 'Take'} {giftType === "coins" ? "Coins" : "XP"}: {giftModalUser.name}
                         </h3>
+
+                        {/* Give/Take Toggle */}
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setGiftMode("give")}
+                                className={`flex-1 py-2 rounded text-sm font-bold uppercase ${giftMode === 'give' ? 'bg-primary/30 text-primary border border-primary/50' : 'bg-white/5 text-muted-foreground'}`}
+                            >
+                                + Give
+                            </button>
+                            <button
+                                onClick={() => setGiftMode("take")}
+                                className={`flex-1 py-2 rounded text-sm font-bold uppercase ${giftMode === 'take' ? 'bg-red-500/30 text-red-400 border border-red-500/50' : 'bg-white/5 text-muted-foreground'}`}
+                            >
+                                − Take
+                            </button>
+                        </div>
+
                         <div className="space-y-2">
                             <label className="text-xs font-bold uppercase text-muted-foreground">Amount</label>
                             <input
@@ -203,9 +225,12 @@ export function UserManager({ users }: { users: User[] }) {
                             </button>
                             <button
                                 onClick={confirmGift}
-                                className="px-4 py-2 rounded bg-primary/80 hover:bg-primary text-white text-sm font-bold shadow-lg shadow-primary/20"
+                                className={`px-4 py-2 rounded text-white text-sm font-bold shadow-lg ${giftMode === 'take'
+                                        ? 'bg-red-500/80 hover:bg-red-500 shadow-red-900/20'
+                                        : 'bg-primary/80 hover:bg-primary shadow-primary/20'
+                                    }`}
                             >
-                                GIVE {giftType.toUpperCase()}
+                                {giftMode === 'give' ? 'GIVE' : 'TAKE'} {giftType.toUpperCase()}
                             </button>
                         </div>
                     </GlassCard>
