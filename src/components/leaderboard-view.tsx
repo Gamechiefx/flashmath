@@ -25,9 +25,10 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
                 return;
             }
 
-            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            const hours = Math.floor((diff % 86400000) / 3600000);
             const mins = Math.floor((diff % 3600000) / 60000);
-            setTimeLeft(`${hours}h ${mins}m`);
+            setTimeLeft(`${days}d ${hours}h ${mins}m`);
         }, 1000);
 
         return () => clearInterval(timer);

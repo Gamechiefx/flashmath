@@ -240,13 +240,27 @@ export const execute = (text: string, params: any[] = []): { changes: number } =
         return { changes: 1 };
     }
 
-    // League participants
+    // League participants - add XP to existing or insert new
     if (lowerText.includes('insert into league_participants') || lowerText.includes('update league_participants')) {
         const [leagueId, userId, name, weeklyXp] = params;
-        database.prepare(`
-            INSERT OR REPLACE INTO league_participants (id, league_id, user_id, name, weekly_xp)
-            VALUES (?, ?, ?, ?, ?)
-        `).run(generateId(), leagueId, userId, name, weeklyXp);
+
+        // Check if user already exists in this league
+        const existing = database.prepare(
+            'SELECT id, weekly_xp FROM league_participants WHERE league_id = ? AND user_id = ?'
+        ).get(leagueId, userId) as { id: string; weekly_xp: number } | undefined;
+
+        if (existing) {
+            // Add to existing XP
+            database.prepare(
+                'UPDATE league_participants SET weekly_xp = weekly_xp + ?, name = ? WHERE id = ?'
+            ).run(weeklyXp, name, existing.id);
+        } else {
+            // Insert new participant
+            database.prepare(`
+                INSERT INTO league_participants (id, league_id, user_id, name, weekly_xp)
+                VALUES (?, ?, ?, ?, ?)
+            `).run(generateId(), leagueId, userId, name, weeklyXp);
+        }
         return { changes: 1 };
     }
 
