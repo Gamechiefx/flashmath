@@ -1,7 +1,7 @@
 "use server";
 
 import { auth, signOut } from "@/auth";
-import { execute, loadData, saveData } from "@/lib/db";
+import { getDatabase, generateId, now } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 
 export async function resetUserData() {
@@ -13,31 +13,29 @@ export async function resetUserData() {
     const userId = (session.user as any).id;
 
     try {
-        // Delete all sessions for this user
-        const db = loadData();
-        db.sessions = db.sessions.filter(s => s.user_id !== userId);
+        const db = getDatabase();
+
+        // Delete all practice sessions for this user
+        db.prepare('DELETE FROM practice_sessions WHERE user_id = ?').run(userId);
 
         // Delete all mastery stats for this user
-        db.mastery_stats = db.mastery_stats.filter(m => m.user_id !== userId);
-
-        // Reset user's total XP, level, and coins
-        const userIndex = db.users.findIndex(u => u.id === userId);
-        if (userIndex !== -1) {
-            db.users[userIndex].total_xp = 0;
-            db.users[userIndex].level = 1;
-            db.users[userIndex].coins = 0;
-            db.users[userIndex].math_tiers = {
-                addition: 0,
-                subtraction: 0,
-                multiplication: 0,
-                division: 0
-            };
-        }
+        db.prepare('DELETE FROM mastery_stats WHERE user_id = ?').run(userId);
 
         // Remove user from league participants
-        db.league_participants = db.league_participants.filter(p => p.user_id !== userId);
+        db.prepare('DELETE FROM league_participants WHERE user_id = ?').run(userId);
 
-        saveData();
+        // Reset user's total XP, level, coins, and math_tiers
+        db.prepare(`
+            UPDATE users SET 
+                total_xp = 0, 
+                level = 1, 
+                coins = 0, 
+                math_tiers = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
+                updated_at = ?
+            WHERE id = ?
+        `).run(now(), userId);
+
+        console.log(`[SETTINGS] Reset all data for user: ${userId}`);
 
         // Revalidate all relevant paths
         revalidatePath("/dashboard");
@@ -62,18 +60,19 @@ export async function deleteUserAccount() {
     const userId = (session.user as any).id;
 
     try {
-        const db = loadData();
+        const db = getDatabase();
 
-        // Delete all user data
-        db.sessions = db.sessions.filter(s => s.user_id !== userId);
-        db.mastery_stats = db.mastery_stats.filter(m => m.user_id !== userId);
-        db.league_participants = db.league_participants.filter(p => p.user_id !== userId);
-        db.inventory = db.inventory.filter(i => i.user_id !== userId);
+        // Delete all user-related data (CASCADE should handle some, but explicit is safer)
+        db.prepare('DELETE FROM practice_sessions WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM mastery_stats WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM league_participants WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM inventory WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
 
         // Delete the user account
-        db.users = db.users.filter(u => u.id !== userId);
+        db.prepare('DELETE FROM users WHERE id = ?').run(userId);
 
-        saveData();
+        console.log(`[SETTINGS] Deleted account for user: ${userId}`);
 
         // Sign out the user
         await signOut({ redirect: false });
@@ -98,24 +97,25 @@ export async function updateUsername(newUsername: string) {
     }
 
     try {
-        const db = loadData();
+        const db = getDatabase();
 
         // Check if username is already taken
-        const existingUser = db.users.find(u => u.name === newUsername && u.id !== userId);
+        const existingUser = db.prepare('SELECT id FROM users WHERE name = ? AND id != ?').get(newUsername, userId);
         if (existingUser) {
             return { error: "Username already taken" };
         }
 
         // Update username
-        const userIndex = db.users.findIndex(u => u.id === userId);
-        if (userIndex !== -1) {
-            db.users[userIndex].name = newUsername;
-        }
+        db.prepare('UPDATE users SET name = ?, updated_at = ? WHERE id = ?').run(newUsername, now(), userId);
 
-        saveData();
+        // Also update name in league_participants
+        db.prepare('UPDATE league_participants SET name = ? WHERE user_id = ?').run(newUsername, userId);
+
+        console.log(`[SETTINGS] Updated username for user ${userId} to: ${newUsername}`);
 
         revalidatePath("/dashboard");
         revalidatePath("/settings");
+        revalidatePath("/leaderboard");
 
         return { success: true };
     } catch (error) {
