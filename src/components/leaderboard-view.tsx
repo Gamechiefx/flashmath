@@ -25,9 +25,9 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
                 return;
             }
 
-            const mins = Math.floor(diff / 60000);
-            const secs = Math.floor((diff % 60000) / 1000);
-            setTimeLeft(`${mins}m ${secs}s`);
+            const hours = Math.floor(diff / 3600000);
+            const mins = Math.floor((diff % 3600000) / 60000);
+            setTimeLeft(`${hours}h ${mins}m`);
         }, 1000);
 
         return () => clearInterval(timer);

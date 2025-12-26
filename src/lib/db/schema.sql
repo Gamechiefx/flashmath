@@ -103,6 +103,21 @@ CREATE TABLE IF NOT EXISTS mastery_stats (
     UNIQUE(user_id, operation, fact)
 );
 
+-- Practice sessions (game stats)
+CREATE TABLE IF NOT EXISTS practice_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    correct_count INTEGER DEFAULT 0,
+    total_count INTEGER DEFAULT 0,
+    avg_speed REAL DEFAULT 0,
+    xp_earned INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_practice_sessions_user ON practice_sessions(user_id, created_at DESC);
+
 -- Leagues
 CREATE TABLE IF NOT EXISTS leagues (
     id TEXT PRIMARY KEY,
