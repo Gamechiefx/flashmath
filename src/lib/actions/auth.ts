@@ -16,6 +16,13 @@ initSchema();
 
 const now = () => new Date().toISOString();
 
+/**
+ * Sign in with Google OAuth
+ */
+export async function signInWithGoogle() {
+    await signIn("google", { redirectTo: "/dashboard" });
+}
+
 export async function registerUser(formData: FormData) {
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
