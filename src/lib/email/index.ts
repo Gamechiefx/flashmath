@@ -35,6 +35,7 @@ export function getEmailProvider(): EmailProvider {
             pass: process.env.SMTP_PASS || '',
             secure: process.env.SMTP_SECURE === 'true',
             defaultFrom: fromEmail,
+            replyTo: process.env.EMAIL_REPLY_TO || 'support@flashmath.io',
         });
     } else {
         console.log('[Email] Using Console provider (development mode)');
