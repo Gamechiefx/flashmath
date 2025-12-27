@@ -3,12 +3,12 @@
  * Defines all achievements, their requirements, and rewards
  */
 
-import { Trophy, Zap, Target, Star, Crown, Flame, Medal, Coins, ShoppingBag, Music, TrendingUp } from "lucide-react";
+import { Trophy, Zap, Target, Star, Crown, Flame, Medal, Coins, ShoppingBag, Music, TrendingUp, Mail } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export type AchievementCategory = 'level' | 'milestone' | 'mastery' | 'league' | 'wealth' | 'dedication';
 export type RequirementType = 'level' | 'sessions' | 'correct_answers' | 'speed_answers' |
-    'tier' | 'streak' | 'league_rank' | 'lifetime_coins' | 'items_owned' | 'perfect_session' | 'avg_speed';
+    'tier' | 'streak' | 'league_rank' | 'lifetime_coins' | 'items_owned' | 'perfect_session' | 'avg_speed' | 'email_verified';
 
 export interface Achievement {
     id: string;
@@ -32,13 +32,13 @@ export interface Achievement {
 export const ACHIEVEMENTS: Achievement[] = [
     // ============ LEVEL ACHIEVEMENTS ============
     {
-        id: 'newbie',
-        name: 'The Newbie',
-        description: 'Welcome to FlashMath!',
-        icon: Star,
+        id: 'welcome',
+        name: 'Welcome to FlashMath',
+        description: 'Verify your email address',
+        icon: Mail,
         category: 'level',
-        reward: { type: 'title', titleName: 'The Newbie' },
-        requirement: { type: 'level', target: 1 }
+        reward: { type: 'both', titleName: 'The Newbie', coins: 100 },
+        requirement: { type: 'email_verified', target: 1 }
     },
     {
         id: 'rising_star',

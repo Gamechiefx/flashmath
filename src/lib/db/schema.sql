@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
     -- 2FA
     two_factor_enabled INTEGER DEFAULT 0,
     two_factor_secret TEXT,
+    two_factor_recovery_codes TEXT,
     
     -- Timestamps
     created_at TEXT NOT NULL,
@@ -89,6 +90,19 @@ CREATE TABLE IF NOT EXISTS rate_limits (
     window_start TEXT NOT NULL,
     UNIQUE(identifier, action)
 );
+
+-- Security activity log
+CREATE TABLE IF NOT EXISTS security_activity (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    action TEXT NOT NULL, -- 'login', 'logout', 'password_change', '2fa_enabled', etc.
+    ip_address TEXT,
+    user_agent TEXT,
+    details TEXT, -- JSON for extra info
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_security_activity_user ON security_activity(user_id);
 
 -- Mastery stats
 CREATE TABLE IF NOT EXISTS mastery_stats (

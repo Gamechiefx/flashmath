@@ -391,3 +391,35 @@ export async function checkSessionAchievements(
     // Also run general achievement check
     await checkAndUnlockAchievements(userId);
 }
+
+/**
+ * Unlock the "Welcome to FlashMath" achievement when email is verified
+ */
+export async function unlockEmailVerifiedAchievement(userId: string) {
+    const db = getDatabase();
+    const achievementId = 'welcome';
+
+    // Check if already unlocked
+    const existing = db.prepare(
+        'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
+    ).get(userId, achievementId) as any;
+
+    if (existing?.unlocked_at) {
+        return; // Already unlocked
+    }
+
+    if (existing) {
+        // Update existing record
+        db.prepare(
+            'UPDATE user_achievements SET progress = 1, unlocked_at = ? WHERE id = ?'
+        ).run(now(), existing.id);
+    } else {
+        // Create new record
+        db.prepare(`
+            INSERT INTO user_achievements (id, user_id, achievement_id, progress, unlocked_at)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(generateId(), userId, achievementId, 1, now());
+    }
+
+    console.log(`[Achievements] Unlocked "Welcome to FlashMath" for user ${userId}`);
+}
