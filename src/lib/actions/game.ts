@@ -8,20 +8,20 @@ import { generateProblemForSession, checkProgression, MathOperation, generateMas
 
 export async function getNextProblems(operation: string, count: number = 20) {
     const session = await auth();
-    if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
-    // Default to Tier 1 if missing
+    // For unauthenticated users (quick practice), use default tier 1
     let currentTier = 1;
-    if (user && user.math_tiers) {
-        currentTier = (user.math_tiers as any)[operation.toLowerCase()] || 1;
+
+    if (session?.user) {
+        const userId = (session.user as any).id;
+        const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+
+        if (user && user.math_tiers) {
+            currentTier = (user.math_tiers as any)[operation.toLowerCase()] || 1;
+        }
     }
 
-    // If tier is 0, it means placement is needed.
-    // The UI should normally handle this by showing "Placement Test" button,
-    // but if we get here, serve Tier 1 but maybe flag it?
-    // Actually, let's just serve Tier 1.
+    // If tier is 0, it means placement is needed - default to Tier 1
     if (currentTier === 0) currentTier = 1;
 
     const problems = [];
