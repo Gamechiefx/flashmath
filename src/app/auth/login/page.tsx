@@ -84,6 +84,11 @@ export default function LoginPage() {
                                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/50 transition-all"
                                 />
                             </div>
+                            <div className="text-right">
+                                <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-primary transition-colors">
+                                    Forgot Password?
+                                </Link>
+                            </div>
                         </div>
 
                         <NeonButton className="w-full mt-4" type="submit" disabled={loading}>
