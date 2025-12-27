@@ -9,7 +9,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./data:/app/data
+      - /opt/flashmath/data:/app/data
     environment:
       - NODE_ENV=production
       - NEXTAUTH_URL=https://flashmath.io

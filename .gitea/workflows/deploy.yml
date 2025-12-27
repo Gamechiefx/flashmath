@@ -23,11 +23,11 @@ jobs:
 
       - name: Prepare data directory
         run: |
-          # Create data directory for SQLite database persistence
-          mkdir -p data
+          # Create persistent data directory on host for SQLite database
+          sudo mkdir -p /opt/flashmath/data
           # Set ownership to nextjs user (UID 1001) used inside the container
-          sudo chown -R 1001:1001 data
-          chmod 755 data
+          sudo chown -R 1001:1001 /opt/flashmath/data
+          sudo chmod 755 /opt/flashmath/data
 
       - name: Build and Start Container
         env:
