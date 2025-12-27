@@ -479,12 +479,40 @@ export const generatePlacementTest = (): Record<MathOperation, MathProblem[]> =>
 };
 
 // Returns new tier or same tier
-// Logic: If last 10 problems > 90% accuracy, advance.
+// Logic: 
+// - >= 70% accuracy over recent problems: advance to next tier
+// - < 70% accuracy: stay at current tier (slower progression)
 export const checkProgression = (currentTier: number, recentAccuracy: number): number => {
-    if (recentAccuracy >= 90 && currentTier < 4) {
+    // Advance only if doing well (70%+)
+    if (recentAccuracy >= 70 && currentTier < 4) {
         return currentTier + 1;
     }
+    // Below 70%: no progression, stay at current tier
     return currentTier;
+};
+
+/**
+ * Generates a mastery test for a specific operation and tier
+ * 10 problems from the current tier to prove mastery before advancing
+ */
+export const generateMasteryTest = (operation: MathOperation, tier: number): MathProblem[] => {
+    const problems: MathProblem[] = [];
+    const opConfig = (TIERS as any)[operation];
+
+    if (!opConfig || !opConfig[tier]) {
+        // Fallback to tier 1
+        for (let i = 0; i < 10; i++) {
+            problems.push(TIERS.addition[1].generate());
+        }
+        return problems;
+    }
+
+    // Generate 10 problems from the current tier
+    for (let i = 0; i < 10; i++) {
+        problems.push(opConfig[tier].generate());
+    }
+
+    return problems;
 };
 
 export default TIERS;

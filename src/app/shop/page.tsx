@@ -57,13 +57,13 @@ export default async function ShopPage() {
                     <div>
                         <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 mb-2">
                             <ShoppingBag size={14} />
-                            Global Exchange
+                            Shop
                         </div>
                         <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-primary">
                             The Shop
                         </h1>
                         <p className="text-muted-foreground mt-2 max-w-lg">
-                            New shipments arrive daily at 00:00 UTC. Acquiring rare tech improves your pilot status.
+                            New shipments arrive daily. Acquiring rare tech improves your pilot status.
                         </p>
                     </div>
 
@@ -86,7 +86,6 @@ export default async function ShopPage() {
                 <div className="w-full p-3 rounded-lg bg-white/5 border border-white/10 flex justify-center items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                     <RefreshCw size={12} className="animate-spin-slow" />
                     Restock in: <ShopTimer />
-                    (Global 5-Min Rotation)
                 </div>
 
 

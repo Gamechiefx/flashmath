@@ -277,6 +277,24 @@ export const ITEMS: Item[] = [
     { id: 'title_pinnacle', name: 'The Pinnacle', description: '', type: ItemType.TITLE, rarity: Rarity.LEGENDARY, price: 50000, assetValue: 'The Pinnacle', icon: Trophy },
     { id: 'title_human_calc', name: 'Human Calculator', description: '', type: ItemType.TITLE, rarity: Rarity.EPIC, price: 10000, assetValue: 'Human Calculator', icon: Monitor },
 
+    // --- 6b. Achievement Titles (Earned, not purchasable) ---
+    { id: 'title_newbie', name: 'The Newbie', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.COMMON, price: 0, assetValue: 'The Newbie', icon: Trophy },
+    { id: 'title_rising_star', name: 'Rising Star', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.UNCOMMON, price: 0, assetValue: 'Rising Star', icon: Trophy },
+    { id: 'title_halfway_hero', name: 'Halfway Hero', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.RARE, price: 0, assetValue: 'Halfway Hero', icon: Crown },
+    { id: 'title_elite_pilot', name: 'Elite Pilot', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.EPIC, price: 0, assetValue: 'Elite Pilot', icon: Crown },
+    { id: 'title_legendary', name: 'Legendary', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.LEGENDARY, price: 0, assetValue: 'Legendary', icon: Crown },
+    { id: 'title_streak_master', name: 'Streak Master', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.RARE, price: 0, assetValue: 'Streak Master', icon: Flame },
+    { id: 'title_speed_demon', name: 'Speed Demon', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.RARE, price: 0, assetValue: 'Speed Demon', icon: Zap },
+    { id: 'title_the_flash', name: 'The Flash', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.EPIC, price: 0, assetValue: 'The Flash', icon: Zap },
+    { id: 'title_addition_ace', name: 'Addition Ace', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.RARE, price: 0, assetValue: 'Addition Ace', icon: Trophy },
+    { id: 'title_subtraction_specialist', name: 'Subtraction Specialist', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.RARE, price: 0, assetValue: 'Subtraction Specialist', icon: Trophy },
+    { id: 'title_multiplication_master', name: 'Multiplication Master', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.RARE, price: 0, assetValue: 'Multiplication Master', icon: Trophy },
+    { id: 'title_division_dominator', name: 'Division Dominator', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.RARE, price: 0, assetValue: 'Division Dominator', icon: Trophy },
+    { id: 'title_math_wizard', name: 'Math Wizard', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.LEGENDARY, price: 0, assetValue: 'Math Wizard', icon: Crown },
+    { id: 'title_math_tryhard', name: 'The Math TryHard', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.LEGENDARY, price: 0, assetValue: 'The Math TryHard', icon: Crown },
+    { id: 'title_wealthy_one', name: 'Wealthy One', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.EPIC, price: 0, assetValue: 'Wealthy One', icon: Crown },
+    { id: 'title_lofi_lyricist', name: 'Lo-Fi Lyricist', description: 'Achievement reward', type: ItemType.TITLE, rarity: Rarity.RARE, price: 0, assetValue: 'Lo-Fi Lyricist', icon: Music },
+
     // --- 7. Avatar Frames ---
     { id: 'frame_bronze', name: 'The Bronze Border', description: 'Simple, sturdy bronze.', type: ItemType.FRAME, rarity: Rarity.COMMON, price: 100, assetValue: 'frame-bronze', icon: Shield },
     { id: 'frame_circuit', name: 'Circuit Frame', description: 'Green PCB traces.', type: ItemType.FRAME, rarity: Rarity.UNCOMMON, price: 500, assetValue: 'frame-circuit', icon: Monitor },

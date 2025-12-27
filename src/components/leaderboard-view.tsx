@@ -25,9 +25,10 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
                 return;
             }
 
-            const mins = Math.floor(diff / 60000);
-            const secs = Math.floor((diff % 60000) / 1000);
-            setTimeLeft(`${mins}m ${secs}s`);
+            const days = Math.floor(diff / 86400000);
+            const hours = Math.floor((diff % 86400000) / 3600000);
+            const mins = Math.floor((diff % 3600000) / 60000);
+            setTimeLeft(`${days}d ${hours}h ${mins}m`);
         }, 1000);
 
         return () => clearInterval(timer);
@@ -41,7 +42,7 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
                         <Trophy size={20} />
                         <span className="text-xs font-bold uppercase tracking-widest">{data.leagueName} LEAGUE</span>
                     </div>
-                    <h1 className="text-5xl font-black tracking-tighter uppercase">Circuit Standings</h1>
+                    <h1 className="text-5xl font-black tracking-tighter uppercase">Weekly Rankings</h1>
                 </div>
 
                 <GlassCard className="py-3 px-6 flex items-center gap-3 border-primary/20">
@@ -121,7 +122,7 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
             <div className="bg-primary/10 border border-primary/20 rounded-2xl p-6 text-center">
                 <p className="text-sm font-medium text-primary">
                     <Trophy size={16} className="inline mr-2 -translate-y-0.5" />
-                    Finish in the **Top 3** to advance to the next league and earn **250 Neural Credits**!
+                    Finish in the **Top 3** to advance to the next league and earn **250 Flux Coins**!
                 </p>
             </div>
         </div>

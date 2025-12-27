@@ -3,7 +3,7 @@
 import { query, queryOne, execute, saveData } from "./db";
 import { v4 as uuid } from "uuid";
 
-const LEAGUE_DURATION_MS = 5 * 60 * 1000; // 5 mins for testing
+const LEAGUE_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (weekly cycle)
 const TIERS = ['neon-league', 'cobalt-league', 'plasma-league', 'void-league', 'apex-league'];
 
 /**
@@ -81,8 +81,24 @@ async function processLeagueReset() {
         execute('DELETE FROM league_participants WHERE league_id = ?', [tierId]);
     }
 
-    // Set new end time
-    const newEndTime = new Date(Date.now() + LEAGUE_DURATION_MS).toISOString();
+    // Set new end time to next Sunday midnight Eastern
+    const getNextSundayMidnight = () => {
+        const now = new Date();
+        const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        const dayOfWeek = eastern.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        // Days until Sunday: if Sunday (0) = 7 days (next Sunday), otherwise 7 - dayOfWeek
+        const daysUntilSunday = dayOfWeek === 0 ? 7 : (7 - dayOfWeek);
+        const nextSunday = new Date(eastern);
+        nextSunday.setDate(eastern.getDate() + daysUntilSunday);
+        nextSunday.setHours(0, 0, 0, 0);
+        // Convert Eastern midnight to UTC (add 5 hours for EST, 4 for EDT)
+        // Using toISOString will give local time, we need to adjust for ET
+        const utcHours = 5; // EST offset (winter)
+        nextSunday.setHours(utcHours, 0, 0, 0);
+        return nextSunday.toISOString();
+    };
+
+    const newEndTime = getNextSundayMidnight();
     for (const tierId of TIERS) {
         execute('UPDATE leagues SET end_time = ? WHERE id = ?', [newEndTime, tierId]);
     }

@@ -60,7 +60,7 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                             <Trophy size={20} />
                             <span className="text-xs font-bold uppercase tracking-widest">{stats?.leagueId?.replace('-league', '')?.toUpperCase()} LEAGUE</span>
                         </div>
-                        <div className="text-3xl font-black">LEVEL {stats?.level || 1} PILOT</div>
+                        <div className="text-3xl font-black">LEVEL {stats?.level || 1}</div>
                         {stats?.equippedTitle && (
                             <div className="text-xs font-bold uppercase tracking-widest text-primary mt-1">{stats.equippedTitle}</div>
                         )}
@@ -84,7 +84,7 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                         </div>
                         <div className="space-y-1">
                             <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Rank #</div>
-                            <div className="text-xl font-mono tracking-tighter text-accent">TOP 10</div>
+                            <div className="text-xl font-mono tracking-tighter text-accent">#{stats?.userRank || "-"}</div>
                         </div>
                         <div className="space-y-1">
                             <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Flux Coins</div>

@@ -1,400 +1,308 @@
-import fs from 'fs';
-import path from 'path';
+/**
+ * FlashMath Database Layer - SQLite Backend
+ * Maintains backward-compatible API with JSON-based db.ts
+ */
 
-// Define the database file path
-const dbPath = path.join(process.cwd(), 'flashmath_db.json');
-
-// Memory cache of the database - using a stable object reference
-const data: {
-    users: any[];
-    mastery_stats: any[];
-    sessions: any[];
-    leagues: any[];
-    league_participants: any[];
-    shop_items: any[];
-    inventory: any[];
-} = {
-    users: [],
-    mastery_stats: [],
-    sessions: [],
-    leagues: [],
-    league_participants: [],
-    shop_items: [],
-    inventory: []
-};
-
-// HELPER: Load data from file
-export const loadData = () => {
-    if (fs.existsSync(dbPath)) {
-        try {
-            const content = fs.readFileSync(dbPath, 'utf8');
-            if (!content || content.trim() === '') return data;
-
-            const parsed = JSON.parse(content);
-
-            // Update the stable object properties instead of reassigning 'data'
-            data.users = (parsed.users || []).map((u: any) => ({
-                level: 1,
-                coins: 100,
-                current_league_id: 'neon-league',
-                math_tiers: {
-                    addition: 0,
-                    subtraction: 0,
-                    multiplication: 0,
-                    division: 0
-                },
-                ...u,
-                // Ensure math_tiers exists even if ...u overwrites it with nothing (if u comes from old DB)
-                // Actually ...u comes from parsed JSON which MIGHT have math_tiers.
-                // If it doesn't, we want the default.
-                // So...
-            }));
-
-            // Second pass to ensure math_tiers is set if it was missing in the file
-            data.users = data.users.map(u => ({
-                ...u,
-                math_tiers: u.math_tiers || {
-                    addition: 0,
-                    subtraction: 0,
-                    multiplication: 0,
-                    division: 0
-                },
-                equipped_items: u.equipped_items || {
-                    theme: 'default',
-                    particle: 'default',
-                    font: 'default',
-                    sound: 'default',
-                    bgm: 'default',
-                    title: 'default',
-                    frame: 'default'
-                }
-            }));
-            data.leagues = parsed.leagues || [];
-            data.league_participants = parsed.league_participants || [];
-            data.shop_items = parsed.shop_items || [];
-            data.inventory = parsed.inventory || [];
-
-            // Critical: Heal orphaned data missing user_id
-            const defaultId = data.users[0]?.id || "unknown";
-            data.mastery_stats = (parsed.mastery_stats || []).map((s: any) => ({
-                ...s,
-                user_id: s.user_id || defaultId
-            }));
-            data.sessions = (parsed.sessions || []).map((s: any) => ({
-                ...s,
-                user_id: s.user_id || defaultId
-            }));
-
-            console.log(`[DB] Sync: ${data.users.length} users, ${data.sessions.length} sessions`);
-        } catch (e) {
-            console.error("Failed to parse DB file", e);
-        }
-    }
-    return data;
-};
-
-// HELPER: Save data to file
-export const saveData = () => {
-    try {
-        fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-    } catch (e) {
-        console.error("Critical: Failed to save DB file", e);
-    }
-};
-
-// Initial load
-loadData();
-
-// Seed items logic helper
+import { getDatabase, generateId, now } from './db/sqlite';
+import Database from 'better-sqlite3';
 import { ITEMS } from './items';
 
+// Get database instance
+let db: Database.Database;
+
+function ensureDb() {
+    if (!db) {
+        db = getDatabase();
+    }
+    return db;
+}
+
+// ============================================
+// BACKWARD-COMPATIBLE API
+// ============================================
+
 /**
- * Executes a query that returns multiple rows.
+ * Load data - for backward compatibility
+ * Returns a proxy object that mimics the old JSON structure
  */
-export const query = (text: string, params: any[] = []) => {
-    loadData();
+export const loadData = () => {
+    const database = ensureDb();
+
+    return {
+        get users() {
+            return database.prepare('SELECT * FROM users').all().map(parseUser);
+        },
+        get mastery_stats() {
+            return database.prepare('SELECT * FROM mastery_stats').all();
+        },
+        get sessions() {
+            return database.prepare('SELECT * FROM practice_sessions').all();
+        },
+        get leagues() {
+            return database.prepare('SELECT * FROM leagues').all();
+        },
+        get league_participants() {
+            return database.prepare('SELECT * FROM league_participants').all();
+        },
+        get shop_items() {
+            return database.prepare('SELECT * FROM shop_items').all().map(parseShopItem);
+        },
+        get inventory() {
+            return database.prepare('SELECT * FROM inventory').all();
+        }
+    };
+};
+
+// Parse user from DB format to app format
+function parseUser(row: any) {
+    return {
+        ...row,
+        math_tiers: row.math_tiers ? JSON.parse(row.math_tiers) : {},
+        equipped_items: row.equipped_items ? JSON.parse(row.equipped_items) : {},
+        is_admin: !!row.is_admin,
+        is_banned: !!row.is_banned,
+        email_verified: !!row.email_verified,
+        two_factor_enabled: !!row.two_factor_enabled
+    };
+}
+
+// Parse shop item from DB format to app format
+function parseShopItem(row: any) {
+    return {
+        ...row,
+        assetValue: row.asset_value
+    };
+}
+
+// saveData is no longer needed with SQLite (auto-persisted)
+export const saveData = () => {
+    // No-op for backward compatibility
+};
+
+/**
+ * Query multiple rows
+ */
+export const query = (text: string, params: any[] = []): any[] => {
+    const database = ensureDb();
     const lowerText = text.toLowerCase();
 
     if (lowerText.includes('from users')) {
-        return data.users;
+        return database.prepare('SELECT * FROM users').all().map(parseUser);
     }
     if (lowerText.includes('from mastery_stats')) {
         const userId = params[0];
-        let results = data.mastery_stats.filter(s => s.user_id === userId);
+        let sql = 'SELECT * FROM mastery_stats WHERE user_id = ?';
+        const sqlParams = [userId];
 
         if (lowerText.includes('operation = ?') && params[1]) {
-            results = results.filter(s => s.operation === params[1]);
+            sql += ' AND operation = ?';
+            sqlParams.push(params[1]);
         }
         if (lowerText.includes('fact = ?') && params[2]) {
-            results = results.filter(s => s.fact === params[2]);
+            sql += ' AND fact = ?';
+            sqlParams.push(params[2]);
         }
-        return results;
+        return database.prepare(sql).all(...sqlParams);
     }
     if (lowerText.includes('from leagues')) {
-        return data.leagues;
+        return database.prepare('SELECT * FROM leagues').all();
     }
     if (lowerText.includes('from league_participants')) {
         const leagueId = params[0];
-        return data.league_participants.filter(p => p.league_id === leagueId);
+        return database.prepare('SELECT * FROM league_participants WHERE league_id = ?').all(leagueId);
     }
-    if (lowerText.includes('from items')) { // NEW
-        return data.shop_items;
+    if (lowerText.includes('from items') || lowerText.includes('from shop_items')) {
+        return database.prepare('SELECT * FROM shop_items').all().map(parseShopItem);
     }
     return [];
 };
 
 /**
- * Executes a query that returns a single row.
+ * Query single row
  */
-export const queryOne = (text: string, params: any[] = []) => {
-    loadData();
+export const queryOne = (text: string, params: any[] = []): any | null => {
+    const database = ensureDb();
     const lowerText = text.toLowerCase();
 
     if (lowerText.includes('select * from users where email = ?')) {
-        const email = params[0];
-        const user = data.users.find(u => u.email === email);
-        return user || null;
+        const row = database.prepare('SELECT * FROM users WHERE email = ?').get(params[0]);
+        return row ? parseUser(row) : null;
     }
 
     if (lowerText.includes('select id from users where email = ?')) {
-        const email = params[0];
-        const user = data.users.find(u => u.email === email);
-        return user ? { id: user.id } : null;
+        const row = database.prepare('SELECT id FROM users WHERE email = ?').get(params[0]);
+        return row || null;
     }
 
     if (lowerText.includes('select * from users where id = ?')) {
-        const id = params[0];
-        const user = data.users.find(u => u.id === id);
-        return user || null;
+        const row = database.prepare('SELECT * FROM users WHERE id = ?').get(params[0]);
+        return row ? parseUser(row) : null;
     }
 
     if (lowerText.includes('select * from leagues where id = ?')) {
-        const id = params[0];
-        return data.leagues.find(l => l.id === id) || null;
+        return database.prepare('SELECT * FROM leagues WHERE id = ?').get(params[0]) || null;
     }
 
-    if (lowerText.includes('select * from items where id = ?')) { // NEW
-        const id = params[0];
-        return data.shop_items.find(i => i.id === id) || null;
+    if (lowerText.includes('select * from items where id = ?') || lowerText.includes('select * from shop_items where id = ?')) {
+        const row = database.prepare('SELECT * FROM shop_items WHERE id = ?').get(params[0]);
+        return row ? parseShopItem(row) : null;
     }
 
     return null;
 };
 
 /**
- * Executes a statement (INSERT, UPDATE, DELETE).
+ * Execute statement (INSERT, UPDATE, DELETE)
  */
-export const execute = (text: string, params: any[] = []) => {
-    loadData();
+export const execute = (text: string, params: any[] = []): { changes: number } => {
+    const database = ensureDb();
     const lowerText = text.toLowerCase();
 
     // INSERT INTO users
     if (lowerText.includes('insert into users')) {
         const [id, name, email, password_hash] = params;
-        data.users.push({
-            id,
-            name,
-            email,
-            password_hash,
-            theme_preferences: 'dark',
-            level: 1,
-            total_xp: 0,
-            coins: 100,
-            current_league_id: 'neon-league',
-            math_tiers: {
-                addition: 0,
-                subtraction: 0,
-                multiplication: 0,
-                division: 0
-            },
-            equipped_items: {
-                theme: 'default',
-                particle: 'default',
-                font: 'default',
-                sound: 'default',
-                bgm: 'default',
-                title: 'default',
-                frame: 'default'
-            },
-            created_at: new Date().toISOString()
-        });
+        database.prepare(`
+            INSERT INTO users (id, name, email, password_hash, level, total_xp, coins, current_league_id, theme_preferences, math_tiers, equipped_items, created_at)
+            VALUES (?, ?, ?, ?, 1, 0, 100, 'neon-league', 'dark', '{}', '{}', ?)
+        `).run(id, name, email, password_hash, now());
+        return { changes: 1 };
     }
 
-    // UPDATE users (for xp, coins, level)
+    // INSERT INTO sessions (practice mode stats) - use practice_sessions table
+    if (lowerText.includes('insert into sessions') && lowerText.includes('operation')) {
+        const [userId, operation, correctCount, totalCount, avgSpeed, xpEarned] = params;
+        database.prepare(`
+            INSERT INTO practice_sessions (id, user_id, operation, correct_count, total_count, avg_speed, xp_earned, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            generateId(),
+            userId,
+            operation,
+            correctCount,
+            totalCount,
+            avgSpeed,
+            xpEarned,
+            now()
+        );
+        return { changes: 1 };
+    }
+
+    // UPDATE users
     if (lowerText.includes('update users')) {
         const id = params[params.length - 1];
-        const user = data.users.find(u => u.id === id);
-        if (user) {
-            if (lowerText.includes('total_xp = ?, level = ?, coins = ?')) {
-                const [xp, level, coins] = params;
-                user.total_xp = xp;
-                user.level = level;
-                user.coins = coins;
-            } else if (lowerText.includes('set coins = ?') && !lowerText.includes('total_xp')) {
-                // Handle simple "UPDATE users SET coins = ? WHERE id = ?"
-                user.coins = params[0];
-            } else if (lowerText.includes('current_league_id = ?')) {
-                user.current_league_id = params[0];
-            } else if (lowerText.includes('math_tiers = ?')) {
-                user.math_tiers = params[0];
-            } else if (lowerText.includes('equipped_items = ?')) {
-                user.equipped_items = params[0];
-            } else if (lowerText.includes('banned_until = ?')) {
-                user.banned_until = params[0]; // ISO string or null
-                // Also sync is_banned boolean for backward compat/easy checks
-                user.is_banned = !!params[0];
-            } else if (lowerText.includes('is_banned = ?')) {
-                user.is_banned = !!params[0];
-                if (!user.is_banned) user.banned_until = null;
-            }
+
+        if (lowerText.includes('total_xp = ?, level = ?, coins = ?')) {
+            const [xp, level, coins] = params;
+            database.prepare('UPDATE users SET total_xp = ?, level = ?, coins = ?, updated_at = ? WHERE id = ?')
+                .run(xp, level, coins, now(), id);
+        } else if (lowerText.includes('set coins = ?') && !lowerText.includes('total_xp')) {
+            database.prepare('UPDATE users SET coins = ?, updated_at = ? WHERE id = ?')
+                .run(params[0], now(), id);
+        } else if (lowerText.includes('current_league_id = ?')) {
+            database.prepare('UPDATE users SET current_league_id = ?, updated_at = ? WHERE id = ?')
+                .run(params[0], now(), id);
+        } else if (lowerText.includes('math_tiers = ?')) {
+            database.prepare('UPDATE users SET math_tiers = ?, updated_at = ? WHERE id = ?')
+                .run(JSON.stringify(params[0]), now(), id);
+        } else if (lowerText.includes('equipped_items = ?')) {
+            database.prepare('UPDATE users SET equipped_items = ?, updated_at = ? WHERE id = ?')
+                .run(JSON.stringify(params[0]), now(), id);
+        } else if (lowerText.includes('banned_until = ?')) {
+            database.prepare('UPDATE users SET banned_until = ?, is_banned = ?, updated_at = ? WHERE id = ?')
+                .run(params[0], params[0] ? 1 : 0, now(), id);
+        } else if (lowerText.includes('is_banned = ?')) {
+            database.prepare('UPDATE users SET is_banned = ?, banned_until = ?, updated_at = ? WHERE id = ?')
+                .run(params[0] ? 1 : 0, params[0] ? null : null, now(), id);
         }
+        return { changes: 1 };
     }
 
-    // UPDATE items (for Admin editing)
-    if (lowerText.includes('update items')) {
+    // UPDATE items / shop_items
+    if (lowerText.includes('update items') || lowerText.includes('update shop_items')) {
         const id = params[params.length - 1];
-        const item = data.shop_items.find(i => i.id === id);
-        if (item) {
-            if (lowerText.includes('rarity = ?')) {
-                item.rarity = params[0];
-            }
-            if (lowerText.includes('price = ?')) {
-                item.price = params[0]; // Or params[1] depending on SQL structure, but let's assume simple updates
-                // Actually usually execute logic parses the exact SET string. 
-                // We'll simplify: "UPDATE items SET rarity = ?, price = ? WHERE id = ?"
-                // Params: [newRarity, newPrice, id]
-                if (params.length === 3) {
-                    item.rarity = params[0];
-                    item.price = params[1];
-                }
-            }
+        if (params.length === 3) {
+            database.prepare('UPDATE shop_items SET rarity = ?, price = ? WHERE id = ?')
+                .run(params[0], params[1], id);
         }
+        return { changes: 1 };
     }
 
-
-    // INSERT INTO mastery_stats
-    if (lowerText.includes('insert into mastery_stats')) {
-        const [user_id, operation, fact, speed, mastery] = params;
-        data.mastery_stats.push({
-            id: Date.now() + Math.random(),
-            user_id,
-            operation,
-            fact,
-            last_response_time: speed,
-            mastery_level: mastery,
-            updated_at: new Date().toISOString()
-        });
+    // INSERT/UPDATE mastery_stats
+    if (lowerText.includes('insert into mastery') || lowerText.includes('update mastery')) {
+        // Upsert mastery stat
+        if (lowerText.includes('insert')) {
+            const [id, userId, operation, fact, responseTime, masteryLevel] = params;
+            database.prepare(`
+                INSERT OR REPLACE INTO mastery_stats (id, user_id, operation, fact, last_response_time, mastery_level, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).run(id || generateId(), userId, operation, fact, responseTime, masteryLevel, now());
+        }
+        return { changes: 1 };
     }
 
-    // INSERT INTO sessions
-    if (lowerText.includes('insert into sessions')) {
-        const [user_id, operation, correct_count, total_count, avg_speed, xp_earned] = params;
-        data.sessions.push({
-            id: Date.now(),
-            user_id,
-            operation,
-            correct_count,
-            total_count,
-            avg_speed,
-            xp_earned: xp_earned || 0,
-            created_at: new Date().toISOString()
-        });
-    }
+    // League participants - add XP to existing or insert new
+    if (lowerText.includes('insert into league_participants') || lowerText.includes('update league_participants')) {
+        const [leagueId, userId, name, weeklyXp] = params;
 
-    // LEAGUE STATEMENTS
-    if (lowerText.includes('insert into league_participants')) {
-        const [league_id, user_id, name, weekly_xp] = params;
-        const existing = data.league_participants.find(p => p.league_id === league_id && p.user_id === user_id);
+        // Check if user already exists in this league
+        const existing = database.prepare(
+            'SELECT id, weekly_xp FROM league_participants WHERE league_id = ? AND user_id = ?'
+        ).get(leagueId, userId) as { id: string; weekly_xp: number } | undefined;
+
         if (existing) {
-            existing.weekly_xp += weekly_xp;
+            // Add to existing XP
+            database.prepare(
+                'UPDATE league_participants SET weekly_xp = weekly_xp + ?, name = ? WHERE id = ?'
+            ).run(weeklyXp, name, existing.id);
         } else {
-            data.league_participants.push({ league_id, user_id, name, weekly_xp });
+            // Insert new participant
+            database.prepare(`
+                INSERT INTO league_participants (id, league_id, user_id, name, weekly_xp)
+                VALUES (?, ?, ?, ?, ?)
+            `).run(generateId(), leagueId, userId, name, weeklyXp);
         }
+        return { changes: 1 };
     }
 
     if (lowerText.includes('delete from league_participants')) {
-        const leagueId = params[0];
-        data.league_participants = data.league_participants.filter(p => p.league_id !== leagueId);
+        database.prepare('DELETE FROM league_participants WHERE league_id = ?').run(params[0]);
+        return { changes: 1 };
     }
 
     if (lowerText.includes('update leagues')) {
         const id = params[params.length - 1];
-        const league = data.leagues.find(l => l.id === id);
-        if (league && lowerText.includes('end_time = ?')) {
-            league.end_time = params[0];
+        if (lowerText.includes('end_time = ?')) {
+            database.prepare('UPDATE leagues SET end_time = ? WHERE id = ?').run(params[0], id);
         }
+        return { changes: 1 };
     }
 
-    saveData();
-    return { changes: 1 };
+    return { changes: 0 };
 };
 
+/**
+ * Initialize schema and seed data
+ */
 export const initSchema = () => {
-    loadData();
+    const database = ensureDb();
 
-    // Seed Leagues if empty
-    if (data.leagues.length === 0) {
-        data.leagues = [
-            { id: 'neon-league', name: 'NEON', min_rank: 1, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
-            { id: 'cobalt-league', name: 'COBALT', min_rank: 2, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
-            { id: 'plasma-league', name: 'PLASMA', min_rank: 3, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
-            { id: 'void-league', name: 'VOID', min_rank: 4, end_time: new Date(Date.now() + 5 * 60000).toISOString() },
-            { id: 'apex-league', name: 'APEX', min_rank: 5, end_time: new Date(Date.now() + 5 * 60000).toISOString() }
-        ];
+    // Seed shop items if empty
+    const itemCount = database.prepare('SELECT COUNT(*) as count FROM shop_items').get() as { count: number };
+    if (itemCount.count === 0) {
+        const insertItem = database.prepare(`
+            INSERT INTO shop_items (id, name, description, type, rarity, price, asset_value)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+
+        for (const item of ITEMS) {
+            insertItem.run(item.id, item.name, item.description, item.type, item.rarity, item.price, item.assetValue);
+        }
+        console.log(`[DB] Seeded ${ITEMS.length} items into database.`);
     }
-
-    // Seed Items if empty
-    if (data.shop_items.length === 0) {
-        // Strip out React icons (they don't serialize well to JSON/DB)
-        // We'll hydrate the icons on the frontend based on ItemType/ID if needed, or store simple string identifiers
-        // Actually ITEMS are just static data in items.ts, we want to migrate them to DB.
-        // We can store everything EXCEPT the icon function.
-        const dbItems = ITEMS.map(({ icon, ...rest }) => rest);
-        data.shop_items = dbItems;
-        console.log(`[DB] Seeded ${data.shop_items.length} items into database.`);
-    }
-
-    // Seed Super Admin if not exists
-    const ADMIN_EMAIL = 'admin@flashmath.io';
-    const adminExists = data.users.some(u => u.email === ADMIN_EMAIL);
-    if (!adminExists) {
-        // bcrypt hash for 'flashadmin!'
-        const ADMIN_PASSWORD_HASH = '$2b$10$oUmu3ok39yQLiORP47FcTe3/udpjrmXYffj/50drWX7tbK1KG5/oq';
-        data.users.push({
-            id: 'super-admin-001',
-            name: 'FlashAdmin',
-            email: ADMIN_EMAIL,
-            password_hash: ADMIN_PASSWORD_HASH,
-            theme_preferences: 'dark',
-            level: 99,
-            total_xp: 999999,
-            coins: 999999999,
-            current_league_id: 'apex-league',
-            is_admin: true,
-            math_tiers: {
-                addition: 4,
-                subtraction: 4,
-                multiplication: 4,
-                division: 4
-            },
-            equipped_items: {
-                theme: 'default',
-                particle: 'default',
-                font: 'default',
-                sound: 'default',
-                bgm: 'default',
-                title: 'default',
-                frame: 'default'
-            },
-            created_at: new Date().toISOString()
-        });
-        console.log(`[DB] Seeded super admin account: ${ADMIN_EMAIL}`);
-    }
-
-    saveData();
 };
 
-// Initial load
+// Initialize on module load
 initSchema();
 
-export default data;
+// Export database getter for direct access when needed
+export { getDatabase, generateId, now };

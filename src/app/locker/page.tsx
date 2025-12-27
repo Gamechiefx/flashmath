@@ -18,15 +18,17 @@ export default async function LockerPage() {
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
     const db = loadData();
     const shopItems = db.shop_items as Item[];
-    const inventory = db.inventory.filter(i => i.user_id === userId);
+    const inventory = (db.inventory as any[]).filter((i: any) => i.user_id === userId);
 
-    // Get Owned Items details
-    // Use shopItems (DB) instead of ITEMS (Static)
-    // Fallback to ITEMS only if DB is empty (safety)
-    const sourceItems = (shopItems && shopItems.length > 0) ? shopItems : ITEMS;
+    // Merge DB shop_items with static ITEMS (ITEMS takes precedence for missing items)
+    // This ensures achievement titles from ITEMS are available even if not in DB yet
+    const allItemsMap = new Map<string, Item>();
+    ITEMS.forEach(item => allItemsMap.set(item.id, item));
+    shopItems?.forEach(item => allItemsMap.set(item.id, item));
+    const allItems = Array.from(allItemsMap.values());
 
-    const ownedItems = sourceItems.filter(item =>
-        inventory.some(inv => inv.item_id === item.id)
+    const ownedItems = allItems.filter(item =>
+        inventory.some((inv: any) => inv.item_id === item.id)
     );
 
     const equipped = user.equipped_items || {};
@@ -47,7 +49,7 @@ export default async function LockerPage() {
                     <div>
                         <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 mb-2">
                             <Archive size={14} />
-                            Personal Armory
+                            Locker
                         </div>
                         <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-primary">
                             Locker
