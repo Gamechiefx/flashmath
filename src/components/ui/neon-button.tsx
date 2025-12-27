@@ -38,7 +38,7 @@ export function NeonButton({
         >
             {/* Inner glow/sheen */}
             < div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-500" />
-            <span className="relative z-10">{children}</span>
+            <span className="relative z-10 flex items-center gap-2">{children}</span>
         </motion.button >
     );
 }

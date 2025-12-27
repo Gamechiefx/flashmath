@@ -72,7 +72,8 @@ export function getDailyShopSelection(): Item[] {
 
     slots.forEach((slotType, index) => {
         // Filter items by type from DB list
-        const candidates = dbItems.filter(i => i.type === slotType);
+        // Exclude items with price 0 (achievement-only titles)
+        const candidates = dbItems.filter(i => i.type === slotType && i.price > 0);
         if (candidates.length === 0) {
             console.log(`[ShopEngine] No candidates for slot ${slotType}`);
             return;
