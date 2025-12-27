@@ -6,6 +6,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Shield, ChevronDown, Check } from "lucide-react";
 import { equipItem } from "@/lib/actions/shop";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { useItemPreview } from "@/components/item-preview-provider";
 
 interface CompactLockerItemProps {
@@ -170,11 +171,13 @@ interface CompactLockerViewProps {
 
 export function CompactLockerView({ ownedItems, equipped }: CompactLockerViewProps) {
     const router = useRouter();
+    const { update: updateSession } = useSession();
     const [loadingItem, setLoadingItem] = useState<string | null>(null);
 
     const handleEquip = async (itemId: string, type: string) => {
         setLoadingItem(itemId);
         await equipItem(type, itemId);
+        await updateSession(); // Refresh session to update header avatar
         router.refresh();
         setLoadingItem(null);
     };
