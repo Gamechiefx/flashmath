@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { deleteUser, banUser, unbanUser } from "@/lib/actions/users";
 import { giveUserCoins, giveUserXP } from "@/lib/actions/admin";
-import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap } from "lucide-react";
+import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap, AlertCircle } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { RoleManager } from "@/components/admin/role-manager";
-import { Role, parseRole, ROLE_LABELS, ROLE_COLORS } from "@/lib/rbac";
+import { Role, parseRole, ROLE_LABELS, ROLE_COLORS, hasPermission, Permission, canManageRole } from "@/lib/rbac";
 
 interface User {
     id: string;
@@ -43,14 +43,8 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
         u.email?.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
-    const handleBanClick = (user: User) => {
-        if (user.is_banned) {
-            // If already banned, just unban immediately (or show info? Let's just unban for now)
-            if (!confirm("Unban this user?")) return;
-            executeBan(user.id, null); // Unban
-        } else {
-            setBanModalUser(user);
-        }
+    const handleBanClickOld = (user: User) => {
+        // This function is replaced by the new one below
     };
 
     const executeBan = async (userId: string, hours: number | null) => {
@@ -83,11 +77,36 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
         executeBan(banModalUser.id, hours);
     };
 
-    const handleDelete = async (userId: string) => {
+    const handleDelete = async (userId: string, userRole: Role) => {
+        // Check permission
+        if (!hasPermission(currentUserRole, Permission.DELETE_USERS)) {
+            alert("❌ Permission Denied: You don't have permission to delete users.");
+            return;
+        }
+        // Can't delete users at or above your level
+        if (!canManageRole(currentUserRole, userRole)) {
+            alert("❌ Permission Denied: You cannot delete users with equal or higher roles.");
+            return;
+        }
         if (!confirm("Are you sure you want to DELETE this user? This cannot be undone.")) return;
         setProcessingId(userId);
         await deleteUser(userId);
         setProcessingId(null);
+    };
+
+    const handleBanClick = (user: User) => {
+        const userRole = parseRole(user.role, !!user.is_admin);
+        // Can't ban users at or above your level
+        if (!canManageRole(currentUserRole, userRole)) {
+            alert("❌ Permission Denied: You cannot ban users with equal or higher roles.");
+            return;
+        }
+        if (user.is_banned) {
+            if (!confirm("Unban this user?")) return;
+            executeBan(user.id, null);
+        } else {
+            setBanModalUser(user);
+        }
     };
 
     const confirmGift = async () => {
@@ -308,40 +327,57 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                             )}
                                         </td>
                                         <td className="p-4 text-right flex justify-end gap-2">
-                                            <button
-                                                onClick={() => openGiftModal(user, "coins")}
-                                                disabled={!!processingId}
-                                                className="p-2 hover:bg-yellow-500/20 rounded text-muted-foreground hover:text-yellow-400 transition-colors"
-                                                title="Give Coins"
-                                            >
-                                                <Coins size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => openGiftModal(user, "xp")}
-                                                disabled={!!processingId}
-                                                className="p-2 hover:bg-primary/20 rounded text-muted-foreground hover:text-primary transition-colors"
-                                                title="Give XP"
-                                            >
-                                                <Zap size={16} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleBanClick(user)}
-                                                disabled={!!processingId}
-                                                className="p-2 hover:bg-white/10 rounded text-muted-foreground hover:text-white transition-colors"
-                                                title={isBanned ? "Unban" : "Ban"}
-                                            >
-                                                {processingId === user.id ? <Loader2 size={16} className="animate-spin" /> :
-                                                    <Ban size={16} className={isBanned ? "text-green-400" : "text-orange-400"} />
-                                                }
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(user.id)}
-                                                disabled={!!processingId}
-                                                className="p-2 hover:bg-red-500/20 rounded text-muted-foreground hover:text-red-400 transition-colors"
-                                                title="Delete"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            {/* Only show gift buttons if user has permission */}
+                                            {hasPermission(currentUserRole, Permission.GIVE_COINS_XP) && canManageRole(currentUserRole, parseRole(user.role, !!user.is_admin)) && (
+                                                <>
+                                                    <button
+                                                        onClick={() => openGiftModal(user, "coins")}
+                                                        disabled={!!processingId}
+                                                        className="p-2 hover:bg-yellow-500/20 rounded text-muted-foreground hover:text-yellow-400 transition-colors"
+                                                        title="Give Coins"
+                                                    >
+                                                        <Coins size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => openGiftModal(user, "xp")}
+                                                        disabled={!!processingId}
+                                                        className="p-2 hover:bg-primary/20 rounded text-muted-foreground hover:text-primary transition-colors"
+                                                        title="Give XP"
+                                                    >
+                                                        <Zap size={16} />
+                                                    </button>
+                                                </>
+                                            )}
+                                            {/* Only show ban button if can manage this user */}
+                                            {canManageRole(currentUserRole, parseRole(user.role, !!user.is_admin)) && (
+                                                <button
+                                                    onClick={() => handleBanClick(user)}
+                                                    disabled={!!processingId}
+                                                    className="p-2 hover:bg-white/10 rounded text-muted-foreground hover:text-white transition-colors"
+                                                    title={isBanned ? "Unban" : "Ban"}
+                                                >
+                                                    {processingId === user.id ? <Loader2 size={16} className="animate-spin" /> :
+                                                        <Ban size={16} className={isBanned ? "text-green-400" : "text-orange-400"} />
+                                                    }
+                                                </button>
+                                            )}
+                                            {/* Only show delete button if has permission and can manage this user */}
+                                            {hasPermission(currentUserRole, Permission.DELETE_USERS) && canManageRole(currentUserRole, parseRole(user.role, !!user.is_admin)) && (
+                                                <button
+                                                    onClick={() => handleDelete(user.id, parseRole(user.role, !!user.is_admin))}
+                                                    disabled={!!processingId}
+                                                    className="p-2 hover:bg-red-500/20 rounded text-muted-foreground hover:text-red-400 transition-colors"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                            {/* Show lock icon for protected users */}
+                                            {!canManageRole(currentUserRole, parseRole(user.role, !!user.is_admin)) && (
+                                                <span className="p-2 text-muted-foreground/50" title="Protected - Cannot manage">
+                                                    <AlertCircle size={16} />
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
                                 )
