@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
     -- 2FA
     two_factor_enabled INTEGER DEFAULT 0,
     two_factor_secret TEXT,
+    two_factor_recovery_codes TEXT,
     
     -- Timestamps
     created_at TEXT NOT NULL,

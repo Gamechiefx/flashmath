@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2 } from "lucide-react";
+import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2, Shield, Monitor, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { resetUserData, deleteUserAccount, updateUsername } from "@/lib/actions/settings";
@@ -199,14 +199,48 @@ export function SettingsView({ user }: SettingsViewProps) {
                             <h2 className="text-xl font-black uppercase tracking-tight">Security</h2>
                         </div>
 
-                        <div className="space-y-4">
-                            <button
-                                disabled
-                                className="w-full p-4 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        <div className="space-y-3">
+                            <Link
+                                href="/settings/security"
+                                className="w-full p-4 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10 transition-colors flex items-center justify-between"
                             >
-                                <div className="text-sm font-bold uppercase tracking-widest">Change Password</div>
-                                <div className="text-xs text-muted-foreground mt-1">Coming soon</div>
-                            </button>
+                                <div className="flex items-center gap-3">
+                                    <Shield size={18} className="text-primary" />
+                                    <div>
+                                        <div className="text-sm font-bold uppercase tracking-widest">Two-Factor Authentication</div>
+                                        <div className="text-xs text-muted-foreground mt-1">Add an extra layer of security</div>
+                                    </div>
+                                </div>
+                                <ChevronRight size={18} className="text-muted-foreground" />
+                            </Link>
+
+                            <Link
+                                href="/settings/sessions"
+                                className="w-full p-4 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10 transition-colors flex items-center justify-between"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Monitor size={18} className="text-accent" />
+                                    <div>
+                                        <div className="text-sm font-bold uppercase tracking-widest">Active Sessions</div>
+                                        <div className="text-xs text-muted-foreground mt-1">Manage where you're logged in</div>
+                                    </div>
+                                </div>
+                                <ChevronRight size={18} className="text-muted-foreground" />
+                            </Link>
+
+                            <Link
+                                href="/forgot-password"
+                                className="w-full p-4 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10 transition-colors flex items-center justify-between"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Lock size={18} className="text-yellow-400" />
+                                    <div>
+                                        <div className="text-sm font-bold uppercase tracking-widest">Change Password</div>
+                                        <div className="text-xs text-muted-foreground mt-1">Update your password</div>
+                                    </div>
+                                </div>
+                                <ChevronRight size={18} className="text-muted-foreground" />
+                            </Link>
                         </div>
                     </GlassCard>
 
