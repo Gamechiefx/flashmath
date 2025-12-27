@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Item, ItemType, RARITY_COLORS } from "@/lib/items";
 import { GlassCard } from "@/components/ui/glass-card";
-import { Shield, ChevronDown, Check } from "lucide-react";
+import { Shield, ChevronDown, Check, X } from "lucide-react";
 import { equipItem } from "@/lib/actions/shop";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -52,24 +52,23 @@ function CompactLockerItem({ item, isEquipped, type, onEquip, isLoading }: Compa
 
     return (
         <button
-            onClick={() => !isEquipped && !isLoading && onEquip(item.id, type)}
-            disabled={isEquipped || isLoading}
+            onClick={() => !isLoading && onEquip(item.id, type)}
+            disabled={isLoading}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
             className={`
                 relative p-2 rounded-lg border transition-all text-left w-full
                 ${rarityBg} ${rarityGlow}
                 ${isEquipped
-                    ? "border-accent shadow-[0_0_20px_rgba(34,211,238,0.3)] ring-1 ring-accent/50"
+                    ? "border-accent shadow-[0_0_20px_rgba(34,211,238,0.3)] ring-1 ring-accent/50 hover:border-red-500/50 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)]"
                     : "hover:bg-white/5 cursor-pointer"
                 }
                 ${isLoading ? "opacity-50 cursor-wait" : ""}
-                disabled:cursor-default
             `}
         >
             {/* Equipped checkmark */}
             {isEquipped && (
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-accent rounded-full flex items-center justify-center shadow-lg">
+                <div className="absolute -top-1 -right-1 w-5 h-5 bg-accent group-hover:bg-red-500 rounded-full flex items-center justify-center shadow-lg">
                     <Check size={12} className="text-black" strokeWidth={3} />
                 </div>
             )}
@@ -147,6 +146,25 @@ function LockerAccordion({ category, items, equipped, onEquip, loadingItem, defa
             {isOpen && (
                 <div className="p-3 bg-black/20">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                        {/* Unequip button - only show if something is equipped */}
+                        {equippedItem && (
+                            <button
+                                onClick={() => onEquip('default', category)}
+                                disabled={loadingItem === 'default'}
+                                className="relative p-2 rounded-lg border transition-all text-left w-full bg-red-600/20 border-red-500/30 hover:bg-red-600/30 hover:border-red-500/50"
+                            >
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 rounded-md bg-red-500/30">
+                                        <X size={16} className="text-red-400" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-medium truncate text-red-400">
+                                            Unequip
+                                        </div>
+                                    </div>
+                                </div>
+                            </button>
+                        )}
                         {sortedItems.map(item => (
                             <CompactLockerItem
                                 key={item.id}
