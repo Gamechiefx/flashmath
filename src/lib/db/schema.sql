@@ -23,8 +23,9 @@ CREATE TABLE IF NOT EXISTS users (
     -- Equipped items (stored as JSON)
     equipped_items TEXT DEFAULT '{"theme":"default","particle":"default","font":"default","sound":"default","bgm":"default","title":"default","frame":"default"}',
     
-    -- Admin flags
+    -- Admin flags and RBAC
     is_admin INTEGER DEFAULT 0,
+    role TEXT DEFAULT 'user', -- 'user', 'moderator', 'admin', 'super_admin'
     
     -- Security
     is_banned INTEGER DEFAULT 0,
