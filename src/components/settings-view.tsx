@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2, Shield, Monitor, ChevronRight, Link2, Clock } from "lucide-react";
+import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2, Shield, Monitor, ChevronRight, Link2, Clock, Mail, CheckCircle } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { resetUserData, deleteUserAccount, updateUsername } from "@/lib/actions/settings";
@@ -174,7 +174,23 @@ export function SettingsView({ user }: SettingsViewProps) {
                             <div>
                                 <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">Email</label>
                                 <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                    <div className="text-lg font-bold">{user?.email}</div>
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-lg font-bold">{user?.email}</div>
+                                        {user?.emailVerified ? (
+                                            <span className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-1 rounded-full">
+                                                <CheckCircle size={12} />
+                                                Verified
+                                            </span>
+                                        ) : (
+                                            <Link
+                                                href={`/verify-email?email=${encodeURIComponent(user?.email || '')}`}
+                                                className="flex items-center gap-1 text-xs text-yellow-400 bg-yellow-500/10 px-3 py-1.5 rounded-full hover:bg-yellow-500/20 transition-colors"
+                                            >
+                                                <Mail size={12} />
+                                                Verify Email
+                                            </Link>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>
