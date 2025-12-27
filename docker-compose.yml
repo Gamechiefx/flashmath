@@ -9,9 +9,10 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./flashmath_db.json:/app/flashmath_db.json
+      - ./data:/app/data
     environment:
       - NODE_ENV=production
       - NEXTAUTH_URL=https://flashmath.io
       - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
+      - DATABASE_PATH=/app/data/flashmath.db
     restart: always
