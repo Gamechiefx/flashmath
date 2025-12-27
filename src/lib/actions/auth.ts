@@ -50,11 +50,11 @@ export async function registerUser(formData: FormData) {
         // Send verification email
         await sendVerificationEmail(email);
 
-        // After success, sign them in
+        // Sign them in and redirect to verify-email page
         await signIn("credentials", {
             email,
             password,
-            redirectTo: "/dashboard",
+            redirectTo: `/verify-email?email=${encodeURIComponent(email)}`,
         });
 
     } catch (error) {
