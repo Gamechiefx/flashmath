@@ -5,17 +5,26 @@ import { deleteUser, banUser, unbanUser } from "@/lib/actions/users";
 import { giveUserCoins, giveUserXP } from "@/lib/actions/admin";
 import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
+import { RoleManager } from "@/components/admin/role-manager";
+import { Role, parseRole, ROLE_LABELS, ROLE_COLORS } from "@/lib/rbac";
 
 interface User {
     id: string;
-    name?: string; // Optional if not set
+    name?: string;
     email?: string;
     total_xp?: number;
     is_banned?: boolean;
     banned_until?: string | null;
+    role?: string;
+    is_admin?: boolean;
 }
 
-export function UserManager({ users }: { users: User[] }) {
+interface UserManagerProps {
+    users: User[];
+    currentUserRole: Role;
+}
+
+export function UserManager({ users, currentUserRole }: UserManagerProps) {
     const [searchTerm, setSearchTerm] = useState("");
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [banModalUser, setBanModalUser] = useState<User | null>(null);
@@ -226,8 +235,8 @@ export function UserManager({ users }: { users: User[] }) {
                             <button
                                 onClick={confirmGift}
                                 className={`px-4 py-2 rounded text-white text-sm font-bold shadow-lg ${giftMode === 'take'
-                                        ? 'bg-red-500/80 hover:bg-red-500 shadow-red-900/20'
-                                        : 'bg-primary/80 hover:bg-primary shadow-primary/20'
+                                    ? 'bg-red-500/80 hover:bg-red-500 shadow-red-900/20'
+                                    : 'bg-primary/80 hover:bg-primary shadow-primary/20'
                                     }`}
                             >
                                 {giftMode === 'give' ? 'GIVE' : 'TAKE'} {giftType.toUpperCase()}
@@ -254,6 +263,7 @@ export function UserManager({ users }: { users: User[] }) {
                         <thead className="sticky top-0 bg-black/80 backdrop-blur-md z-10">
                             <tr className="border-b border-white/10 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                                 <th className="p-4">User</th>
+                                <th className="p-4">Role</th>
                                 <th className="p-4">XP</th>
                                 <th className="p-4">Status</th>
                                 <th className="p-4 text-right">Actions</th>
@@ -268,6 +278,15 @@ export function UserManager({ users }: { users: User[] }) {
                                             <div className="font-bold text-white">{user.name || "Unknown"}</div>
                                             <div className="text-xs text-muted-foreground font-mono">{user.id}</div>
                                             {user.email && <div className="text-xs text-muted-foreground">{user.email}</div>}
+                                        </td>
+                                        <td className="p-4">
+                                            <RoleManager
+                                                userId={user.id}
+                                                userName={user.name || "Unknown"}
+                                                currentRole={parseRole(user.role, !!user.is_admin)}
+                                                managerRole={currentUserRole}
+                                                onRoleChanged={() => window.location.reload()}
+                                            />
                                         </td>
                                         <td className="p-4 font-mono text-accent">{user.total_xp?.toLocaleString() || 0}</td>
                                         <td className="p-4">
