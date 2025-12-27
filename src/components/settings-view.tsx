@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2, Shield, Monitor, ChevronRight } from "lucide-react";
+import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2, Shield, Monitor, ChevronRight, Link2, Clock } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { resetUserData, deleteUserAccount, updateUsername } from "@/lib/actions/settings";
@@ -237,6 +237,34 @@ export function SettingsView({ user }: SettingsViewProps) {
                                     <div>
                                         <div className="text-sm font-bold uppercase tracking-widest">Change Password</div>
                                         <div className="text-xs text-muted-foreground mt-1">Update your password</div>
+                                    </div>
+                                </div>
+                                <ChevronRight size={18} className="text-muted-foreground" />
+                            </Link>
+
+                            <Link
+                                href="/settings/linked-accounts"
+                                className="w-full p-4 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10 transition-colors flex items-center justify-between"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Link2 size={18} className="text-purple-400" />
+                                    <div>
+                                        <div className="text-sm font-bold uppercase tracking-widest">Linked Accounts</div>
+                                        <div className="text-xs text-muted-foreground mt-1">Manage connected logins (Google)</div>
+                                    </div>
+                                </div>
+                                <ChevronRight size={18} className="text-muted-foreground" />
+                            </Link>
+
+                            <Link
+                                href="/settings/activity"
+                                className="w-full p-4 rounded-xl bg-white/5 border border-white/10 text-left hover:bg-white/10 transition-colors flex items-center justify-between"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Clock size={18} className="text-orange-400" />
+                                    <div>
+                                        <div className="text-sm font-bold uppercase tracking-widest">Security Activity</div>
+                                        <div className="text-xs text-muted-foreground mt-1">View recent security events</div>
                                     </div>
                                 </div>
                                 <ChevronRight size={18} className="text-muted-foreground" />

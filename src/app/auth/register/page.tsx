@@ -3,7 +3,8 @@
 import { motion } from "framer-motion";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { Zap, Mail, Lock, User, ArrowLeft } from "lucide-react";
+import { PasswordStrength } from "@/components/ui/password-strength";
+import { Zap, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { registerUser, signInWithGoogle } from "@/lib/actions/auth";
 import { useState } from "react";
@@ -11,6 +12,8 @@ import { useState } from "react";
 export default function RegisterPage() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
 
     async function handleSubmit(formData: FormData) {
         setLoading(true);
@@ -89,13 +92,23 @@ export default function RegisterPage() {
                             <div className="relative">
                                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                                 <input
-                                    type="password"
+                                    type={showPassword ? "text" : "password"}
                                     name="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
                                     placeholder="••••••••"
                                     required
-                                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-12 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
                                 />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
                             </div>
+                            <PasswordStrength password={password} />
                         </div>
 
                         <NeonButton variant="accent" className="w-full mt-4" type="submit" disabled={loading}>
