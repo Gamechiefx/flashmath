@@ -7,21 +7,21 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest # Reverting to the common default
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Prepare data directory
+        run: |
+          # Create data directory for SQLite database persistence
+          mkdir -p data
+          chmod 777 data
 
       - name: Build and Start Container
         env:
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
         run: |
-          # Remove existing database to force fresh seed with admin account
-          rm -f flashmath_db.json
-          
-          # Create empty database file for volume mount
-          echo "{}" > flashmath_db.json
-          
           # Build and start container
           docker compose build
           docker compose up -d
