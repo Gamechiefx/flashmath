@@ -263,14 +263,36 @@ body {
 
 .frame-rainbow {
   position: relative;
-  border: 4px solid transparent;
   border-radius: 9999px;
-  background: conic-gradient(red, orange, yellow, green, blue, indigo, violet, red) border-box;
-  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  animation: spin-infinite 2s linear infinite;
+}
+
+.frame-rainbow::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  background: conic-gradient(#ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
+  animation: rainbow-rotate 2s linear infinite;
+  z-index: -1;
+}
+
+.frame-rainbow::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 9999px;
+  background: var(--background);
+  z-index: -1;
+}
+
+@keyframes rainbow-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 .frame-wanted {

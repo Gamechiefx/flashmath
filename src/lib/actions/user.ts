@@ -11,13 +11,13 @@ export async function getDashboardStats() {
 
     await syncLeagueState();
     const db = loadData();
-    const userSessions = db.sessions.filter(s => s.user_id === userId);
-    const userMastery = db.mastery_stats.filter(s => s.user_id === userId);
+    const userSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId);
+    const userMastery = (db.mastery_stats as any[]).filter((s: any) => s.user_id === userId);
 
-    const totalCorrect = userSessions.reduce((acc, s) => acc + (s.correct_count || 0), 0);
-    const totalAttempted = userSessions.reduce((acc, s) => acc + (s.total_count || 0), 0);
+    const totalCorrect = userSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
+    const totalAttempted = userSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0);
     const avgSpeed = userSessions.length > 0
-        ? userSessions.reduce((acc, s) => acc + s.avg_speed, 0) / userSessions.length
+        ? userSessions.reduce((acc: number, s: any) => acc + s.avg_speed, 0) / userSessions.length
         : 0;
 
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
@@ -31,9 +31,15 @@ export async function getDashboardStats() {
     const ops = ["Addition", "Subtraction", "Multiplication", "Division"];
     const masteryMap = ops.map(op => {
         const opLower = op.toLowerCase();
-        const opMastery = userMastery.filter(m => m.operation.toLowerCase() === opLower);
-        const masteredCount = opMastery.filter(m => m.mastery_level >= 3).length;
-        const realProgress = Math.min(100, Math.round((masteredCount / 100) * 100)); // Assuming 100 facts base
+        const opMastery = userMastery.filter((m: any) => m.operation.toLowerCase() === opLower);
+
+        // Calculate progress based on total mastery points earned
+        // Each fact can have mastery 0-5, assume 50 facts per tier, 5 mastery each = 250 max points per tier
+        // But for simpler feedback: count total mastery points / expected points for meaningful progress
+        const totalMasteryPoints = opMastery.reduce((acc: number, m: any) => acc + (m.mastery_level || 0), 0);
+        // 25 facts with avg mastery of 2 = 50 points per 25% tier progress
+        // So let's say 100 points = 100% tier progress for simpler math
+        const realProgress = Math.min(100, Math.round(totalMasteryPoints));
 
         // Tier Implied Progress
         // Tier 4 = 75% start (Simulated mastery of tiers 1-3)
@@ -44,24 +50,13 @@ export async function getDashboardStats() {
         const tierBase = (tier - 1) * 25;
 
         // Calculate progress WITHIN the current tier
-        // e.g. if I am Tier 1, my progress is RealProgress / 25 * 100 (since tier 1 is first 25%)
-        // if I am Tier 2, my progress is (RealProgress - 25) / 25 * 100
-        // But what if RealProgress < TierBase (e.g. placed tier 3, but 0 facts)? then undefined.
-        // We initially set "RealProgress" based on fact count.
-        // If we are "placed" in a tier, we assume previous tiers are mastered.
-        // So we should assume RealProgress is AT LEAST TierBase.
-
-        // But if we use Math.max, and the user has 0 actual mastery facts (fresh placement),
-        // they have to master 25 facts before the bar moves from 0% (if Tier 2).
-        // User wants immediate feedback.
-        // So we treat 'realProgress' (facts mastered) as ADDITIVE to the tier base.
-        // Assumption: Any fact you master now contributes to moving through the current tier.
-
+        // realProgress is now mastery points earned, which directly contributes to bar fill
+        // Scale: 100 mastery points fills 100% of a tier
         const effectiveProgress = Math.min(100, tierBase + realProgress);
 
         // now scale it to 0-100 for just this tier
         // range of current tier is [tierBase, tierBase + 25]
-        const progressInTier = Math.min(100, Math.max(0, (effectiveProgress - tierBase) / 25 * 100));
+        const progressInTier = Math.round(Math.min(100, Math.max(0, (effectiveProgress - tierBase) / 25 * 100)));
 
         return {
             title: op,
@@ -72,18 +67,18 @@ export async function getDashboardStats() {
 
 
     // Career Stats Calculation
-    const careerTotalCorrect = userSessions.length > 0 ? userSessions.reduce((acc, s) => acc + (s.correct_count || 0), 0) : 0;
-    const careerTotalAttempts = userSessions.length > 0 ? userSessions.reduce((acc, s) => acc + (s.total_count || 0), 0) : 0;
+    const careerTotalCorrect = userSessions.length > 0 ? userSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0) : 0;
+    const careerTotalAttempts = userSessions.length > 0 ? userSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0) : 0;
     const careerAccuracy = careerTotalAttempts > 0 ? (careerTotalCorrect / careerTotalAttempts) * 100 : 0;
 
     // Detailed Operation Stats
     const opStats = ops.map(op => {
-        const opSessions = userSessions.filter(s => s.operation === op);
-        const opCorrect = opSessions.reduce((acc, s) => acc + (s.correct_count || 0), 0);
-        const opTotal = opSessions.reduce((acc, s) => acc + (s.total_count || 0), 0);
-        const opXP = opSessions.reduce((acc, s) => acc + (s.xp_earned || 0), 0);
+        const opSessions = userSessions.filter((s: any) => s.operation === op);
+        const opCorrect = opSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
+        const opTotal = opSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0);
+        const opXP = opSessions.reduce((acc: number, s: any) => acc + (s.xp_earned || 0), 0);
         const opAvgSpeed = opSessions.length > 0
-            ? opSessions.reduce((acc, s) => acc + s.avg_speed, 0) / opSessions.length
+            ? opSessions.reduce((acc: number, s: any) => acc + s.avg_speed, 0) / opSessions.length
             : 0;
 
         return {
@@ -105,7 +100,7 @@ export async function getDashboardStats() {
     const hasPlaced = Object.values(userTiers).some((t: any) => t > 0);
 
     // Accuracy History (Last 10)
-    const accuracyHistory = userSessions.slice(-10).map(s => ({
+    const accuracyHistory = userSessions.slice(-10).map((s: any) => ({
         id: s.id,
         accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
         xp: s.xp_earned
@@ -160,24 +155,24 @@ export async function getOperationDetails(operation: string) {
 
     const db = loadData();
     // Case-insensitive match for operation
-    const opSessions = db.sessions.filter(s => s.user_id === userId && s.operation.toLowerCase() === operation.toLowerCase());
-    const opMastery = db.mastery_stats.filter(s => s.user_id === userId && s.operation.toLowerCase() === operation.toLowerCase());
+    const opSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId && s.operation.toLowerCase() === operation.toLowerCase());
+    const opMastery = (db.mastery_stats as any[]).filter((s: any) => s.user_id === userId && s.operation.toLowerCase() === operation.toLowerCase());
 
     // Calculate Summary Stats
-    const totalCorrect = opSessions.reduce((acc, s) => acc + (s.correct_count || 0), 0);
-    const totalAttempts = opSessions.reduce((acc, s) => acc + (s.total_count || 0), 0);
-    const totalXP = opSessions.reduce((acc, s) => acc + (s.xp_earned || 0), 0);
+    const totalCorrect = opSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
+    const totalAttempts = opSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0);
+    const totalXP = opSessions.reduce((acc: number, s: any) => acc + (s.xp_earned || 0), 0);
     const avgSpeed = opSessions.length > 0
-        ? opSessions.reduce((acc, s) => acc + s.avg_speed, 0) / opSessions.length
+        ? opSessions.reduce((acc: number, s: any) => acc + s.avg_speed, 0) / opSessions.length
         : 0;
 
     // Identify Missed Problems (Mastery < 3 means not fully mastered, < 0 means struggling)
     // Sorting by mastery level ascending (lowest first)
     const missedProblems = opMastery
-        .filter(m => m.mastery_level < 3)
-        .sort((a, b) => a.mastery_level - b.mastery_level)
+        .filter((m: any) => m.mastery_level < 3)
+        .sort((a: any, b: any) => a.mastery_level - b.mastery_level)
         .slice(0, 20) // Top 20 needs work
-        .map(m => ({
+        .map((m: any) => ({
             fact: m.fact,
             mastery: m.mastery_level,
             attempts: m.attempts,
@@ -185,7 +180,7 @@ export async function getOperationDetails(operation: string) {
         }));
 
     // Trend Graph (Last 10 sessions for this op)
-    const trend = opSessions.slice(-10).map((s, index) => ({
+    const trend = opSessions.slice(-10).map((s: any, index: number) => ({
         id: s.id,
         date: s.created_at ? new Date(s.created_at).toLocaleDateString() : `Session ${index + 1}`,
         accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,

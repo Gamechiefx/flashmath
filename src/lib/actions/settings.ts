@@ -27,6 +27,9 @@ export async function resetUserData() {
         // Delete all inventory items for this user
         db.prepare('DELETE FROM inventory WHERE user_id = ?').run(userId);
 
+        // Delete all achievements for this user
+        db.prepare('DELETE FROM user_achievements WHERE user_id = ?').run(userId);
+
         // Reset user's total XP, level, coins, math_tiers, and equipped_items
         db.prepare(`
             UPDATE users SET 
@@ -104,6 +107,21 @@ export async function updateUsername(newUsername: string) {
 
     try {
         const db = getDatabase();
+
+        // Check 3-month rate limit for username changes
+        const user = db.prepare('SELECT name, updated_at FROM users WHERE id = ?').get(userId) as any;
+        if (user?.updated_at) {
+            const lastUpdate = new Date(user.updated_at);
+            const daysSinceUpdate = (Date.now() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24);
+            if (daysSinceUpdate < 90) {
+                const daysRemaining = Math.ceil(90 - daysSinceUpdate);
+                if (daysRemaining > 30) {
+                    const monthsRemaining = Math.ceil(daysRemaining / 30);
+                    return { error: `You can change your username again in ${monthsRemaining} month${monthsRemaining > 1 ? 's' : ''}` };
+                }
+                return { error: `You can change your username again in ${daysRemaining} day${daysRemaining > 1 ? 's' : ''}` };
+            }
+        }
 
         // Check if username is already taken
         const existingUser = db.prepare('SELECT id FROM users WHERE name = ? AND id != ?').get(newUsername, userId);

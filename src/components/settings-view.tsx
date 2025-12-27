@@ -149,7 +149,7 @@ export function SettingsView({ user }: SettingsViewProps) {
 
                         <div className="space-y-4">
                             <div>
-                                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">Username</label>
+                                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">Username <span className="text-yellow-400/70 normal-case font-normal">(Sign out for changes to apply, Can change every 3 months)</span></label>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"

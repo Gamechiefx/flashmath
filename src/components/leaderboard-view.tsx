@@ -42,7 +42,7 @@ export function LeaderboardView({ data }: LeaderboardViewProps) {
                         <Trophy size={20} />
                         <span className="text-xs font-bold uppercase tracking-widest">{data.leagueName} LEAGUE</span>
                     </div>
-                    <h1 className="text-5xl font-black tracking-tighter uppercase">Circuit Standings</h1>
+                    <h1 className="text-5xl font-black tracking-tighter uppercase">Weekly Rankings</h1>
                 </div>
 
                 <GlassCard className="py-3 px-6 flex items-center gap-3 border-primary/20">

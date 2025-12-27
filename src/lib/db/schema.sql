@@ -159,6 +159,18 @@ CREATE TABLE IF NOT EXISTS inventory (
     UNIQUE(user_id, item_id)
 );
 
+-- User achievements
+CREATE TABLE IF NOT EXISTS user_achievements (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    achievement_id TEXT NOT NULL,
+    progress INTEGER DEFAULT 0,
+    unlocked_at TEXT,
+    claimed_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, achievement_id)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
@@ -166,3 +178,5 @@ CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 CREATE INDEX IF NOT EXISTS idx_verification_tokens_token ON verification_tokens(token);
 CREATE INDEX IF NOT EXISTS idx_mastery_stats_user_id ON mastery_stats(user_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_user_id ON inventory(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id ON user_achievements(user_id);
+

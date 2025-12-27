@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Zap,
@@ -18,6 +18,7 @@ import { getNextProblems } from "@/lib/actions/game";
 import { Operation } from "@/lib/math-engine";
 import { MathProblem } from "@/lib/math-tiers";
 import { PlacementTest } from "@/components/placement-test";
+import { MasteryTest } from "@/components/mastery-test";
 import { HelpModal } from "@/components/help-modal";
 import Link from "next/link";
 import { AuthHeader } from "@/components/auth-header";
@@ -71,6 +72,8 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [isPaused, setIsPaused] = useState(false);
     const [isLoadingProblems, setIsLoadingProblems] = useState(false);
     const [currentTier, setCurrentTier] = useState(1);
+    const [showMasteryTest, setShowMasteryTest] = useState(false);
+    const [opAccuracy, setOpAccuracy] = useState(0);
 
     // Fetch problems helper
     const fetchMoreProblems = async (op: string) => {
@@ -87,6 +90,24 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     useEffect(() => {
         if (operation) setSelectedOp(operation);
     }, [operation]);
+
+    // Fetch current tier and accuracy when operation changes
+    useEffect(() => {
+        const fetchTierAndAccuracy = async () => {
+            const res = await getNextProblems(selectedOp, 1);
+            if (res.currentTier) setCurrentTier(res.currentTier);
+
+            // Get progression for this operation from dashboard stats
+            const { getDashboardStats } = await import("@/lib/actions/user");
+            const stats = await getDashboardStats();
+            if (stats?.masteryMap) {
+                const opData = stats.masteryMap.find((m: any) => m.title.toLowerCase() === selectedOp.toLowerCase());
+                if (opData) setOpAccuracy(opData.progress);
+                else setOpAccuracy(0);
+            }
+        };
+        if (session?.user) fetchTierAndAccuracy();
+    }, [selectedOp, session]);
 
     // Start the game
     const startGame = async () => {
@@ -108,6 +129,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         if (res.problems) {
             setProblemQueue(res.problems);
             setProblem(res.problems[0]);
+            if (res.currentTier) setCurrentTier(res.currentTier);
             setGameState("playing");
             setProblemStartTime(Date.now());
         }
@@ -116,7 +138,12 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
     // End the game
     const endGame = useCallback(async () => {
+        // Guard against double execution
+        if (isSaving || gameState === "finished") return;
         setIsSaving(true);
+
+        // Set to finished IMMEDIATELY before any async operations
+        setGameState("finished");
 
         // Finalize stats
         const finalStats = [...sessionStats];
@@ -135,38 +162,66 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                     correctCount: finalScore,
                     totalCount: totalAttempts,
                     avgSpeed: avgSpeed / 1000,
-                    xpGained: finalXP
+                    xpGained: finalXP,
+                    maxStreak: maxStreak
                 });
 
                 await updateMastery(finalStats.map(s => ({
                     fact: s.fact,
                     operation: selectedOp,
                     responseTime: s.responseTime,
-                    masteryDelta: s.performance === 'fast' ? 1 : (s.performance === 'correct' ? 0.2 : -0.5)
+                    masteryDelta: s.performance === 'fast' ? 1 : (s.performance === 'normal' ? 0.2 : -0.5)
                 })));
 
-                // Refresh session to show new XP/Level in header
-                await update();
+                // Refresh session to show new XP/Level in header - do this in background
+                update().catch(console.error);
             } catch (err) {
                 console.error("[PRACTICE] Error in endGame saving pipeline:", err);
             }
         }
 
         setIsSaving(false);
-        setGameState("finished");
         soundEngine.playComplete();
-    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP]);
+    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState]);
 
-    // Timer logic
+    // Timer logic - use setInterval for reliable timing independent of state changes
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const endGameRef = useRef(endGame);
+    endGameRef.current = endGame;
+
     useEffect(() => {
-        let timer: NodeJS.Timeout;
-        if (gameState === "playing" && timeLeft > 0 && !isPaused) {
-            timer = setTimeout(() => setTimeLeft(prev => prev - 1), 1000);
-        } else if (timeLeft === 0 && gameState === "playing") {
-            endGame();
+        if (gameState === "playing" && !isPaused) {
+            // Clear any existing timer
+            if (timerRef.current) clearInterval(timerRef.current);
+
+            // Start interval timer
+            timerRef.current = setInterval(() => {
+                setTimeLeft(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timerRef.current!);
+                        timerRef.current = null;
+                        // Use ref to avoid dependency issues
+                        setTimeout(() => endGameRef.current(), 0);
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        } else {
+            // Clear timer when not playing or paused
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
         }
-        return () => clearTimeout(timer);
-    }, [gameState, timeLeft, endGame, isPaused]);
+
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+                timerRef.current = null;
+            }
+        };
+    }, [gameState, isPaused]);
 
     // Handle Input
     const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -234,6 +289,8 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             setAttempts(prev => prev + 1);
             setTotalAttempts(prev => prev + 1);
             setStreak(0);
+            // Small XP penalty for incorrect answers
+            setSessionXP(prev => Math.max(0, prev - 2));
             soundEngine.playIncorrect();
         }
     };
@@ -288,6 +345,21 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                 }} />
             )}
 
+            {showMasteryTest && (
+                <MasteryTest
+                    operation={selectedOp}
+                    currentTier={currentTier}
+                    onComplete={(passed, newTier) => {
+                        setShowMasteryTest(false);
+                        if (passed) {
+                            setCurrentTier(newTier);
+                            setOpAccuracy(0); // Reset progress for new tier
+                        }
+                    }}
+                    onCancel={() => setShowMasteryTest(false)}
+                />
+            )}
+
             {showHelpModal && (
                 <HelpModal
                     explanation={currentExplanation}
@@ -324,11 +396,27 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                 </p>
                             </div>
 
-                            <div className="flex gap-4 justify-center pt-8">
+                            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
                                 <NeonButton onClick={startGame} className="px-8 py-4 text-lg w-full sm:w-auto">
                                     START SIMULATION
                                 </NeonButton>
+                                {currentTier < 4 && opAccuracy >= 90 && (
+                                    <button
+                                        onClick={() => setShowMasteryTest(true)}
+                                        className="px-8 py-4 text-lg rounded-xl bg-accent/20 border border-accent/30 text-accent font-bold uppercase hover:bg-accent/30 transition-colors flex items-center justify-center gap-2"
+                                    >
+                                        <Trophy size={20} />
+                                        MASTERY TEST
+                                    </button>
+                                )}
                             </div>
+                            {currentTier < 4 && (
+                                <p className="text-center text-muted-foreground text-xs mt-2">
+                                    Tier {currentTier} • {opAccuracy >= 90
+                                        ? 'Mastery test available!'
+                                        : `${opAccuracy.toFixed(0)}% progress → 90% to unlock mastery test`}
+                                </p>
+                            )}
 
                             <div className="pt-12 w-full max-w-2xl mx-auto">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -502,7 +590,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                     </div>
                                     <div className="p-6 rounded-2xl bg-yellow-400/20 border border-yellow-400/20">
                                         <div className="text-[10px] font-bold uppercase tracking-widest text-yellow-500 mb-1">Flux Earned</div>
-                                        <div className="text-4xl font-black text-yellow-400 whitespace-nowrap">§ {sessionXP}</div>
+                                        <div className="text-4xl font-black text-yellow-400 whitespace-nowrap">§ {Math.floor(sessionXP * 0.5)}</div>
                                     </div>
                                     <div className="p-6 rounded-2xl bg-white/5 border border-white/10 col-span-2 md:col-span-4">
                                         <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Best Streak</div>

@@ -57,7 +57,7 @@ export default async function ShopPage() {
                     <div>
                         <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 mb-2">
                             <ShoppingBag size={14} />
-                            Global Exchange
+                            Shop
                         </div>
                         <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-primary">
                             The Shop

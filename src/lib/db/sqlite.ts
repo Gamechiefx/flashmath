@@ -33,6 +33,21 @@ function initializeSchema() {
         console.log('[SQLite] Schema initialized');
     }
 
+    // Ensure user_achievements table exists (for achievements system)
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS user_achievements (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            achievement_id TEXT NOT NULL,
+            progress INTEGER DEFAULT 0,
+            unlocked_at TEXT,
+            claimed_at TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE(user_id, achievement_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id ON user_achievements(user_id);
+    `);
+
     // Seed default leagues if empty
     const leagueCount = database.prepare('SELECT COUNT(*) as count FROM leagues').get() as { count: number };
     if (leagueCount.count === 0) {
