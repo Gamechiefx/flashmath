@@ -327,8 +327,8 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                             )}
                                         </td>
                                         <td className="p-4 text-right flex justify-end gap-2">
-                                            {/* Only show gift buttons if user has permission */}
-                                            {hasPermission(currentUserRole, Permission.GIVE_COINS_XP) && canManageRole(currentUserRole, parseRole(user.role, !!user.is_admin)) && (
+                                            {/* Gift buttons - Super Admin can gift anyone including themselves */}
+                                            {hasPermission(currentUserRole, Permission.GIVE_COINS_XP) && (currentUserRole === Role.SUPER_ADMIN || canManageRole(currentUserRole, parseRole(user.role, !!user.is_admin))) && (
                                                 <>
                                                     <button
                                                         onClick={() => openGiftModal(user, "coins")}
