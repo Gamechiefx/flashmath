@@ -10,6 +10,13 @@ let db: Database.Database | null = null;
 
 export function getDatabase(): Database.Database {
     if (!db) {
+        // Ensure the parent directory exists before opening the database
+        const dbDir = path.dirname(DB_PATH);
+        if (!fs.existsSync(dbDir)) {
+            fs.mkdirSync(dbDir, { recursive: true });
+            console.log(`[SQLite] Created database directory: ${dbDir}`);
+        }
+
         db = new Database(DB_PATH);
         // Enable foreign keys
         db.pragma('foreign_keys = ON');
