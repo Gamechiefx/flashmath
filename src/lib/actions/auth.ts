@@ -259,6 +259,55 @@ export async function resetPassword(
 }
 
 // ============================================
+// MAGIC LINK (Passwordless Login)
+// ============================================
+
+export async function requestMagicLink(email: string): Promise<{ success: boolean; error?: string }> {
+    const db = getDatabase();
+
+    const user = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email) as any;
+
+    if (!user) {
+        // Don't reveal if user exists - still show success
+        console.log(`[Auth] Magic link requested for unknown email: ${email}`);
+        return { success: true };
+    }
+
+    // Check if account is locked
+    const lockStatus = await isAccountLocked(email);
+    if (lockStatus.locked) {
+        return { success: false, error: `Account locked. Try again after ${lockStatus.until?.toLocaleTimeString()}` };
+    }
+
+    // Create magic link token (15 min expiry)
+    const token = await createToken(email, 'magic_link', user.id, 15);
+
+    // Build magic link URL
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const magicUrl = `${baseUrl}/api/auth/magic-link?token=${token}`;
+
+    // Import template dynamically to avoid circular deps
+    const { magicLinkEmailTemplate } = await import("@/lib/email/templates/magic-link");
+
+    // Send email
+    const template = magicLinkEmailTemplate(email, magicUrl);
+    const result = await sendEmail({
+        to: email,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+    });
+
+    if (!result.success) {
+        console.error("[Auth] Failed to send magic link email:", result.error);
+        return { success: false, error: "Failed to send email" };
+    }
+
+    console.log(`[Auth] Magic link email sent to ${email}`);
+    return { success: true };
+}
+
+// ============================================
 // ACCOUNT LOCKOUT
 // ============================================
 

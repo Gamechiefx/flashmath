@@ -122,6 +122,17 @@ export default function LoginPage() {
                         </button>
                     </form>
 
+                    {/* Magic Link */}
+                    <Link
+                        href="/magic-link"
+                        className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all mt-3"
+                    >
+                        <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                        <span className="text-white font-medium">Sign in with Magic Link</span>
+                    </Link>
+
                     <div className="text-center text-sm text-muted-foreground mt-6">
                         Don't have an account?{" "}
                         <Link href="/auth/register" className="text-accent hover:underline">
