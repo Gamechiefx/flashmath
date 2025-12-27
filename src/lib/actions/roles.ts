@@ -13,7 +13,8 @@ export async function getCurrentUserRole(): Promise<Role> {
     if (!session?.user) return Role.USER;
 
     const db = getDatabase();
-    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?')
+    // Use SELECT * to handle databases without role column
+    const user = db.prepare('SELECT * FROM users WHERE id = ?')
         .get((session.user as any).id) as any;
 
     if (!user) return Role.USER;
@@ -41,15 +42,15 @@ export async function changeUserRole(
     const currentUserId = (session.user as any).id;
     const db = getDatabase();
 
-    // Get current user's role
-    const currentUser = db.prepare('SELECT role, is_admin FROM users WHERE id = ?')
+    // Get current user's role (SELECT * to handle missing role column)
+    const currentUser = db.prepare('SELECT * FROM users WHERE id = ?')
         .get(currentUserId) as any;
     if (!currentUser) return { success: false, error: "User not found" };
 
     const currentUserRole = parseRole(currentUser.role, !!currentUser.is_admin);
 
     // Get target user's current role
-    const targetUser = db.prepare('SELECT role, is_admin FROM users WHERE id = ?')
+    const targetUser = db.prepare('SELECT * FROM users WHERE id = ?')
         .get(targetUserId) as any;
     if (!targetUser) return { success: false, error: "Target user not found" };
 
@@ -113,7 +114,8 @@ export async function getUsersWithRoles(): Promise<Array<{
     if (!hasAccess) return [];
 
     const db = getDatabase();
-    const users = db.prepare('SELECT id, name, email, role, is_admin, is_banned, created_at FROM users ORDER BY created_at DESC')
+    // Use SELECT * to handle databases without role column
+    const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC')
         .all() as any[];
 
     return users.map(user => ({

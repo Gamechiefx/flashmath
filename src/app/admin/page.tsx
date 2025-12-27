@@ -19,7 +19,8 @@ export default async function AdminPage() {
 
     // Get current user and their role from database
     const db = getDatabase();
-    const currentUser = db.prepare('SELECT role, is_admin FROM users WHERE id = ?')
+    // Use SELECT * to handle databases without role column
+    const currentUser = db.prepare('SELECT * FROM users WHERE id = ?')
         .get((session.user as any).id) as any;
 
     if (!currentUser) return <div className="p-10 text-center">Unauthorized: User not found</div>;
