@@ -30,26 +30,15 @@ export interface Achievement {
 }
 
 export const ACHIEVEMENTS: Achievement[] = [
-    // ============ WELCOME ACHIEVEMENT ============
+    // ============ LEVEL ACHIEVEMENTS ============
     {
         id: 'welcome',
         name: 'Welcome to FlashMath',
         description: 'Verify your email address',
         icon: Mail,
-        category: 'milestone',
-        reward: { type: 'coins', coins: 100 },
-        requirement: { type: 'email_verified', target: 1 }
-    },
-
-    // ============ LEVEL ACHIEVEMENTS ============
-    {
-        id: 'newbie',
-        name: 'The Newbie',
-        description: 'Welcome to FlashMath!',
-        icon: Star,
         category: 'level',
-        reward: { type: 'title', titleName: 'The Newbie' },
-        requirement: { type: 'level', target: 1 }
+        reward: { type: 'both', titleName: 'The Newbie', coins: 100 },
+        requirement: { type: 'email_verified', target: 1 }
     },
     {
         id: 'rising_star',
