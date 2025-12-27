@@ -10,6 +10,7 @@ import { createToken, verifyToken, markTokenUsed, deleteToken } from "@/lib/auth
 import { sendEmail } from "@/lib/email";
 import { verificationEmailTemplate } from "@/lib/email/templates/verification";
 import { passwordResetEmailTemplate } from "@/lib/email/templates/password-reset";
+import { unlockEmailVerifiedAchievement } from "@/lib/actions/achievements";
 
 // Ensure schema exists on first action call
 initSchema();
@@ -182,6 +183,12 @@ export async function verifyEmailCode(
     `).run(now(), email);
 
     await markTokenUsed(code);
+
+    // Get user ID to unlock achievement
+    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as any;
+    if (user) {
+        await unlockEmailVerifiedAchievement(user.id);
+    }
 
     console.log(`[Auth] Email verified for ${email}`);
     return { success: true };
