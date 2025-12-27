@@ -9,8 +9,17 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Clean workspace
+        run: |
+          # Remove any leftover files from previous runs
+          rm -rf $GITHUB_WORKSPACE/* || true
+          rm -rf $GITHUB_WORKSPACE/.* || true
+
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          clean: true
 
       - name: Prepare data directory
         run: |
@@ -22,8 +31,13 @@ jobs:
         env:
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
         run: |
-          # Build and start container
-          docker compose build
+          # Stop and remove existing container
+          docker compose down || true
+          
+          # Build fresh image with new code
+          docker compose build --no-cache
+          
+          # Start container
           docker compose up -d
           
           # Cleanup old images
