@@ -600,8 +600,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
                                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                                     <NeonButton onClick={startGame} className="w-full sm:w-auto flex items-center gap-2">
-                                        <RotateCcw size={18} />
-                                        RETRY TRIAL
+                                        <RotateCcw size={18} /> RETRY
                                     </NeonButton>
                                     <Link href="/dashboard" className="w-full sm:w-auto">
                                         <button className="w-full px-8 py-4 rounded-xl font-bold border border-white/10 hover:bg-white/5 transition-all flex items-center justify-center gap-2">
