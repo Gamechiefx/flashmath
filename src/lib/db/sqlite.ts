@@ -69,6 +69,44 @@ function initializeSchema() {
         CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id ON user_achievements(user_id);
     `);
 
+    // RBAC: Add role column if missing (migration for existing databases)
+    try {
+        database.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
+        console.log('[SQLite] Added role column to users table');
+        // Update existing admins to super_admin role
+        database.exec("UPDATE users SET role = 'super_admin' WHERE is_admin = 1 AND (role IS NULL OR role = 'user')");
+    } catch (e: any) {
+        // Column already exists - this is expected
+        if (!e.message.includes('duplicate column')) {
+            console.warn('[SQLite] Role column migration error:', e.message);
+        }
+    }
+
+    // Add two_factor_recovery_codes column if missing
+    try {
+        database.exec("ALTER TABLE users ADD COLUMN two_factor_recovery_codes TEXT");
+        console.log('[SQLite] Added two_factor_recovery_codes column');
+    } catch (e: any) {
+        if (!e.message.includes('duplicate column')) {
+            console.warn('[SQLite] two_factor_recovery_codes column migration error:', e.message);
+        }
+    }
+
+    // Ensure security_activity table exists
+    database.exec(`
+        CREATE TABLE IF NOT EXISTS security_activity (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            details TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_security_activity_user ON security_activity(user_id);
+    `);
+
     // Seed default leagues if empty
     const leagueCount = database.prepare('SELECT COUNT(*) as count FROM leagues').get() as { count: number };
     if (leagueCount.count === 0) {
