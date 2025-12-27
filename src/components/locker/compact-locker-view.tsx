@@ -151,10 +151,10 @@ function LockerAccordion({ category, items, equipped, onEquip, loadingItem, defa
                             <button
                                 onClick={() => onEquip('default', category)}
                                 disabled={loadingItem === 'default'}
-                                className="p-2 rounded-lg border transition-all bg-red-600/20 border-red-500/30 hover:bg-red-600/30 hover:border-red-500/50 flex items-center justify-center"
+                                className="w-8 h-8 rounded-lg border transition-all bg-red-600/20 border-red-500/30 hover:bg-red-600/30 hover:border-red-500/50 flex items-center justify-center shrink-0"
                                 title="Unequip"
                             >
-                                <X size={16} className="text-red-400" />
+                                <X size={14} className="text-red-400" />
                             </button>
                         )}
                         {sortedItems.map(item => (
