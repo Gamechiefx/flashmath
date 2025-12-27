@@ -15,6 +15,14 @@ services:
       - NEXTAUTH_URL=https://flashmath.io
       - AUTH_SECRET=${AUTH_SECRET:-your-secret-here}
       - DATABASE_PATH=/app/data/flashmath.db
+      # SMTP Email Configuration
+      - SMTP_HOST=mail.lanit.services
+      - SMTP_PORT=587
+      - SMTP_USER=auth-mailer@flashmath.io
+      - SMTP_PASS=${SMTP_PASS:-authmailer1234}
+      - SMTP_SECURE=false
+      - EMAIL_FROM=Flash Math <noreply@flashmath.io>
+      - EMAIL_REPLY_TO=support@flashmath.io
     restart: always
 
 volumes:
