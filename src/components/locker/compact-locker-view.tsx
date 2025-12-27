@@ -119,11 +119,11 @@ function LockerAccordion({ category, items, equipped, onEquip, loadingItem, defa
 
     return (
         <div className="border border-white/10 rounded-xl overflow-hidden">
-            <button
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full p-4 flex items-center justify-between bg-white/5 hover:bg-white/10 transition-colors"
-            >
-                <div className="flex items-center gap-3">
+            <div className="w-full p-4 flex items-center justify-between bg-white/5 hover:bg-white/10 transition-colors">
+                <button
+                    onClick={() => setIsOpen(!isOpen)}
+                    className="flex items-center gap-3 flex-1"
+                >
                     <span className="text-sm font-bold uppercase tracking-wider text-white">
                         {categoryLabels[category] || category}
                     </span>
@@ -136,27 +136,34 @@ function LockerAccordion({ category, items, equipped, onEquip, loadingItem, defa
                             {equippedItem.name}
                         </span>
                     )}
+                </button>
+                <div className="flex items-center gap-2">
+                    {/* Unequip X button - only show if something is equipped */}
+                    {equippedItem && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onEquip('default', category);
+                            }}
+                            disabled={loadingItem === 'default'}
+                            className="w-6 h-6 rounded border transition-all bg-red-600/20 border-red-500/30 hover:bg-red-600/40 hover:border-red-500/50 flex items-center justify-center"
+                            title="Unequip"
+                        >
+                            <X size={12} className="text-red-400" />
+                        </button>
+                    )}
+                    <button onClick={() => setIsOpen(!isOpen)}>
+                        <ChevronDown
+                            size={18}
+                            className={`text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
+                        />
+                    </button>
                 </div>
-                <ChevronDown
-                    size={18}
-                    className={`text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`}
-                />
-            </button>
+            </div>
 
             {isOpen && (
                 <div className="p-3 bg-black/20">
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                        {/* Unequip button - only show if something is equipped */}
-                        {equippedItem && (
-                            <button
-                                onClick={() => onEquip('default', category)}
-                                disabled={loadingItem === 'default'}
-                                className="w-8 h-8 rounded-lg border transition-all bg-red-600/20 border-red-500/30 hover:bg-red-600/30 hover:border-red-500/50 flex items-center justify-center shrink-0"
-                                title="Unequip"
-                            >
-                                <X size={14} className="text-red-400" />
-                            </button>
-                        )}
                         {sortedItems.map(item => (
                             <CompactLockerItem
                                 key={item.id}
