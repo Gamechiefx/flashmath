@@ -32,12 +32,26 @@ export function getDatabase(): Database.Database {
 function initializeSchema() {
     const database = db!;
 
-    // Read and execute schema
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    if (fs.existsSync(schemaPath)) {
-        const schema = fs.readFileSync(schemaPath, 'utf-8');
-        database.exec(schema);
-        console.log('[SQLite] Schema initialized');
+    // Read and execute schema - try multiple paths for production/dev compatibility
+    const schemaPaths = [
+        path.join(process.cwd(), 'src', 'lib', 'db', 'schema.sql'),
+        path.join(__dirname, 'schema.sql'),
+        path.join(process.cwd(), 'schema.sql')
+    ];
+
+    let schemaLoaded = false;
+    for (const schemaPath of schemaPaths) {
+        if (fs.existsSync(schemaPath)) {
+            const schema = fs.readFileSync(schemaPath, 'utf-8');
+            database.exec(schema);
+            console.log(`[SQLite] Schema initialized from: ${schemaPath}`);
+            schemaLoaded = true;
+            break;
+        }
+    }
+
+    if (!schemaLoaded) {
+        console.warn('[SQLite] No schema.sql file found, tables must already exist or be created manually');
     }
 
     // Ensure user_achievements table exists (for achievements system)
