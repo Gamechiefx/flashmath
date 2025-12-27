@@ -21,13 +21,12 @@ jobs:
           fetch-depth: 0
           clean: true
 
-      - name: Prepare data directory
+      - name: Ensure data volume has correct permissions
         run: |
-          # Create persistent data directory on host for SQLite database
-          sudo mkdir -p /opt/flashmath/data
-          # Set ownership to nextjs user (UID 1001) used inside the container
-          sudo chown -R 1001:1001 /opt/flashmath/data
-          sudo chmod 755 /opt/flashmath/data
+          # Create a temporary container to fix permissions on the named volume
+          # This is needed because the nextjs user (1001) needs write access
+          docker volume create flashmath_data 2>/dev/null || true
+          docker run --rm -v flashmath_data:/data alpine chown -R 1001:1001 /data
 
       - name: Build and Start Container
         env:
