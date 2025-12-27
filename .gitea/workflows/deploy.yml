@@ -25,7 +25,9 @@ jobs:
         run: |
           # Create data directory for SQLite database persistence
           mkdir -p data
-          chmod 777 data
+          # Set ownership to nextjs user (UID 1001) used inside the container
+          sudo chown -R 1001:1001 data
+          chmod 755 data
 
       - name: Build and Start Container
         env:
