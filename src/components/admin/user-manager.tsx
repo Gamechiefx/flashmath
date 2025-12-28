@@ -31,6 +31,9 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
     const [banDuration, setBanDuration] = useState<string>("5"); // Default 5 hours
     const [customDuration, setCustomDuration] = useState<string>("");
 
+    // Unban modal state
+    const [unbanModalUser, setUnbanModalUser] = useState<User | null>(null);
+
     // Gift modal state
     const [giftModalUser, setGiftModalUser] = useState<User | null>(null);
     const [giftType, setGiftType] = useState<"coins" | "xp">("coins");
@@ -102,11 +105,19 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
             return;
         }
         if (user.is_banned) {
-            if (!confirm("Unban this user?")) return;
-            executeBan(user.id, null);
+            // Show unban modal instead of browser confirm
+            setUnbanModalUser(user);
         } else {
             setBanModalUser(user);
         }
+    };
+
+    const confirmUnban = async () => {
+        if (!unbanModalUser) return;
+        setProcessingId(unbanModalUser.id);
+        await unbanUser(unbanModalUser.id);
+        setProcessingId(null);
+        setUnbanModalUser(null);
     };
 
     const confirmGift = async () => {
@@ -203,6 +214,35 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                 </div>
             )}
 
+            {/* UNBAN MODAL OVERLAY */}
+            {unbanModalUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <GlassCard className="w-full max-w-md p-6 space-y-4 border border-green-500/30">
+                        <h3 className="text-xl font-bold text-green-400 flex items-center gap-2">
+                            <CheckCircle /> Unban User: {unbanModalUser.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                            Are you sure you want to unban this user? They will be able to access their account again.
+                        </p>
+                        <div className="flex gap-2 justify-end mt-4">
+                            <button
+                                onClick={() => setUnbanModalUser(null)}
+                                className="px-4 py-2 rounded hover:bg-white/10 text-sm font-bold"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmUnban}
+                                disabled={!!processingId}
+                                className="px-4 py-2 rounded bg-green-600 hover:bg-green-500 text-white text-sm font-bold shadow-lg shadow-green-900/20"
+                            >
+                                {processingId === unbanModalUser.id ? 'UNBANNING...' : 'CONFIRM UNBAN'}
+                            </button>
+                        </div>
+                    </GlassCard>
+                </div>
+            )}
+
             {/* GIFT MODAL OVERLAY */}
             {giftModalUser && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -276,8 +316,8 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                 />
             </div>
 
-            <GlassCard className="overflow-hidden">
-                <div className="overflow-x-auto max-h-[500px]">
+            <GlassCard className="overflow-visible">
+                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                     <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 bg-black/80 backdrop-blur-md z-10">
                             <tr className="border-b border-white/10 text-xs font-bold uppercase tracking-widest text-muted-foreground">

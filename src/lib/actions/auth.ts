@@ -48,8 +48,10 @@ export async function registerUser(formData: FormData) {
             [id, name, email, hashedPassword, now()]
         );
 
-        // Send verification email
-        await sendVerificationEmail(email);
+        // Send verification email (fire-and-forget to avoid slow registration)
+        sendVerificationEmail(email).catch(err => {
+            console.error('[Auth] Failed to send verification email:', err);
+        });
 
         // Sign them in and redirect to verify-email page
         await signIn("credentials", {
