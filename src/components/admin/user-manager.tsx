@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { deleteUser, banUser, unbanUser } from "@/lib/actions/users";
 import { giveUserCoins, giveUserXP } from "@/lib/actions/admin";
-import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap, AlertCircle } from "lucide-react";
+import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap, AlertCircle, ArrowUp, ArrowDown } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { RoleManager } from "@/components/admin/role-manager";
 import { Role, parseRole, ROLE_LABELS, ROLE_COLORS, hasPermission, Permission, canManageRole } from "@/lib/rbac";
@@ -17,6 +17,7 @@ interface User {
     banned_until?: string | null;
     role?: string;
     is_admin?: boolean;
+    created_at?: string;
 }
 
 interface UserManagerProps {
@@ -40,11 +41,32 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
     const [giftMode, setGiftMode] = useState<"give" | "take">("give");
     const [giftAmount, setGiftAmount] = useState<string>("100");
 
-    const filteredUsers = users.filter(u =>
-    (u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.id.includes(searchTerm) ||
-        u.email?.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    // Sorting state
+    const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp">("created_at");
+    const [sortAsc, setSortAsc] = useState(false); // Default: newest first
+
+    // Filter and sort users
+    const filteredUsers = users
+        .filter(u =>
+        (u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            u.id.includes(searchTerm) ||
+            u.email?.toLowerCase().includes(searchTerm.toLowerCase()))
+        )
+        .sort((a, b) => {
+            let comparison = 0;
+            switch (sortBy) {
+                case 'created_at':
+                    comparison = (a.created_at || '').localeCompare(b.created_at || '');
+                    break;
+                case 'name':
+                    comparison = (a.name || '').localeCompare(b.name || '');
+                    break;
+                case 'xp':
+                    comparison = (a.total_xp || 0) - (b.total_xp || 0);
+                    break;
+            }
+            return sortAsc ? comparison : -comparison;
+        });
 
     const handleBanClickOld = (user: User) => {
         // This function is replaced by the new one below
@@ -305,15 +327,36 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                 </div>
             )}
 
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center gap-4 flex-wrap">
                 <h2 className="text-xl font-bold uppercase tracking-widest text-primary">User Management</h2>
-                <input
-                    type="text"
-                    placeholder="Search Users..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-black/20 border border-white/10 rounded px-4 py-2 text-sm w-64"
-                />
+                <div className="flex items-center gap-3">
+                    {/* Sort Controls */}
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value as any)}
+                            className="bg-black/20 border border-white/10 rounded px-3 py-2 text-sm"
+                        >
+                            <option value="created_at">Created</option>
+                            <option value="name">Name</option>
+                            <option value="xp">XP</option>
+                        </select>
+                        <button
+                            onClick={() => setSortAsc(!sortAsc)}
+                            className="p-2 bg-black/20 border border-white/10 rounded hover:bg-white/10 transition-colors"
+                            title={sortAsc ? "Ascending" : "Descending"}
+                        >
+                            {sortAsc ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
+                        </button>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Search Users..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded px-4 py-2 text-sm w-64"
+                    />
+                </div>
             </div>
 
             <GlassCard className="overflow-visible">

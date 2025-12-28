@@ -193,6 +193,22 @@ export function SettingsView({ user }: SettingsViewProps) {
                                     </div>
                                 </div>
                             </div>
+
+                            <div>
+                                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">Member Since</label>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                                    <div className="flex items-center gap-2">
+                                        <Clock size={16} className="text-muted-foreground" />
+                                        <span className="text-lg font-bold">
+                                            {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            }) : 'Unknown'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </GlassCard>
 
