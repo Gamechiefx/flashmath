@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Role, ROLE_LABELS, ROLE_COLORS, ROLE_HIERARCHY } from "@/lib/rbac";
 import { changeUserRole } from "@/lib/actions/roles";
 import { Shield, ChevronDown, Crown, User, UserCheck } from "lucide-react";
@@ -24,7 +25,7 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+    const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
 
     const managerLevel = ROLE_HIERARCHY[managerRole];
@@ -39,20 +40,25 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
         .map(([role, _]) => role as Role)
         .sort((a, b) => ROLE_HIERARCHY[b] - ROLE_HIERARCHY[a]); // Highest first
 
-    // Calculate dropdown position when opened
-    useEffect(() => {
-        if (isOpen && buttonRef.current) {
+    const openDropdown = useCallback(() => {
+        if (buttonRef.current) {
             const rect = buttonRef.current.getBoundingClientRect();
-            setDropdownPosition({
+            setPosition({
                 top: rect.bottom + 4,
                 left: rect.left
             });
+            setIsOpen(true);
         }
-    }, [isOpen]);
+    }, []);
+
+    const closeDropdown = useCallback(() => {
+        setIsOpen(false);
+        setPosition(null);
+    }, []);
 
     const handleRoleChange = async (newRole: Role) => {
         if (newRole === currentRole) {
-            setIsOpen(false);
+            closeDropdown();
             return;
         }
 
@@ -68,7 +74,7 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
         }
 
         setLoading(false);
-        setIsOpen(false);
+        closeDropdown();
     };
 
     if (!canManage) {
@@ -82,10 +88,10 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
     }
 
     return (
-        <>
+        <div className="relative inline-block">
             <button
                 ref={buttonRef}
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => isOpen ? closeDropdown() : openDropdown()}
                 disabled={loading}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_COLORS[currentRole]} hover:opacity-80 transition-opacity cursor-pointer`}
             >
@@ -94,18 +100,24 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
                 <ChevronDown size={12} className={`ml-1 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            {isOpen && (
+            {isOpen && position && typeof document !== 'undefined' && createPortal(
                 <>
                     {/* Backdrop */}
                     <div
-                        className="fixed inset-0 z-[100]"
-                        onClick={() => setIsOpen(false)}
+                        className="fixed inset-0"
+                        style={{ zIndex: 9998 }}
+                        onClick={closeDropdown}
                     />
 
-                    {/* Dropdown - Fixed position to escape overflow */}
+                    {/* Dropdown */}
                     <div
-                        className="fixed z-[101] min-w-[160px] bg-background border border-white/10 rounded-lg shadow-xl overflow-hidden"
-                        style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+                        className="min-w-[160px] bg-zinc-900 border border-white/20 rounded-lg shadow-2xl"
+                        style={{
+                            position: 'fixed',
+                            top: position.top,
+                            left: position.left,
+                            zIndex: 9999
+                        }}
                     >
                         <div className="py-1">
                             {availableRoles.map(role => (
@@ -113,7 +125,7 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
                                     key={role}
                                     onClick={() => handleRoleChange(role)}
                                     disabled={loading}
-                                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/5 transition-colors ${role === currentRole ? 'bg-white/10' : ''
+                                    className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-white/10 transition-colors ${role === currentRole ? 'bg-white/10' : ''
                                         }`}
                                 >
                                     <span className={ROLE_COLORS[role].split(' ')[0]}>
@@ -127,14 +139,15 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
                             ))}
                         </div>
                     </div>
-                </>
+                </>,
+                document.body
             )}
 
             {error && (
-                <div className="absolute left-0 top-full mt-1 text-xs text-red-400 bg-red-500/10 px-2 py-1 rounded z-[102]">
+                <div className="absolute left-0 top-full mt-1 text-xs text-red-400 bg-red-500/10 px-2 py-1 rounded whitespace-nowrap">
                     {error}
                 </div>
             )}
-        </>
+        </div>
     );
 }
