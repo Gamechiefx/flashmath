@@ -13,6 +13,7 @@ interface User {
     name?: string;
     email?: string;
     total_xp?: number;
+    coins?: number;
     is_banned?: boolean;
     banned_until?: string | null;
     role?: string;
@@ -359,14 +360,15 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                 </div>
             </div>
 
-            <GlassCard className="overflow-visible">
-                <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+            <GlassCard>
+                <div className="max-h-[500px] overflow-y-auto">
                     <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 bg-black/80 backdrop-blur-md z-10">
+                        <thead className="sticky top-0 bg-black/95 backdrop-blur-md z-20">
                             <tr className="border-b border-white/10 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                                 <th className="p-4">User</th>
-                                <th className="p-4">Role</th>
+                                <th className="p-4 relative">Role</th>
                                 <th className="p-4">XP</th>
+                                <th className="p-4">Coins</th>
                                 <th className="p-4">Status</th>
                                 <th className="p-4 text-right">Actions</th>
                             </tr>
@@ -381,7 +383,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                             <div className="text-xs text-muted-foreground font-mono">{user.id}</div>
                                             {user.email && <div className="text-xs text-muted-foreground">{user.email}</div>}
                                         </td>
-                                        <td className="p-4">
+                                        <td className="p-4 relative z-30">
                                             <RoleManager
                                                 userId={user.id}
                                                 userName={user.name || "Unknown"}
@@ -391,6 +393,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                             />
                                         </td>
                                         <td className="p-4 font-mono text-accent">{user.total_xp?.toLocaleString() || 0}</td>
+                                        <td className="p-4 font-mono text-yellow-400">{user.coins?.toLocaleString() || 0}</td>
                                         <td className="p-4">
                                             {isBanned ? (
                                                 <div className="flex flex-col items-start gap-1">

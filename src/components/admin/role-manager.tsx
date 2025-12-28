@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Role, ROLE_LABELS, ROLE_COLORS, ROLE_HIERARCHY } from "@/lib/rbac";
 import { changeUserRole } from "@/lib/actions/roles";
 import { Shield, ChevronDown, Crown, User, UserCheck } from "lucide-react";
@@ -24,6 +24,8 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+    const buttonRef = useRef<HTMLButtonElement>(null);
 
     const managerLevel = ROLE_HIERARCHY[managerRole];
     const currentLevel = ROLE_HIERARCHY[currentRole];
@@ -36,6 +38,17 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
         .filter(([_, level]) => level < managerLevel)
         .map(([role, _]) => role as Role)
         .sort((a, b) => ROLE_HIERARCHY[b] - ROLE_HIERARCHY[a]); // Highest first
+
+    // Calculate dropdown position when opened
+    useEffect(() => {
+        if (isOpen && buttonRef.current) {
+            const rect = buttonRef.current.getBoundingClientRect();
+            setDropdownPosition({
+                top: rect.bottom + 4,
+                left: rect.left
+            });
+        }
+    }, [isOpen]);
 
     const handleRoleChange = async (newRole: Role) => {
         if (newRole === currentRole) {
@@ -69,8 +82,9 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
     }
 
     return (
-        <div className="relative">
+        <>
             <button
+                ref={buttonRef}
                 onClick={() => setIsOpen(!isOpen)}
                 disabled={loading}
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${ROLE_COLORS[currentRole]} hover:opacity-80 transition-opacity cursor-pointer`}
@@ -84,12 +98,15 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
                 <>
                     {/* Backdrop */}
                     <div
-                        className="fixed inset-0 z-40"
+                        className="fixed inset-0 z-[100]"
                         onClick={() => setIsOpen(false)}
                     />
 
-                    {/* Dropdown */}
-                    <div className="absolute left-0 top-full mt-1 z-50 min-w-[160px] bg-background border border-white/10 rounded-lg shadow-xl overflow-hidden">
+                    {/* Dropdown - Fixed position to escape overflow */}
+                    <div
+                        className="fixed z-[101] min-w-[160px] bg-background border border-white/10 rounded-lg shadow-xl overflow-hidden"
+                        style={{ top: dropdownPosition.top, left: dropdownPosition.left }}
+                    >
                         <div className="py-1">
                             {availableRoles.map(role => (
                                 <button
@@ -114,10 +131,10 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
             )}
 
             {error && (
-                <div className="absolute left-0 top-full mt-1 text-xs text-red-400 bg-red-500/10 px-2 py-1 rounded">
+                <div className="absolute left-0 top-full mt-1 text-xs text-red-400 bg-red-500/10 px-2 py-1 rounded z-[102]">
                     {error}
                 </div>
             )}
-        </div>
+        </>
     );
 }
