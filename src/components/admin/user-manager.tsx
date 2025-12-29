@@ -43,7 +43,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
     const [giftAmount, setGiftAmount] = useState<string>("100");
 
     // Sorting state
-    const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp">("created_at");
+    const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp" | "coins">("created_at");
     const [sortAsc, setSortAsc] = useState(false); // Default: newest first
 
     // Filter and sort users
@@ -64,6 +64,9 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                     break;
                 case 'xp':
                     comparison = (a.total_xp || 0) - (b.total_xp || 0);
+                    break;
+                case 'coins':
+                    comparison = (a.coins || 0) - (b.coins || 0);
                     break;
             }
             return sortAsc ? comparison : -comparison;
@@ -341,6 +344,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                             <option value="created_at">Created</option>
                             <option value="name">Name</option>
                             <option value="xp">XP</option>
+                            <option value="coins">Coins</option>
                         </select>
                         <button
                             onClick={() => setSortAsc(!sortAsc)}
