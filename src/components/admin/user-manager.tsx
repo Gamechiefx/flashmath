@@ -96,7 +96,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                     break;
                 case 'role':
                     // Sort by role hierarchy (higher roles first when descending)
-                    const roleOrder = { 'super_admin': 4, 'admin': 3, 'mod': 2, 'user': 1 };
+                    const roleOrder: Record<string, number> = { 'super_admin': 4, 'admin': 3, 'moderator': 2, 'user': 1 };
                     const aRole = parseRole(a.role, !!a.is_admin);
                     const bRole = parseRole(b.role, !!b.is_admin);
                     comparison = (roleOrder[aRole] || 0) - (roleOrder[bRole] || 0);

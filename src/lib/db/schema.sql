@@ -1,6 +1,20 @@
 -- FlashMath SQLite Schema
 -- Authentication and User Management
 
+-- System settings (maintenance mode, signup toggle, etc)
+CREATE TABLE IF NOT EXISTS system_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT,
+    updated_by TEXT
+);
+
+-- Default system settings
+INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES
+    ('maintenance_mode', 'false', datetime('now')),
+    ('maintenance_message', 'We are currently performing scheduled maintenance. Please check back soon!', datetime('now')),
+    ('signup_enabled', 'true', datetime('now'));
+
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,

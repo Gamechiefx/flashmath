@@ -33,6 +33,13 @@ export async function registerUser(formData: FormData) {
         return { error: "Missing required fields" };
     }
 
+    // Check if signups are enabled
+    const { isSignupEnabled } = await import("@/lib/actions/system");
+    const signupEnabled = await isSignupEnabled();
+    if (!signupEnabled) {
+        return { error: "Registration is currently disabled. Please try again later." };
+    }
+
     try {
         // Check if user exists
         const existing = queryOne("SELECT id FROM users WHERE email = ?", [email]);

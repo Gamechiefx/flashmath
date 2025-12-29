@@ -11,6 +11,8 @@ import { UserManager } from "@/components/admin/user-manager";
 import { AdminSection } from "@/components/admin/admin-section";
 import { PriceGuide } from "@/components/admin/price-guide";
 import { SeedButton } from "@/components/admin/seed-button";
+import { SystemControls } from "@/components/admin/system-controls";
+import { getAllSystemSettings } from "@/lib/actions/system";
 import { Role, parseRole, hasPermission, Permission, ROLE_LABELS } from "@/lib/rbac";
 
 export default async function AdminPage() {
@@ -41,6 +43,9 @@ export default async function AdminPage() {
 
     // Sort by type then rarity
     const items = (data.shop_items as Item[]).sort((a, b) => a.type.localeCompare(b.type));
+
+    // Get system settings
+    const systemSettings = await getAllSystemSettings();
 
     return (
         <div className="min-h-screen bg-background text-foreground p-8">
@@ -93,6 +98,17 @@ export default async function AdminPage() {
                 {canViewUsers && (
                     <AdminSection title="User Management DB" defaultOpen={true}>
                         <UserManager users={data.users || []} currentUserRole={currentUserRole} />
+                    </AdminSection>
+                )}
+
+                {/* System Controls Section */}
+                {(currentUserRole === Role.ADMIN || currentUserRole === Role.SUPER_ADMIN) && (
+                    <AdminSection title="System Controls">
+                        <SystemControls
+                            maintenanceMode={systemSettings.maintenance_mode === 'true'}
+                            maintenanceMessage={systemSettings.maintenance_message || 'We are currently performing scheduled maintenance. Please check back soon!'}
+                            signupEnabled={systemSettings.signup_enabled !== 'false'}
+                        />
                     </AdminSection>
                 )}
             </div>
