@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { deleteUser, banUser, unbanUser } from "@/lib/actions/users";
-import { giveUserCoins, giveUserXP } from "@/lib/actions/admin";
-import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap, AlertCircle } from "lucide-react";
+import { giveUserCoins, giveUserXP, giveUserItem, giveUserAllItems, getAllShopItems } from "@/lib/actions/admin";
+import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap, AlertCircle, ArrowUp, ArrowDown, Package } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { RoleManager } from "@/components/admin/role-manager";
 import { Role, parseRole, ROLE_LABELS, ROLE_COLORS, hasPermission, Permission, canManageRole } from "@/lib/rbac";
@@ -13,10 +13,12 @@ interface User {
     name?: string;
     email?: string;
     total_xp?: number;
+    coins?: number;
     is_banned?: boolean;
     banned_until?: string | null;
     role?: string;
     is_admin?: boolean;
+    created_at?: string;
 }
 
 interface UserManagerProps {
@@ -31,17 +33,63 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
     const [banDuration, setBanDuration] = useState<string>("5"); // Default 5 hours
     const [customDuration, setCustomDuration] = useState<string>("");
 
+    // Unban modal state
+    const [unbanModalUser, setUnbanModalUser] = useState<User | null>(null);
+
     // Gift modal state
     const [giftModalUser, setGiftModalUser] = useState<User | null>(null);
     const [giftType, setGiftType] = useState<"coins" | "xp">("coins");
     const [giftMode, setGiftMode] = useState<"give" | "take">("give");
     const [giftAmount, setGiftAmount] = useState<string>("100");
 
-    const filteredUsers = users.filter(u =>
-    (u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.id.includes(searchTerm) ||
-        u.email?.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    // Item grant modal state
+    const [itemModalUser, setItemModalUser] = useState<User | null>(null);
+    const [shopItems, setShopItems] = useState<any[]>([]);
+    const [selectedItemId, setSelectedItemId] = useState<string>("");
+    const [itemsLoading, setItemsLoading] = useState(false);
+
+    // Load shop items when modal opens
+    useEffect(() => {
+        if (itemModalUser && shopItems.length === 0) {
+            setItemsLoading(true);
+            getAllShopItems().then((result) => {
+                if (!result.error) {
+                    setShopItems(result.items);
+                }
+                setItemsLoading(false);
+            });
+        }
+    }, [itemModalUser, shopItems.length]);
+
+    // Sorting state
+    const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp" | "coins">("created_at");
+    const [sortAsc, setSortAsc] = useState(false); // Default: newest first
+
+    // Filter and sort users
+    const filteredUsers = users
+        .filter(u =>
+        (u.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            u.id.includes(searchTerm) ||
+            u.email?.toLowerCase().includes(searchTerm.toLowerCase()))
+        )
+        .sort((a, b) => {
+            let comparison = 0;
+            switch (sortBy) {
+                case 'created_at':
+                    comparison = (a.created_at || '').localeCompare(b.created_at || '');
+                    break;
+                case 'name':
+                    comparison = (a.name || '').localeCompare(b.name || '');
+                    break;
+                case 'xp':
+                    comparison = (a.total_xp || 0) - (b.total_xp || 0);
+                    break;
+                case 'coins':
+                    comparison = (a.coins || 0) - (b.coins || 0);
+                    break;
+            }
+            return sortAsc ? comparison : -comparison;
+        });
 
     const handleBanClickOld = (user: User) => {
         // This function is replaced by the new one below
@@ -102,11 +150,19 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
             return;
         }
         if (user.is_banned) {
-            if (!confirm("Unban this user?")) return;
-            executeBan(user.id, null);
+            // Show unban modal instead of browser confirm
+            setUnbanModalUser(user);
         } else {
             setBanModalUser(user);
         }
+    };
+
+    const confirmUnban = async () => {
+        if (!unbanModalUser) return;
+        setProcessingId(unbanModalUser.id);
+        await unbanUser(unbanModalUser.id);
+        setProcessingId(null);
+        setUnbanModalUser(null);
     };
 
     const confirmGift = async () => {
@@ -138,6 +194,39 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
         setGiftType(type);
         setGiftMode(mode);
         setGiftAmount(type === "coins" ? "100" : "500");
+    };
+
+    // Item grant handlers
+    const confirmItemGrant = async () => {
+        if (!itemModalUser || !selectedItemId) return;
+        setProcessingId(itemModalUser.id);
+
+        const result = await giveUserItem(itemModalUser.id, selectedItemId);
+
+        setProcessingId(null);
+        if (result.error) {
+            alert(`Error: ${result.error}`);
+        } else {
+            alert(`✅ Gave "${result.itemName}" to ${itemModalUser.name}`);
+            setItemModalUser(null);
+            setSelectedItemId("");
+        }
+    };
+
+    const grantAllItems = async () => {
+        if (!itemModalUser) return;
+        if (!confirm(`Grant ALL ${shopItems.length} items to ${itemModalUser.name}?`)) return;
+
+        setProcessingId(itemModalUser.id);
+        const result = await giveUserAllItems(itemModalUser.id);
+        setProcessingId(null);
+
+        if (result.error) {
+            alert(`Error: ${result.error}`);
+        } else {
+            alert(`✅ Granted ${result.itemsGranted} new items to ${itemModalUser.name}`);
+            setItemModalUser(null);
+        }
     };
 
     // Helper to format ban time
@@ -197,6 +286,35 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                 className="px-4 py-2 rounded bg-red-600 hover:bg-red-500 text-white text-sm font-bold shadow-lg shadow-red-900/20"
                             >
                                 CONFIRM BAN
+                            </button>
+                        </div>
+                    </GlassCard>
+                </div>
+            )}
+
+            {/* UNBAN MODAL OVERLAY */}
+            {unbanModalUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <GlassCard className="w-full max-w-md p-6 space-y-4 border border-green-500/30">
+                        <h3 className="text-xl font-bold text-green-400 flex items-center gap-2">
+                            <CheckCircle /> Unban User: {unbanModalUser.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                            Are you sure you want to unban this user? They will be able to access their account again.
+                        </p>
+                        <div className="flex gap-2 justify-end mt-4">
+                            <button
+                                onClick={() => setUnbanModalUser(null)}
+                                className="px-4 py-2 rounded hover:bg-white/10 text-sm font-bold"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmUnban}
+                                disabled={!!processingId}
+                                className="px-4 py-2 rounded bg-green-600 hover:bg-green-500 text-white text-sm font-bold shadow-lg shadow-green-900/20"
+                            >
+                                {processingId === unbanModalUser.id ? 'UNBANNING...' : 'CONFIRM UNBAN'}
                             </button>
                         </div>
                     </GlassCard>
@@ -265,25 +383,108 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                 </div>
             )}
 
-            <div className="flex justify-between items-center">
+            {/* ITEM GRANT MODAL OVERLAY */}
+            {itemModalUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <GlassCard className="w-full max-w-md p-6 space-y-4 border border-purple-500/30">
+                        <h3 className="text-xl font-bold text-purple-400 flex items-center gap-2">
+                            <Package /> Grant Items: {itemModalUser.name}
+                        </h3>
+
+                        {itemsLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="animate-spin text-purple-400" />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold uppercase text-muted-foreground">Select Item</label>
+                                    <select
+                                        value={selectedItemId}
+                                        onChange={(e) => setSelectedItemId(e.target.value)}
+                                        className="w-full bg-black/40 border border-white/10 rounded p-2 text-sm"
+                                    >
+                                        <option value="">-- Choose an item --</option>
+                                        {shopItems.map((item: any) => (
+                                            <option key={item.id} value={item.id}>
+                                                {item.name} ({item.type}) - {item.rarity}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="flex gap-2 justify-between mt-4">
+                                    <button
+                                        onClick={grantAllItems}
+                                        disabled={!!processingId}
+                                        className="px-4 py-2 rounded bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-bold shadow-lg"
+                                    >
+                                        {processingId === itemModalUser.id ? <Loader2 size={16} className="animate-spin" /> : 'GRANT ALL ITEMS'}
+                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => { setItemModalUser(null); setSelectedItemId(""); }}
+                                            className="px-4 py-2 rounded hover:bg-white/10 text-sm font-bold"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={confirmItemGrant}
+                                            disabled={!selectedItemId || !!processingId}
+                                            className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold shadow-lg shadow-purple-900/20 disabled:opacity-50"
+                                        >
+                                            GRANT ITEM
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </GlassCard>
+                </div>
+            )}
+
+            <div className="flex justify-between items-center gap-4 flex-wrap">
                 <h2 className="text-xl font-bold uppercase tracking-widest text-primary">User Management</h2>
-                <input
-                    type="text"
-                    placeholder="Search Users..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-black/20 border border-white/10 rounded px-4 py-2 text-sm w-64"
-                />
+                <div className="flex items-center gap-3">
+                    {/* Sort Controls */}
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={sortBy}
+                            onChange={(e) => setSortBy(e.target.value as any)}
+                            className="bg-black/20 border border-white/10 rounded px-3 py-2 text-sm"
+                        >
+                            <option value="created_at">Created</option>
+                            <option value="name">Name</option>
+                            <option value="xp">XP</option>
+                            <option value="coins">Coins</option>
+                        </select>
+                        <button
+                            onClick={() => setSortAsc(!sortAsc)}
+                            className="p-2 bg-black/20 border border-white/10 rounded hover:bg-white/10 transition-colors"
+                            title={sortAsc ? "Ascending" : "Descending"}
+                        >
+                            {sortAsc ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
+                        </button>
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Search Users..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="bg-black/20 border border-white/10 rounded px-4 py-2 text-sm w-64"
+                    />
+                </div>
             </div>
 
-            <GlassCard className="overflow-hidden">
-                <div className="overflow-x-auto max-h-[500px]">
+            <GlassCard>
+                <div className="max-h-[500px] overflow-y-auto">
                     <table className="w-full text-left border-collapse">
-                        <thead className="sticky top-0 bg-black/80 backdrop-blur-md z-10">
+                        <thead className="sticky top-0 bg-black/95 backdrop-blur-md z-20">
                             <tr className="border-b border-white/10 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                                 <th className="p-4">User</th>
-                                <th className="p-4">Role</th>
+                                <th className="p-4 relative">Role</th>
                                 <th className="p-4">XP</th>
+                                <th className="p-4">Coins</th>
                                 <th className="p-4">Status</th>
                                 <th className="p-4 text-right">Actions</th>
                             </tr>
@@ -298,7 +499,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                             <div className="text-xs text-muted-foreground font-mono">{user.id}</div>
                                             {user.email && <div className="text-xs text-muted-foreground">{user.email}</div>}
                                         </td>
-                                        <td className="p-4">
+                                        <td className="p-4 relative z-30">
                                             <RoleManager
                                                 userId={user.id}
                                                 userName={user.name || "Unknown"}
@@ -308,6 +509,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                             />
                                         </td>
                                         <td className="p-4 font-mono text-accent">{user.total_xp?.toLocaleString() || 0}</td>
+                                        <td className="p-4 font-mono text-yellow-400">{user.coins?.toLocaleString() || 0}</td>
                                         <td className="p-4">
                                             {isBanned ? (
                                                 <div className="flex flex-col items-start gap-1">
@@ -345,6 +547,14 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                                         title="Give XP"
                                                     >
                                                         <Zap size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setItemModalUser(user)}
+                                                        disabled={!!processingId}
+                                                        className="p-2 hover:bg-purple-500/20 rounded text-muted-foreground hover:text-purple-400 transition-colors"
+                                                        title="Grant Items"
+                                                    >
+                                                        <Package size={16} />
                                                     </button>
                                                 </>
                                             )}

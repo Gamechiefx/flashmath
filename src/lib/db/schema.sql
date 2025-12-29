@@ -20,7 +20,12 @@ CREATE TABLE IF NOT EXISTS users (
     -- Math progress (stored as JSON)
     math_tiers TEXT DEFAULT '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
     
+    -- Skill mastery points per operation (+1 correct, -1 wrong)
+    -- Points needed to complete a tier: 100 points
+    skill_points TEXT DEFAULT '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
+    
     -- Equipped items (stored as JSON)
+
     equipped_items TEXT DEFAULT '{"theme":"default","particle":"default","font":"default","sound":"default","bgm":"default","title":"default","frame":"default"}',
     
     -- Admin flags and RBAC
@@ -194,4 +199,54 @@ CREATE INDEX IF NOT EXISTS idx_verification_tokens_token ON verification_tokens(
 CREATE INDEX IF NOT EXISTS idx_mastery_stats_user_id ON mastery_stats(user_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_user_id ON inventory(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id ON user_achievements(user_id);
+
+-- ==============================================
+-- AI ADAPTIVE LEARNING SYSTEM TABLES
+-- ==============================================
+
+-- AI Learning Sessions (telemetry tracking)
+CREATE TABLE IF NOT EXISTS learner_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    session_start TEXT NOT NULL,
+    session_end TEXT,
+    telemetry_json TEXT,
+    directives_json TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Echo Queue (scheduled remediation)
+CREATE TABLE IF NOT EXISTS echo_queue (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    skill_id TEXT NOT NULL,
+    concept_id TEXT NOT NULL,
+    priority INTEGER DEFAULT 0,
+    due_after_n INTEGER DEFAULT 3,
+    max_attempts INTEGER DEFAULT 3,
+    attempts INTEGER DEFAULT 0,
+    variant_policy TEXT DEFAULT 'direct',
+    status TEXT DEFAULT 'scheduled',
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Skill Mastery (Bayesian probabilities per skill)
+CREATE TABLE IF NOT EXISTS skill_mastery (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    skill_id TEXT NOT NULL,
+    mastery_prob REAL DEFAULT 0.5,
+    uncertainty REAL DEFAULT 0.3,
+    last_seen_at TEXT,
+    error_signatures TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, skill_id)
+);
+
+-- AI Engine indexes
+CREATE INDEX IF NOT EXISTS idx_learner_sessions_user ON learner_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_echo_queue_user ON echo_queue(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_skill_mastery_user ON skill_mastery(user_id);
 

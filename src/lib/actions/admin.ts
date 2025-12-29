@@ -123,3 +123,104 @@ export async function getAllUsers() {
         return { error: "Failed to get users", users: [] };
     }
 }
+
+export async function getAllShopItems() {
+    const { isAdmin, error } = await requireAdmin();
+    if (!isAdmin) return { error, items: [] };
+
+    try {
+        const db = getDatabase();
+        const items = db.prepare('SELECT id, name, rarity, type, price FROM shop_items ORDER BY type, name').all();
+        return { items };
+    } catch (error) {
+        console.error("Failed to get shop items:", error);
+        return { error: "Failed to get shop items", items: [] };
+    }
+}
+
+export async function giveUserItem(userId: string, itemId: string) {
+    const { isAdmin, error } = await requireAdmin();
+    if (!isAdmin) return { error };
+
+    try {
+        const db = getDatabase();
+
+        // Check if user exists
+        const user = db.prepare('SELECT id, name FROM users WHERE id = ?').get(userId) as any;
+        if (!user) return { error: "User not found" };
+
+        // Check if item exists
+        const item = db.prepare('SELECT id, name FROM shop_items WHERE id = ?').get(itemId) as any;
+        if (!item) return { error: "Item not found" };
+
+        // Check if user already owns this item
+        const existingInventory = db.prepare('SELECT id FROM inventory WHERE user_id = ? AND item_id = ?').get(userId, itemId);
+        if (existingInventory) {
+            return { error: "User already owns this item" };
+        }
+
+        // Add to inventory
+        const { generateId } = await import("@/lib/db");
+        db.prepare(`
+            INSERT INTO inventory (id, user_id, item_id, acquired_at)
+            VALUES (?, ?, ?, ?)
+        `).run(generateId(), userId, itemId, new Date().toISOString());
+
+        console.log(`[ADMIN] Gave item "${item.name}" to ${user.name} (${userId})`);
+
+        revalidatePath("/admin");
+        revalidatePath("/locker");
+        revalidatePath("/shop");
+        return { success: true, itemName: item.name };
+    } catch (error) {
+        console.error("Failed to give item:", error);
+        return { error: "Failed to give item" };
+    }
+}
+
+export async function giveUserAllItems(userId: string) {
+    const { isAdmin, error } = await requireAdmin();
+    if (!isAdmin) return { error };
+
+    try {
+        const db = getDatabase();
+
+        // Check if user exists
+        const user = db.prepare('SELECT id, name FROM users WHERE id = ?').get(userId) as any;
+        if (!user) return { error: "User not found" };
+
+        // Get all shop items
+        const allItems = db.prepare('SELECT id, name FROM shop_items').all() as any[];
+
+        // Get user's current inventory
+        const existingInventory = db.prepare('SELECT item_id FROM inventory WHERE user_id = ?').all(userId) as { item_id: string }[];
+        const ownedItemIds = new Set(existingInventory.map(i => i.item_id));
+
+        // Add items not already owned
+        const { generateId } = await import("@/lib/db");
+        const insertStmt = db.prepare(`
+            INSERT INTO inventory (id, user_id, item_id, acquired_at)
+            VALUES (?, ?, ?, ?)
+        `);
+
+        let itemsGranted = 0;
+        const now = new Date().toISOString();
+
+        for (const item of allItems) {
+            if (!ownedItemIds.has(item.id)) {
+                insertStmt.run(generateId(), userId, item.id, now);
+                itemsGranted++;
+            }
+        }
+
+        console.log(`[ADMIN] Gave ${itemsGranted} items to ${user.name} (${userId})`);
+
+        revalidatePath("/admin");
+        revalidatePath("/locker");
+        revalidatePath("/shop");
+        return { success: true, itemsGranted, totalItems: allItems.length };
+    } catch (error) {
+        console.error("Failed to give all items:", error);
+        return { error: "Failed to give all items" };
+    }
+}

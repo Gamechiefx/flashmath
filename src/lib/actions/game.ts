@@ -91,6 +91,32 @@ export async function saveSession(sessionData: any) {
             "INSERT INTO league_participants (league_id, user_id, name, weekly_xp) VALUES (?, ?, ?, ?)",
             [user.current_league_id || 'neon-league', userId, user.name || 'Unknown Pilot', xpGained]
         );
+
+        // Update Skill Points for tier completion bar
+        // Net points: +1 for correct, -1 for wrong
+        // Only award skill points if at least 10 questions were answered
+        if (totalCount >= 10) {
+            const netSkillPoints = correctCount - (totalCount - correctCount); // = 2*correct - total
+            const opLower = operation.toLowerCase();
+
+            let skillPoints = user.skill_points;
+            if (typeof skillPoints === 'string') {
+                try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+            }
+            skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+
+            // Update points for this operation (can go negative, min 0)
+            skillPoints[opLower] = Math.max(0, (skillPoints[opLower] || 0) + netSkillPoints);
+
+            console.log(`[SAVE_SESSION] Skill points for ${opLower}: ${netSkillPoints} net, new total: ${skillPoints[opLower]}`);
+
+            execute(
+                "UPDATE users SET skill_points = ? WHERE id = ?",
+                [JSON.stringify(skillPoints), userId]
+            );
+        } else {
+            console.log(`[SAVE_SESSION] Skipping skill points - only ${totalCount} questions (need 10+)`);
+        }
     }
 
     // 🏅 CHECK ACHIEVEMENTS
@@ -191,6 +217,15 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
         // Advance to next tier
         const updated = { ...currentTiers, [opKey]: currentTier + 1 };
         execute("UPDATE users SET math_tiers = ? WHERE id = ?", [updated, userId]);
+
+        // Reset skill points for this operation (start fresh for new tier)
+        let skillPoints = user.skill_points;
+        if (typeof skillPoints === 'string') {
+            try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+        }
+        skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+        skillPoints[opKey] = 0;
+        execute("UPDATE users SET skill_points = ? WHERE id = ?", [JSON.stringify(skillPoints), userId]);
 
         // Clear mastery stats for this operation so progress resets for new tier
         const { getDatabase } = await import("@/lib/db");

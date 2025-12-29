@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { motion } from "framer-motion";
+import { motion, useSpring, useTransform, useInView } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
     Zap,
@@ -20,8 +20,8 @@ import {
 import Link from "next/link";
 
 import { PlacementTest } from "@/components/placement-test";
-import { useState } from "react";
-import { updateTiers } from "@/lib/actions/game"; // If needed for placement test callback
+import { useState, useEffect, useRef } from "react";
+import { updateTiers } from "@/lib/actions/game";
 import { useRouter } from "next/navigation";
 
 interface DashboardViewProps {
@@ -31,8 +31,104 @@ interface DashboardViewProps {
 
 import { useSession } from "next-auth/react";
 
+// Animated counter component
+function AnimatedNumber({ value, duration = 1.5, suffix = "" }: { value: number; duration?: number; suffix?: string }) {
+    const [displayValue, setDisplayValue] = useState(0);
+    const ref = useRef<HTMLSpanElement>(null);
+    const isInView = useInView(ref, { once: true });
+
+    useEffect(() => {
+        if (!isInView) return;
+
+        const startTime = Date.now();
+        const startValue = 0;
+        const endValue = value;
+
+        const animate = () => {
+            const now = Date.now();
+            const elapsed = (now - startTime) / 1000;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Ease out cubic
+            const eased = 1 - Math.pow(1 - progress, 3);
+            const current = startValue + (endValue - startValue) * eased;
+
+            setDisplayValue(current);
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            }
+        };
+
+        requestAnimationFrame(animate);
+    }, [value, duration, isInView]);
+
+    return <span ref={ref}>{displayValue.toFixed(suffix === "%" || suffix === "s" ? 1 : 0)}{suffix}</span>;
+}
+
+// Animated progress bar component
+function AnimatedProgressBar({
+    value,
+    className,
+    glowColor = "rgba(34,211,238,0.5)",
+    delay = 0
+}: {
+    value: number;
+    className?: string;
+    glowColor?: string;
+    delay?: number;
+}) {
+    const ref = useRef<HTMLDivElement>(null);
+    const isInView = useInView(ref, { once: true });
+
+    return (
+        <div ref={ref} className="h-full w-full">
+            <motion.div
+                initial={{ width: 0 }}
+                animate={isInView ? { width: `${value}%` } : { width: 0 }}
+                transition={{
+                    duration: 1.2,
+                    delay: delay,
+                    ease: [0.34, 1.56, 0.64, 1] // Spring-like easing
+                }}
+                className={className}
+                style={{ boxShadow: `0 0 10px ${glowColor}` }}
+            />
+        </div>
+    );
+}
+
+// Stagger container variants
+const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.1,
+            delayChildren: 0.1
+        }
+    }
+};
+
+const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+            duration: 0.5,
+            ease: [0.25, 0.46, 0.45, 0.94]
+        }
+    }
+};
+
+const cardHover = {
+    scale: 1.02,
+    transition: { duration: 0.2 }
+};
+
 export function DashboardView({ stats, userName }: DashboardViewProps) {
-    const [isOperationsOpen, setIsOperationsOpen] = useState(true); // Default open?
+    const [isOperationsOpen, setIsOperationsOpen] = useState(true);
     const [selectedOp, setSelectedOp] = useState<string | null>(null);
     const [showPlacementTest, setShowPlacementTest] = useState(false);
     const router = useRouter();
@@ -51,134 +147,214 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
 
 
     return (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <motion.div
+            className="grid grid-cols-1 lg:grid-cols-12 gap-8"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+        >
             {/* Left Column: Stats Summary */}
             <div className="lg:col-span-4 space-y-6">
-                <GlassCard className="p-0 overflow-hidden">
-                    <div className="p-6 bg-primary/10 border-b border-primary/10">
-                        <div className="flex items-center gap-3 mb-2 text-primary">
-                            <Trophy size={20} />
-                            <span className="text-xs font-bold uppercase tracking-widest">{stats?.leagueId?.replace('-league', '')?.toUpperCase()} LEAGUE</span>
+                <motion.div variants={itemVariants}>
+                    <GlassCard className="p-0 overflow-hidden">
+                        <div className="p-6 bg-primary/10 border-b border-primary/10">
+                            <motion.div
+                                className="flex items-center gap-3 mb-2 text-primary"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: 0.2 }}
+                            >
+                                <Trophy size={20} />
+                                <span className="text-xs font-bold uppercase tracking-widest">{stats?.leagueId?.replace('-league', '')?.toUpperCase()} LEAGUE</span>
+                            </motion.div>
+                            <motion.div
+                                className="text-3xl font-black"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                transition={{ delay: 0.3, duration: 0.5 }}
+                            >
+                                LEVEL {stats?.level || 1}
+                            </motion.div>
+                            {stats?.equippedTitle && (
+                                <motion.div
+                                    className="text-xs font-bold uppercase tracking-widest text-primary mt-1"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    transition={{ delay: 0.4 }}
+                                >
+                                    {stats.equippedTitle}
+                                </motion.div>
+                            )}
+                            <div className="mt-4 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                                <AnimatedProgressBar
+                                    value={(stats?.totalXP % 1000) / 10}
+                                    className="h-full bg-primary"
+                                    delay={0.5}
+                                />
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-tighter">Next Level at {Math.ceil(((stats?.totalXP || 0) + 1) / 1000) * 1000} XP ({stats?.totalXP || 0} Total)</p>
                         </div>
-                        <div className="text-3xl font-black">LEVEL {stats?.level || 1}</div>
-                        {stats?.equippedTitle && (
-                            <div className="text-xs font-bold uppercase tracking-widest text-primary mt-1">{stats.equippedTitle}</div>
-                        )}
-                        <div className="mt-4 w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                            <div
-                                className="h-full bg-primary shadow-[0_0_10px_rgba(34,211,238,0.5)] transition-all duration-1000"
-                                style={{ width: `${(stats?.totalXP % 1000) / 10}%` }}
-                            />
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-2 uppercase tracking-tighter">Next Level at {Math.ceil(((stats?.totalXP || 0) + 1) / 1000) * 1000} XP ({stats?.totalXP || 0} Total)</p>
-                    </div>
 
-                    <div className="p-6 grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Accuracy</div>
-                            <div className="text-xl font-mono tracking-tighter">{stats?.accuracy?.toFixed(1) || 0}%</div>
-                        </div>
-                        <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Avg Speed</div>
-                            <div className="text-xl font-mono tracking-tighter">{stats?.avgSpeed || "0.00s"}</div>
-                        </div>
-                        <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Rank #</div>
-                            <div className="text-xl font-mono tracking-tighter text-accent">#{stats?.userRank || "-"}</div>
-                        </div>
-                        <div className="space-y-1">
-                            <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Flux Coins</div>
-                            <div className="text-xl font-mono tracking-tighter text-yellow-400">§ {stats?.coins || 0}</div>
-                        </div>
-                    </div>
-                </GlassCard>
+                        <motion.div
+                            className="p-6 grid grid-cols-2 gap-4"
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate="visible"
+                        >
+                            <motion.div className="space-y-1" variants={itemVariants}>
+                                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Accuracy</div>
+                                <div className="text-xl font-mono tracking-tighter">
+                                    <AnimatedNumber value={stats?.accuracy || 0} suffix="%" />
+                                </div>
+                            </motion.div>
+                            <motion.div className="space-y-1" variants={itemVariants}>
+                                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Avg Speed</div>
+                                <div className="text-xl font-mono tracking-tighter">{stats?.avgSpeed || "0.00s"}</div>
+                            </motion.div>
+                            <motion.div className="space-y-1" variants={itemVariants}>
+                                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Rank #</div>
+                                <div className="text-xl font-mono tracking-tighter text-accent">
+                                    #{stats?.userRank || "-"}
+                                </div>
+                            </motion.div>
+                            <motion.div className="space-y-1" variants={itemVariants}>
+                                <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Flux Coins</div>
+                                <div className="text-xl font-mono tracking-tighter text-yellow-400">
+                                    § <AnimatedNumber value={stats?.coins || 0} />
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    </GlassCard>
+                </motion.div>
 
                 {/* Career Stats Section */}
                 {
                     stats?.careerStats && (
-                        <Link href="/stats" className="block">
-                            <GlassCard className="space-y-4 hover:bg-white/5 transition-all cursor-pointer group">
-                                <div className="flex items-center gap-3 text-muted-foreground group-hover:text-white transition-colors">
-                                    <Activity size={16} />
-                                    <h3 className="text-xs font-bold uppercase tracking-widest">Career Stats</h3>
-                                    <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
-                                </div>
+                        <motion.div variants={itemVariants}>
+                            <Link href="/stats" className="block">
+                                <motion.div whileHover={cardHover}>
+                                    <GlassCard className="space-y-4 hover:bg-white/5 transition-all cursor-pointer group">
+                                        <div className="flex items-center gap-3 text-muted-foreground group-hover:text-white transition-colors">
+                                            <Activity size={16} />
+                                            <h3 className="text-xs font-bold uppercase tracking-widest">Career Stats</h3>
+                                            <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                                        </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center overflow-hidden">
-                                        <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">Lifetime Accuracy</div>
-                                        <div className="text-2xl font-black text-primary truncate max-w-full">{stats.careerStats.lifetimeAccuracy.toFixed(1)}%</div>
-                                    </div>
-                                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center overflow-hidden">
-                                        <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">Needs Work</div>
-                                        <div className="text-2xl font-black text-red-400 truncate max-w-full" title={stats.careerStats.weakestLink}>{stats.careerStats.weakestLink}</div>
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Recent Trend</div>
-                                    <div className="h-16 flex items-end gap-1">
-                                        {stats.careerStats.history.map((s: any, i: number) => (
-                                            <div
-                                                key={i}
-                                                className="flex-1 bg-primary/20 rounded-t-sm relative group/bar hover:bg-primary transition-colors"
-                                                style={{ height: `${s.accuracy}%` }}
-                                            >
-                                                <div className="opacity-0 group-hover/bar:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap pointer-events-none z-10">
-                                                    {s.accuracy.toFixed(0)}%
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center overflow-hidden">
+                                                <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">Lifetime Accuracy</div>
+                                                <div className="text-2xl font-black text-primary truncate max-w-full">
+                                                    <AnimatedNumber value={stats.careerStats.lifetimeAccuracy} suffix="%" />
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </GlassCard>
-                        </Link>
+                                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center overflow-hidden">
+                                                <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">Needs Work</div>
+                                                <div className="text-2xl font-black text-red-400 truncate max-w-full" title={stats.careerStats.weakestLink}>{stats.careerStats.weakestLink}</div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Recent Trend</div>
+                                            <div className="h-16 flex items-end gap-1">
+                                                {stats.careerStats.history.map((s: any, i: number) => (
+                                                    <motion.div
+                                                        key={i}
+                                                        className="flex-1 bg-primary/20 rounded-t-sm relative group/bar hover:bg-primary transition-colors"
+                                                        initial={{ height: 0 }}
+                                                        animate={{ height: `${s.accuracy}%` }}
+                                                        transition={{
+                                                            duration: 0.8,
+                                                            delay: 0.5 + i * 0.1,
+                                                            ease: [0.34, 1.56, 0.64, 1]
+                                                        }}
+                                                    >
+                                                        <div className="opacity-0 group-hover/bar:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap pointer-events-none z-10">
+                                                            {s.accuracy.toFixed(0)}%
+                                                        </div>
+                                                    </motion.div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </GlassCard>
+                                </motion.div>
+                            </Link>
+                        </motion.div>
                     )
                 }
 
-                <div className="grid grid-cols-3 gap-4">
-                    <Link href="/leaderboard" className="block">
-                        <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-primary/5 transition-all group">
-                            <BarChart3 className="text-primary group-hover:scale-110 transition-transform" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Leagues</span>
-                        </GlassCard>
-                    </Link>
-                    <Link href="/shop" className="block">
-                        <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-accent/5 transition-all group">
-                            <ShoppingBag className="text-accent group-hover:scale-110 transition-transform" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Shop</span>
-                        </GlassCard>
-                    </Link>
-                    <Link href="/locker" className="block">
-                        <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-green-400/5 transition-all group">
-                            <Archive size={24} className="text-green-400 group-hover:scale-110 transition-transform" />
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Locker</span>
-                        </GlassCard>
-                    </Link>
-                </div>
+                <motion.div
+                    className="grid grid-cols-3 gap-4"
+                    variants={containerVariants}
+                >
+                    <motion.div variants={itemVariants}>
+                        <Link href="/leaderboard" className="block">
+                            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-primary/5 transition-all group">
+                                    <BarChart3 className="text-primary group-hover:scale-110 transition-transform" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">Leagues</span>
+                                </GlassCard>
+                            </motion.div>
+                        </Link>
+                    </motion.div>
+                    <motion.div variants={itemVariants}>
+                        <Link href="/shop" className="block">
+                            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-accent/5 transition-all group">
+                                    <ShoppingBag className="text-accent group-hover:scale-110 transition-transform" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">Shop</span>
+                                </GlassCard>
+                            </motion.div>
+                        </Link>
+                    </motion.div>
+                    <motion.div variants={itemVariants}>
+                        <Link href="/locker" className="block">
+                            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-green-400/5 transition-all group">
+                                    <Archive size={24} className="text-green-400 group-hover:scale-110 transition-transform" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">Locker</span>
+                                </GlassCard>
+                            </motion.div>
+                        </Link>
+                    </motion.div>
+                </motion.div>
 
 
-                <GlassCard className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recent Sessions</h3>
-                        <History size={16} className="text-muted-foreground" />
-                    </div>
-                    <div className="space-y-3">
-                        {stats?.recentSessions?.length > 0 ? (
-                            stats.recentSessions.map((s: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-                                    <div className="text-sm font-bold">{s.operation}</div>
-                                    <div className="text-xs font-mono text-primary">+{s.xp_earned || 0} XP</div>
-                                </div>
-                            ))
-                        ) : (
-                            <div className="text-xs text-muted-foreground italic py-4">No sessions logged yet.</div>
-                        )}
-                    </div>
-                    <Link href="/practice" className="block text-center">
-                        <button className="w-full text-[10px] uppercase font-bold tracking-widest text-primary hover:underline transition-all">Start New Practice</button>
-                    </Link>
-                </GlassCard>
+                <motion.div variants={itemVariants}>
+                    <GlassCard className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recent Sessions</h3>
+                            <History size={16} className="text-muted-foreground" />
+                        </div>
+                        <div className="space-y-3">
+                            {stats?.recentSessions?.length > 0 ? (
+                                stats.recentSessions.map((s: any, i: number) => (
+                                    <motion.div
+                                        key={i}
+                                        className="flex items-center justify-between py-2 border-b border-white/5 last:border-0"
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.8 + i * 0.1 }}
+                                    >
+                                        <div className="text-sm font-bold">{s.operation}</div>
+                                        <motion.div
+                                            className="text-xs font-mono text-primary"
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ delay: 1 + i * 0.1, type: "spring" }}
+                                        >
+                                            +{s.xp_earned || 0} XP
+                                        </motion.div>
+                                    </motion.div>
+                                ))
+                            ) : (
+                                <div className="text-xs text-muted-foreground italic py-4">No sessions logged yet.</div>
+                            )}
+                        </div>
+                        <Link href="/practice" className="block text-center">
+                            <button className="w-full text-[10px] uppercase font-bold tracking-widest text-primary hover:underline transition-all">Start New Practice</button>
+                        </Link>
+                    </GlassCard>
+                </motion.div>
             </div >
 
             {/* Right Column: Mastery Map & Operations */}
@@ -199,39 +375,57 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                 )}
 
                 {/* Collapsible Operations Section */}
-                <div className="group rounded-3xl border border-white/10 overflow-hidden bg-white/5 transition-all">
+                <motion.div
+                    className="group rounded-3xl border border-white/10 overflow-hidden bg-white/5 transition-all"
+                    variants={itemVariants}
+                >
                     <button
                         onClick={() => setIsOperationsOpen(!isOperationsOpen)}
                         className="w-full flex items-center justify-between p-8 text-2xl font-black uppercase tracking-tighter text-white hover:text-primary transition-colors"
                     >
                         <div className="flex items-center gap-6">
-                            <div className="grid grid-cols-2 gap-1 p-2 bg-accent/10 rounded-lg">
+                            <motion.div
+                                className="grid grid-cols-2 gap-1 p-2 bg-accent/10 rounded-lg"
+                                animate={{ rotate: isOperationsOpen ? 0 : 180 }}
+                                transition={{ duration: 0.3 }}
+                            >
                                 <span className="text-accent text-[10px] font-black leading-none">+</span>
                                 <span className="text-accent text-[10px] font-black leading-none">×</span>
                                 <span className="text-accent text-[10px] font-black leading-none">-</span>
                                 <span className="text-accent text-[10px] font-black leading-none">÷</span>
-                            </div>
+                            </motion.div>
                             <span className="text-2xl font-black uppercase tracking-tighter">OPERATIONS</span>
                         </div>
-                        <div className={cn("transition-transform duration-300", isOperationsOpen ? "rotate-180" : "")}>
+                        <motion.div
+                            animate={{ rotate: isOperationsOpen ? 90 : 0 }}
+                            transition={{ duration: 0.3 }}
+                        >
                             <ChevronRight />
-                        </div>
+                        </motion.div>
                     </button>
 
-                    <div className={cn(
-                        "grid transition-all duration-300 ease-in-out",
-                        isOperationsOpen ? "grid-rows-[1fr] opacity-100 p-8 pt-0" : "grid-rows-[0fr] opacity-0 p-0"
-                    )}>
-                        <div className="overflow-hidden">
+                    <motion.div
+                        initial={false}
+                        animate={{
+                            height: isOperationsOpen ? "auto" : 0,
+                            opacity: isOperationsOpen ? 1 : 0
+                        }}
+                        transition={{ duration: 0.3, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                        <div className="p-8 pt-0">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {(stats?.masteryMap || [
                                     { title: "Addition", progress: 0 },
                                     { title: "Subtraction", progress: 0 },
                                     { title: "Multiplication", progress: 0 },
                                     { title: "Division", progress: 0 }
-                                ]).map((op: any) => (
-                                    <div
+                                ]).map((op: any, index: number) => (
+                                    <motion.div
                                         key={op.title}
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.1 + index * 0.1 }}
                                         className={cn(
                                             "relative overflow-hidden rounded-2xl border transition-all p-6 cursor-pointer group",
                                             selectedOp === op.title
@@ -247,75 +441,121 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                                                     Tier {toRoman(op.tier || 1)}
                                                 </span>
                                             </div>
-                                            <span className={cn(
-                                                "text-3xl font-black truncate max-w-[80px]",
-                                                selectedOp === op.title ? "text-primary" : "text-zinc-700"
-                                            )}>
+                                            <motion.span
+                                                className={cn(
+                                                    "text-3xl font-black truncate max-w-[80px]",
+                                                    selectedOp === op.title ? "text-primary" : "text-zinc-700"
+                                                )}
+                                                animate={{
+                                                    scale: selectedOp === op.title ? [1, 1.2, 1] : 1,
+                                                    rotate: selectedOp === op.title ? [0, 5, -5, 0] : 0
+                                                }}
+                                                transition={{ duration: 0.4 }}
+                                            >
                                                 {op.title === "Addition" ? "+" : op.title === "Subtraction" ? "-" : op.title === "Multiplication" ? "×" : "÷"}
-                                            </span>
+                                            </motion.span>
                                         </div>
 
                                         <div className="space-y-3 mb-6">
                                             <div className="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
                                                 <span>Tier Completion</span>
-                                                <span className={cn(selectedOp === op.title ? "text-primary" : "")}>{op.progress}%</span>
+                                                <motion.span
+                                                    className={cn(selectedOp === op.title ? "text-primary" : "")}
+                                                    key={op.progress}
+                                                    initial={{ scale: 1.5, opacity: 0 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                >
+                                                    {op.progress}%
+                                                </motion.span>
                                             </div>
 
                                             <div className="h-2 w-full bg-zinc-800/50 rounded-full overflow-hidden">
                                                 <motion.div
                                                     initial={{ width: 0 }}
                                                     animate={{ width: `${op.progress}%` }}
-                                                    className={cn("h-full transition-all", selectedOp === op.title ? "bg-primary shadow-[0_0_10px_rgba(34,211,238,0.5)]" : "bg-zinc-600")}
+                                                    transition={{
+                                                        duration: 1,
+                                                        delay: 0.3 + index * 0.15,
+                                                        ease: [0.34, 1.56, 0.64, 1]
+                                                    }}
+                                                    className={cn(
+                                                        "h-full transition-all",
+                                                        selectedOp === op.title
+                                                            ? "bg-primary shadow-[0_0_10px_rgba(34,211,238,0.5)]"
+                                                            : "bg-gradient-to-r from-zinc-600 to-zinc-500"
+                                                    )}
                                                 />
                                             </div>
                                         </div>
 
                                         {/* Action Area (Visible when selected) */}
-                                        <div className={cn(
-                                            "grid transition-all duration-300 ease-in-out",
-                                            selectedOp === op.title ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                                        )}>
-                                            <div className="overflow-hidden pt-2">
+                                        <motion.div
+                                            initial={false}
+                                            animate={{
+                                                height: selectedOp === op.title ? "auto" : 0,
+                                                opacity: selectedOp === op.title ? 1 : 0
+                                            }}
+                                            transition={{ duration: 0.3 }}
+                                            className="overflow-hidden"
+                                        >
+                                            <div className="pt-2">
                                                 <Link href={`/practice?op=${op.title}`}>
                                                     <NeonButton className="w-full py-4 text-lg font-bold">
                                                         START TRAINING
                                                     </NeonButton>
                                                 </Link>
                                             </div>
-                                        </div>
-                                    </div>
+                                        </motion.div>
+                                    </motion.div>
                                 ))}
                             </div>
 
                             <div className="mt-8 flex gap-4 justify-center">
                                 {!stats?.hasPlaced && (
-                                    <button
+                                    <motion.button
                                         onClick={() => setShowPlacementTest(true)}
-                                        className="px-8 py-4 rounded-xl border border-white/10 hover:bg-white/5 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-white transition-colors animate-pulse"
+                                        className="px-8 py-4 rounded-xl border border-white/10 hover:bg-white/5 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-white transition-colors"
+                                        animate={{
+                                            boxShadow: [
+                                                "0 0 0 0 rgba(34, 211, 238, 0)",
+                                                "0 0 0 10px rgba(34, 211, 238, 0.1)",
+                                                "0 0 0 0 rgba(34, 211, 238, 0)"
+                                            ]
+                                        }}
+                                        transition={{ duration: 2, repeat: Infinity }}
                                     >
                                         Take Placement Test
-                                    </button>
+                                    </motion.button>
                                 )}
                             </div>
                         </div>
-                    </div>
-                </div>
+                    </motion.div>
+                </motion.div>
 
                 {/* Coming Soon Sections */}
-                <div className="grid grid-cols-2 gap-6 opacity-40">
-                    <div className="rounded-3xl border border-white/10 bg-white/5 p-8 flex items-center justify-between cursor-not-allowed">
+                <motion.div
+                    className="grid grid-cols-2 gap-6 opacity-40"
+                    variants={containerVariants}
+                >
+                    <motion.div
+                        className="rounded-3xl border border-white/10 bg-white/5 p-8 flex items-center justify-between cursor-not-allowed"
+                        variants={itemVariants}
+                    >
                         <span className="font-bold text-muted-foreground uppercase tracking-widest">Percentage</span>
                         <span className="text-[10px] bg-white/10 px-2 py-1 rounded">SOON</span>
-                    </div>
-                    <div className="rounded-3xl border border-white/10 bg-white/5 p-8 flex items-center justify-between cursor-not-allowed">
+                    </motion.div>
+                    <motion.div
+                        className="rounded-3xl border border-white/10 bg-white/5 p-8 flex items-center justify-between cursor-not-allowed"
+                        variants={itemVariants}
+                    >
                         <span className="font-bold text-muted-foreground uppercase tracking-widest">Decimals</span>
                         <span className="text-[10px] bg-white/10 px-2 py-1 rounded">SOON</span>
-                    </div>
-                </div>
+                    </motion.div>
+                </motion.div>
 
             </div>
 
             {/* Detailed Operation Stats */}
-        </div >
+        </motion.div >
     );
 }

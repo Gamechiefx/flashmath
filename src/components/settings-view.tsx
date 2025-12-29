@@ -57,6 +57,65 @@ function VolumeControl() {
     );
 }
 
+function KeybindSettings() {
+    const [continueKey, setContinueKey] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return localStorage.getItem('continueKey') || 'Space';
+        }
+        return 'Space';
+    });
+    const [isListening, setIsListening] = useState(false);
+
+    const handleKeyCapture = (e: React.KeyboardEvent) => {
+        e.preventDefault();
+        const key = e.code;
+        setContinueKey(key);
+        localStorage.setItem('continueKey', key);
+        setIsListening(false);
+    };
+
+    const formatKeyName = (key: string) => {
+        if (key === 'Space') return 'Space';
+        if (key.startsWith('Key')) return key.replace('Key', '');
+        if (key.startsWith('Digit')) return key.replace('Digit', '');
+        return key.replace('Arrow', '↑↓←→'.includes(key.slice(-1)) ? '' : '');
+    };
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <div className="flex justify-between items-center mb-2">
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Continue Key</label>
+                    <span className="text-xs text-muted-foreground">Press after wrong answer</span>
+                </div>
+                <button
+                    onClick={() => setIsListening(true)}
+                    onKeyDown={isListening ? handleKeyCapture : undefined}
+                    className={`w-full p-4 rounded-xl border text-left transition-all ${isListening
+                            ? 'bg-purple-500/20 border-purple-500/50 animate-pulse'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10'
+                        }`}
+                >
+                    <div className="flex items-center justify-between">
+                        <div>
+                            {isListening ? (
+                                <span className="text-purple-400 text-sm">Press any key...</span>
+                            ) : (
+                                <kbd className="px-3 py-1.5 bg-white/10 rounded text-lg font-mono text-white">
+                                    {formatKeyName(continueKey)}
+                                </kbd>
+                            )}
+                        </div>
+                        {!isListening && (
+                            <span className="text-xs text-muted-foreground">Click to change</span>
+                        )}
+                    </div>
+                </button>
+            </div>
+        </div>
+    );
+}
+
 export function SettingsView({ user }: SettingsViewProps) {
     const router = useRouter();
     const [newUsername, setNewUsername] = useState(user?.name || "");
@@ -193,6 +252,22 @@ export function SettingsView({ user }: SettingsViewProps) {
                                     </div>
                                 </div>
                             </div>
+
+                            <div>
+                                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">Member Since</label>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                                    <div className="flex items-center gap-2">
+                                        <Clock size={16} className="text-muted-foreground" />
+                                        <span className="text-lg font-bold">
+                                            {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            }) : 'Unknown'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </GlassCard>
 
@@ -206,6 +281,16 @@ export function SettingsView({ user }: SettingsViewProps) {
                         <div className="space-y-6">
                             <VolumeControl />
                         </div>
+                    </GlassCard>
+
+                    {/* Keybinds Section */}
+                    <GlassCard className="p-6 space-y-4">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Settings size={20} className="text-purple-400" />
+                            <h2 className="text-xl font-black uppercase tracking-tight">Keybinds</h2>
+                        </div>
+
+                        <KeybindSettings />
                     </GlassCard>
 
                     {/* Security Section */}
