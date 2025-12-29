@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { deleteUser, banUser, unbanUser } from "@/lib/actions/users";
-import { giveUserCoins, giveUserXP } from "@/lib/actions/admin";
-import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap, AlertCircle, ArrowUp, ArrowDown } from "lucide-react";
+import { giveUserCoins, giveUserXP, giveUserItem, giveUserAllItems, getAllShopItems } from "@/lib/actions/admin";
+import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap, AlertCircle, ArrowUp, ArrowDown, Package } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { RoleManager } from "@/components/admin/role-manager";
 import { Role, parseRole, ROLE_LABELS, ROLE_COLORS, hasPermission, Permission, canManageRole } from "@/lib/rbac";
@@ -41,6 +41,25 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
     const [giftType, setGiftType] = useState<"coins" | "xp">("coins");
     const [giftMode, setGiftMode] = useState<"give" | "take">("give");
     const [giftAmount, setGiftAmount] = useState<string>("100");
+
+    // Item grant modal state
+    const [itemModalUser, setItemModalUser] = useState<User | null>(null);
+    const [shopItems, setShopItems] = useState<any[]>([]);
+    const [selectedItemId, setSelectedItemId] = useState<string>("");
+    const [itemsLoading, setItemsLoading] = useState(false);
+
+    // Load shop items when modal opens
+    useEffect(() => {
+        if (itemModalUser && shopItems.length === 0) {
+            setItemsLoading(true);
+            getAllShopItems().then((result) => {
+                if (!result.error) {
+                    setShopItems(result.items);
+                }
+                setItemsLoading(false);
+            });
+        }
+    }, [itemModalUser, shopItems.length]);
 
     // Sorting state
     const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp" | "coins">("created_at");
@@ -175,6 +194,39 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
         setGiftType(type);
         setGiftMode(mode);
         setGiftAmount(type === "coins" ? "100" : "500");
+    };
+
+    // Item grant handlers
+    const confirmItemGrant = async () => {
+        if (!itemModalUser || !selectedItemId) return;
+        setProcessingId(itemModalUser.id);
+
+        const result = await giveUserItem(itemModalUser.id, selectedItemId);
+
+        setProcessingId(null);
+        if (result.error) {
+            alert(`Error: ${result.error}`);
+        } else {
+            alert(`✅ Gave "${result.itemName}" to ${itemModalUser.name}`);
+            setItemModalUser(null);
+            setSelectedItemId("");
+        }
+    };
+
+    const grantAllItems = async () => {
+        if (!itemModalUser) return;
+        if (!confirm(`Grant ALL ${shopItems.length} items to ${itemModalUser.name}?`)) return;
+
+        setProcessingId(itemModalUser.id);
+        const result = await giveUserAllItems(itemModalUser.id);
+        setProcessingId(null);
+
+        if (result.error) {
+            alert(`Error: ${result.error}`);
+        } else {
+            alert(`✅ Granted ${result.itemsGranted} new items to ${itemModalUser.name}`);
+            setItemModalUser(null);
+        }
     };
 
     // Helper to format ban time
@@ -331,6 +383,66 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                 </div>
             )}
 
+            {/* ITEM GRANT MODAL OVERLAY */}
+            {itemModalUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <GlassCard className="w-full max-w-md p-6 space-y-4 border border-purple-500/30">
+                        <h3 className="text-xl font-bold text-purple-400 flex items-center gap-2">
+                            <Package /> Grant Items: {itemModalUser.name}
+                        </h3>
+
+                        {itemsLoading ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="animate-spin text-purple-400" />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-bold uppercase text-muted-foreground">Select Item</label>
+                                    <select
+                                        value={selectedItemId}
+                                        onChange={(e) => setSelectedItemId(e.target.value)}
+                                        className="w-full bg-black/40 border border-white/10 rounded p-2 text-sm"
+                                    >
+                                        <option value="">-- Choose an item --</option>
+                                        {shopItems.map((item: any) => (
+                                            <option key={item.id} value={item.id}>
+                                                {item.name} ({item.type}) - {item.rarity}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="flex gap-2 justify-between mt-4">
+                                    <button
+                                        onClick={grantAllItems}
+                                        disabled={!!processingId}
+                                        className="px-4 py-2 rounded bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-bold shadow-lg"
+                                    >
+                                        {processingId === itemModalUser.id ? <Loader2 size={16} className="animate-spin" /> : 'GRANT ALL ITEMS'}
+                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => { setItemModalUser(null); setSelectedItemId(""); }}
+                                            className="px-4 py-2 rounded hover:bg-white/10 text-sm font-bold"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={confirmItemGrant}
+                                            disabled={!selectedItemId || !!processingId}
+                                            className="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold shadow-lg shadow-purple-900/20 disabled:opacity-50"
+                                        >
+                                            GRANT ITEM
+                                        </button>
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                    </GlassCard>
+                </div>
+            )}
+
             <div className="flex justify-between items-center gap-4 flex-wrap">
                 <h2 className="text-xl font-bold uppercase tracking-widest text-primary">User Management</h2>
                 <div className="flex items-center gap-3">
@@ -435,6 +547,14 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                                         title="Give XP"
                                                     >
                                                         <Zap size={16} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setItemModalUser(user)}
+                                                        disabled={!!processingId}
+                                                        className="p-2 hover:bg-purple-500/20 rounded text-muted-foreground hover:text-purple-400 transition-colors"
+                                                        title="Grant Items"
+                                                    >
+                                                        <Package size={16} />
                                                     </button>
                                                 </>
                                             )}

@@ -213,6 +213,10 @@ export const execute = (text: string, params: any[] = []): { changes: number } =
         } else if (lowerText.includes('is_banned = ?')) {
             database.prepare('UPDATE users SET is_banned = ?, banned_until = ?, updated_at = ? WHERE id = ?')
                 .run(params[0] ? 1 : 0, params[0] ? null : null, now(), id);
+        } else if (lowerText.includes('skill_points = ?')) {
+            database.prepare('UPDATE users SET skill_points = ?, updated_at = ? WHERE id = ?')
+                .run(params[0], now(), id);
+            console.log(`[DB] Updated skill_points for user ${id}: ${params[0]}`);
         }
         return { changes: 1 };
     }

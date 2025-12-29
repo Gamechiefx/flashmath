@@ -9,12 +9,15 @@ import {
     Clock,
     LayoutDashboard,
     Star,
-    HelpCircle
+    HelpCircle,
+    Brain,
+    AlertTriangle
 } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 
 import { getNextProblems } from "@/lib/actions/game";
+import { initializeAISession, submitAIAnswer, requestAIHint as requestAIHintAction, endAISession } from "@/lib/actions/ai-engine";
 import { Operation } from "@/lib/math-engine";
 import { MathProblem } from "@/lib/math-tiers";
 import { PlacementTest } from "@/components/placement-test";
@@ -27,6 +30,7 @@ import { useSession } from "next-auth/react";
 import { cn } from "@/lib/utils";
 import { useSearchParams } from "next/navigation";
 import { soundEngine } from "@/lib/sound-engine";
+import type { ContentItem, HintPayload } from "@/lib/ai-engine/types";
 
 interface PracticeViewProps {
     session?: any;
@@ -62,6 +66,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [isError, setIsError] = useState(false);
     const [selectedOp, setSelectedOp] = useState<Operation>(operation);
     const [isSaving, setIsSaving] = useState(false);
+    const [continueKey, setContinueKey] = useState('Space');
 
     // Tiered System State
     const [problemQueue, setProblemQueue] = useState<MathProblem[]>([]);
@@ -74,6 +79,27 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [currentTier, setCurrentTier] = useState(1);
     const [showMasteryTest, setShowMasteryTest] = useState(false);
     const [opAccuracy, setOpAccuracy] = useState(0);
+
+    // AI Engine State
+    const [aiSessionId, setAiSessionId] = useState<string | null>(null);
+    const [currentAIItem, setCurrentAIItem] = useState<ContentItem | null>(null);
+    const [aiHint, setAiHint] = useState<HintPayload | null>(null);
+    const [tiltScore, setTiltScore] = useState(0);
+    const [echoQueueSize, setEchoQueueSize] = useState(0);
+    const [echoItemsResolved, setEchoItemsResolved] = useState(0);
+    const [isAIMode, setIsAIMode] = useState(true);  // AI mode enabled by default
+    const [prefetchedQuestion, setPrefetchedQuestion] = useState<{ question: ContentItem; stats: any } | null>(null);
+    const [tierAdvanced, setTierAdvanced] = useState<{ from: number; to: number } | null>(null);
+    const [aiAnalysis, setAiAnalysis] = useState<{
+        wasAISession: boolean;
+        confidenceScore: number;
+        finalTiltScore: number;
+        echoItemsResolved: number;
+        hintsGiven: number;
+        masteryDelta: number;
+    } | null>(null);
+    const [hintsReceivedCount, setHintsReceivedCount] = useState(0);
+    const [isLoadingHint, setIsLoadingHint] = useState(false);
 
     // Fetch problems helper
     const fetchMoreProblems = async (op: string) => {
@@ -123,8 +149,39 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         setMaxStreak(0);
         setIsError(false);
         setProblemQueue([]);
+        setAiHint(null);
+        setTiltScore(0);
+        setEchoQueueSize(0);
+        setEchoItemsResolved(0);
+        setPrefetchedQuestion(null);
+        setTierAdvanced(null);
+        setAiAnalysis(null);
+        setHintsReceivedCount(0);
+        setIsLoadingHint(false);
 
-        // Load problems for selectedOp
+        // Try AI mode first for authenticated users
+        if (session?.user && isAIMode) {
+            try {
+                const aiResult = await initializeAISession(selectedOp);
+                if (!('error' in aiResult)) {
+                    setAiSessionId(aiResult.sessionId);
+                    setCurrentAIItem(aiResult.firstQuestion);
+                    setProblem({
+                        question: aiResult.firstQuestion.promptText,
+                        answer: aiResult.firstQuestion.correctAnswer,
+                        explanation: aiResult.firstQuestion.explanation,
+                    });
+                    setCurrentTier(aiResult.firstQuestion.tier || 1);
+                    setGameState("playing");
+                    setProblemStartTime(Date.now());
+                    return;
+                }
+            } catch (err) {
+                console.error("[PRACTICE] AI session failed, falling back:", err);
+            }
+        }
+
+        // Fallback to classic mode
         const res = await getNextProblems(selectedOp);
         if (res.problems) {
             setProblemQueue(res.problems);
@@ -149,13 +206,48 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         const finalStats = [...sessionStats];
         const finalScore = score;
         const finalXP = sessionXP;
+        const avgSpeed = finalStats.length > 0
+            ? finalStats.reduce((acc, s) => acc + s.responseTime, 0) / finalStats.length
+            : 0;
 
         // If logged in, save to DB
         if (session?.user) {
             try {
-                const avgSpeed = finalStats.length > 0
-                    ? finalStats.reduce((acc, s) => acc + s.responseTime, 0) / finalStats.length
-                    : 0;
+                // End AI session first (handles tier progression)
+                if (aiSessionId) {
+                    // Capture AI analysis before ending
+                    const accuracy = finalScore / Math.max(1, totalAttempts);
+                    // Calculate actual skill points: +1 per correct, -1 per wrong
+                    const netSkillPoints = totalAttempts >= 10 ? (finalScore - (totalAttempts - finalScore)) : 0;
+                    setAiAnalysis({
+                        wasAISession: true,
+                        confidenceScore: accuracy >= 0.8 ? 0.85 : accuracy >= 0.6 ? 0.65 : 0.4,
+                        finalTiltScore: tiltScore,
+                        echoItemsResolved: echoItemsResolved,
+                        hintsGiven: hintsReceivedCount,
+                        masteryDelta: netSkillPoints,  // Now actual skill points, not percentage
+                    });
+
+                    const aiResult = await endAISession(aiSessionId, {
+                        totalQuestions: totalAttempts,
+                        correctCount: finalScore,
+                        avgLatencyMs: avgSpeed,
+                        maxStreak: maxStreak,
+                        xpEarned: finalXP,
+                    });
+
+                    if (!('error' in aiResult) && aiResult.tierProgression?.advanced) {
+                        // Tier advanced! Update local state
+                        setCurrentTier(aiResult.tierProgression.newTier);
+                        setTierAdvanced({
+                            from: aiResult.tierProgression.previousTier,
+                            to: aiResult.tierProgression.newTier,
+                        });
+                        console.log(`[AI] Tier advanced: ${aiResult.tierProgression.previousTier} → ${aiResult.tierProgression.newTier}`);
+                    }
+
+                    setAiSessionId(null);
+                }
 
                 const result = await saveSession({
                     operation: selectedOp,
@@ -182,7 +274,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
         setIsSaving(false);
         soundEngine.playComplete();
-    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState]);
+    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState, aiSessionId, maxStreak, tiltScore, echoQueueSize, hintsReceivedCount]);
 
     // Timer logic - use setInterval for reliable timing independent of state changes
     const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -224,7 +316,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     }, [gameState, isPaused]);
 
     // Handle Input
-    const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         if (isError) return;
 
@@ -248,6 +340,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             setScore(prev => prev + 1);
             setTotalAttempts(prev => prev + 1);
             setSessionXP(prev => prev + perf.xp);
+            setAiHint(null);  // Clear any hint
 
             setSessionStats(prev => [...prev, {
                 fact: problem.question || `${problem.num1}${selectedOp === 'Multiplication' ? 'x' : selectedOp === 'Addition' ? '+' : selectedOp === 'Subtraction' ? '-' : '÷'}${problem.num2}`,
@@ -263,8 +356,62 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             });
             soundEngine.playCorrect(streak + 1);
 
+            // AI Mode: With timeout fallback for smooth gameplay
+            if (aiSessionId && currentAIItem) {
+                const AI_TIMEOUT_MS = 1500; // 1.5 second timeout
+
+                try {
+                    // Race between AI and timeout
+                    const aiPromise = submitAIAnswer(aiSessionId, intVal, responseTime, false);
+                    const timeoutPromise = new Promise((_, reject) =>
+                        setTimeout(() => reject(new Error('timeout')), AI_TIMEOUT_MS)
+                    );
+
+                    const aiResult = await Promise.race([aiPromise, timeoutPromise]) as any;
+
+                    if (!('error' in aiResult)) {
+                        setTiltScore(aiResult.sessionStats.tiltScore);
+                        setEchoQueueSize(aiResult.sessionStats.echoQueueSize);
+                        setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved || 0);
+
+                        // Show feedback briefly, then update to next question
+                        setTimeout(() => {
+                            setCurrentAIItem(aiResult.nextQuestion);
+                            setProblem({
+                                question: aiResult.nextQuestion.promptText,
+                                answer: aiResult.nextQuestion.correctAnswer,
+                                explanation: aiResult.nextQuestion.explanation,
+                            });
+                            setInputValue("");
+                            setProblemStartTime(Date.now());
+                            setFeedback(null);
+                            setAttempts(0);
+                            setIsError(false);
+                        }, 200);
+                        return;
+                    }
+                } catch (err: any) {
+                    if (err?.message === 'timeout') {
+                        console.log("[AI] Timeout - using random fallback question");
+                        // Generate fallback at user's tier
+                        const fallback = generateFallbackProblem(selectedOp, currentTier);
+                        setTimeout(() => {
+                            setCurrentAIItem(null); // Clear AI item since we're using fallback
+                            setProblem(fallback);
+                            setInputValue("");
+                            setProblemStartTime(Date.now());
+                            setFeedback(null);
+                            setAttempts(0);
+                            setIsError(false);
+                        }, 200);
+                        return;
+                    }
+                    console.error("[AI] Submit failed:", err);
+                }
+            }
+
+            // Classic mode fallback
             setTimeout(() => {
-                // Next problem from queue
                 const nextQueue = [...problemQueue];
                 nextQueue.shift();
                 if (nextQueue.length < 5) fetchMoreProblems(selectedOp);
@@ -289,23 +436,47 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             setAttempts(prev => prev + 1);
             setTotalAttempts(prev => prev + 1);
             setStreak(0);
-            // Small XP penalty for incorrect answers
             setSessionXP(prev => Math.max(0, prev - 2));
             soundEngine.playIncorrect();
+
+            // AI Mode: Submit wrong answer and prefetch next question
+            if (aiSessionId && currentAIItem) {
+                const responseTime = Date.now() - problemStartTime;
+                // Submit answer and prefetch next question immediately
+                submitAIAnswer(aiSessionId, intVal, responseTime, false).then(aiResult => {
+                    if (!('error' in aiResult)) {
+                        setTiltScore(aiResult.sessionStats.tiltScore);
+                        setEchoQueueSize(aiResult.sessionStats.echoQueueSize);
+                        setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved || 0);
+                        // Prefetch next question so it's ready when user presses continue
+                        setPrefetchedQuestion({
+                            question: aiResult.nextQuestion,
+                            stats: aiResult.sessionStats
+                        });
+                        console.log("[AI] Prefetched next question");
+                    }
+                }).catch(err => console.error("[AI] Answer tracking failed:", err));
+            }
         }
     };
 
-    // Spacebar to skip logic
+    // Load continue keybind from localStorage
+    useEffect(() => {
+        const savedKey = localStorage.getItem('continueKey');
+        if (savedKey) setContinueKey(savedKey);
+    }, []);
+
+    // Continue key handler
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.code === "Space" && isError) {
+            if (e.code === continueKey && isError) {
                 e.preventDefault();
                 handleHelpNext();
             }
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isError, problemQueue, selectedOp]);
+    }, [isError, problemQueue, selectedOp, continueKey]);
 
 
     const getSymbol = () => {
@@ -317,15 +488,155 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         }
     };
 
-    const handleHelpNext = () => {
+    // Generate a random fallback problem when AI times out
+    const generateFallbackProblem = (op: Operation, tier: number): MathProblem => {
+        // Tier ranges: 1=[2-5], 2=[2-9], 3=[2-12], 4=[5-15]
+        const ranges: Record<number, [number, number]> = {
+            1: [2, 5], 2: [2, 9], 3: [2, 12], 4: [5, 15]
+        };
+        const [min, max] = ranges[tier] || [2, 9];
+
+        let a = Math.floor(Math.random() * (max - min + 1)) + min;
+        let b = Math.floor(Math.random() * (max - min + 1)) + min;
+        let answer: number;
+        let question: string;
+
+        switch (op) {
+            case 'Addition':
+                answer = a + b;
+                question = `${a} + ${b}`;
+                break;
+            case 'Subtraction':
+                // Ensure positive result
+                if (b > a) [a, b] = [b, a];
+                answer = a - b;
+                question = `${a} - ${b}`;
+                break;
+            case 'Division':
+                // Ensure clean division
+                answer = a;
+                a = a * b;
+                question = `${a} ÷ ${b}`;
+                break;
+            default: // Multiplication
+                answer = a * b;
+                question = `${a} × ${b}`;
+        }
+
+        return { question, answer, explanation: `${question} = ${answer}` };
+    };
+
+    // Format key code for display
+    const formatKeyName = (key: string) => {
+        if (key === 'Space') return 'Space';
+        if (key.startsWith('Key')) return key.replace('Key', '');
+        if (key.startsWith('Digit')) return key.replace('Digit', '');
+        if (key === 'Enter') return 'Enter';
+        if (key === 'Escape') return 'Esc';
+        return key;
+    };
+
+    // Request AI Hint on-demand (when clicking ? button)
+    const requestAIHint = async () => {
+        if (!aiSessionId || !currentAIItem || isLoadingHint) return;
+
+        setIsLoadingHint(true);
+        setIsPaused(true);
+
+        try {
+            const result = await requestAIHintAction(
+                aiSessionId,
+                inputValue,
+                Date.now() - problemStartTime,
+                problem.question,  // Pass current problem text
+                problem.answer     // Pass correct answer
+            );
+
+            if (!('error' in result)) {
+                setAiHint(result.hint);
+                setHintsReceivedCount(prev => prev + 1);
+            } else {
+                // Fallback to static explanation
+                setCurrentExplanation(problem.explanation || "No explanation available.");
+                setShowHelpModal(true);
+            }
+        } catch (err) {
+            console.error("[AI] Hint request failed:", err);
+            // Fallback to static explanation
+            setCurrentExplanation(problem.explanation || "No explanation available.");
+            setShowHelpModal(true);
+        } finally {
+            setIsLoadingHint(false);
+        }
+    };
+
+    const handleHelpNext = async () => {
         setShowHelpModal(false);
         setIsPaused(false);
         setInputValue("");
         setIsError(false);
         setFeedback(null);
         setAttempts(0);
+        setAiHint(null);
 
-        // Move to next problem
+        // AI Mode: Use prefetched question if available (instant!)
+        if (aiSessionId && prefetchedQuestion) {
+            console.log("[AI] Using prefetched question - instant load!");
+            setCurrentAIItem(prefetchedQuestion.question);
+            setProblem({
+                question: prefetchedQuestion.question.promptText,
+                answer: prefetchedQuestion.question.correctAnswer,
+                explanation: prefetchedQuestion.question.explanation,
+            });
+            setProblemStartTime(Date.now());
+            setTiltScore(prefetchedQuestion.stats.tiltScore);
+            setEchoQueueSize(prefetchedQuestion.stats.echoQueueSize);
+            setEchoItemsResolved(prefetchedQuestion.stats.echoItemsResolved || 0);
+            setPrefetchedQuestion(null); // Clear prefetch
+            return;
+        }
+
+        // AI Mode fallback: Fetch if no prefetch available (with timeout)
+        if (aiSessionId && currentAIItem) {
+            const AI_TIMEOUT_MS = 1500;
+            try {
+                console.log("[AI] No prefetch - fetching next question...");
+                const responseTime = Date.now() - problemStartTime;
+
+                const aiPromise = submitAIAnswer(aiSessionId, "", responseTime, true);
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('timeout')), AI_TIMEOUT_MS)
+                );
+
+                const aiResult = await Promise.race([aiPromise, timeoutPromise]) as any;
+
+                if (!('error' in aiResult)) {
+                    setCurrentAIItem(aiResult.nextQuestion);
+                    setProblem({
+                        question: aiResult.nextQuestion.promptText,
+                        answer: aiResult.nextQuestion.correctAnswer,
+                        explanation: aiResult.nextQuestion.explanation,
+                    });
+                    setProblemStartTime(Date.now());
+                    setTiltScore(aiResult.sessionStats.tiltScore);
+                    setEchoQueueSize(aiResult.sessionStats.echoQueueSize);
+                    setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved || 0);
+                    return;
+                }
+            } catch (err: any) {
+                if (err?.message === 'timeout') {
+                    console.log("[AI] Timeout on continue - using random fallback");
+                    const fallback = generateFallbackProblem(selectedOp, currentTier);
+                    setCurrentAIItem(null);
+                    setProblem(fallback);
+                    setProblemStartTime(Date.now());
+                    return;
+                }
+                console.error("[AI] Next question failed:", err);
+            }
+        }
+
+        // Classic mode fallback
         const nextQueue = [...problemQueue];
         nextQueue.shift();
         if (nextQueue.length < 5) fetchMoreProblems(selectedOp);
@@ -502,7 +813,10 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                             </>
                                         )}
                                     </div>
-                                    <div className="text-7xl md:text-9xl font-thin text-muted-foreground">=</div>
+                                    {/* Only show = if question doesn't already contain it */}
+                                    {(!problem.question || !problem.question.includes('=')) && (
+                                        <div className="text-7xl md:text-9xl font-thin text-muted-foreground">=</div>
+                                    )}
                                 </motion.div>
 
                                 <div className="relative w-full max-w-sm">
@@ -511,6 +825,12 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                         type="number"
                                         value={inputValue}
                                         onChange={handleInput}
+                                        onKeyDown={(e) => {
+                                            // Block 'e' and 'E' (scientific notation) in number inputs
+                                            if (['e', 'E'].includes(e.key)) {
+                                                e.preventDefault();
+                                            }
+                                        }}
                                         className={cn(
                                             "w-full border-2 rounded-3xl py-8 text-center text-6xl font-black outline-none transition-all shadow-lg",
                                             isError
@@ -520,18 +840,34 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                         placeholder="?"
                                     />
 
-                                    {isError && (
+                                    {isError && !aiHint && (
                                         <motion.button
                                             initial={{ opacity: 0, scale: 0.8 }}
                                             animate={{ opacity: 1, scale: 1 }}
                                             onClick={() => {
-                                                setIsPaused(true);
-                                                setCurrentExplanation(problem.explanation || "No explanation available.");
-                                                setShowHelpModal(true);
+                                                if (aiSessionId && currentAIItem) {
+                                                    // AI mode: request hint from Claude
+                                                    requestAIHint();
+                                                } else {
+                                                    // Classic mode: show static explanation
+                                                    setIsPaused(true);
+                                                    setCurrentExplanation(problem.explanation || "No explanation available.");
+                                                    setShowHelpModal(true);
+                                                }
                                             }}
-                                            className="absolute top-1/2 -right-20 -translate-y-1/2 p-4 bg-white/5 border border-white/10 rounded-full text-muted-foreground hover:text-white hover:bg-white/10 transition-all"
+                                            disabled={isLoadingHint}
+                                            className={cn(
+                                                "absolute top-1/2 -right-20 -translate-y-1/2 p-4 rounded-full transition-all",
+                                                isLoadingHint
+                                                    ? "bg-blue-500/20 border border-blue-500/30 text-blue-400 animate-pulse"
+                                                    : "bg-white/5 border border-white/10 text-muted-foreground hover:text-white hover:bg-white/10"
+                                            )}
                                         >
-                                            <HelpCircle size={24} />
+                                            {isLoadingHint ? (
+                                                <Brain size={24} className="animate-spin" />
+                                            ) : (
+                                                <HelpCircle size={24} />
+                                            )}
                                             <span className="sr-only">Help</span>
                                         </motion.button>
                                     )}
@@ -556,7 +892,81 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
+
+                                    {/* Press Key prompt when error (no hint yet) */}
+                                    {isError && !aiHint && (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            className="absolute -bottom-16 left-0 right-0 text-center"
+                                        >
+                                            <span className="text-sm text-muted-foreground">
+                                                Press <kbd className="px-2 py-1 bg-white/10 rounded text-xs mx-1 text-white">{formatKeyName(continueKey)}</kbd> to continue
+                                            </span>
+                                        </motion.div>
+                                    )}
                                 </div>
+
+                                {/* AI Hint Display */}
+                                <AnimatePresence>
+                                    {aiHint && isError && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -10 }}
+                                            className="mt-8 p-6 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/20 max-w-lg"
+                                        >
+                                            <div className="flex items-start gap-3">
+                                                <div className="p-2 rounded-lg bg-blue-500/20">
+                                                    <Brain size={20} className="text-blue-400" />
+                                                </div>
+                                                <div>
+                                                    <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">
+                                                        {aiHint.isLLMGenerated ? "AI Coach Hint" : "Hint"}
+                                                    </div>
+                                                    <p className="text-white/90 text-lg leading-relaxed">
+                                                        {aiHint.hintText}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-4 text-center">
+                                                <button
+                                                    onClick={handleHelpNext}
+                                                    className="text-sm text-muted-foreground hover:text-white transition-colors"
+                                                >
+                                                    Press <kbd className="px-2 py-1 bg-white/10 rounded text-xs mx-1">{formatKeyName(continueKey)}</kbd> to continue
+                                                </button>
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                {/* AI Status Indicators (subtle, bottom right) */}
+                                {aiSessionId && (
+                                    <div className="fixed bottom-4 right-4 flex items-center gap-2 text-xs">
+                                        {tiltScore > 0.5 && (
+                                            <div className={cn(
+                                                "flex items-center gap-1 px-2 py-1 rounded-full border",
+                                                tiltScore > 0.75
+                                                    ? "bg-red-500/10 border-red-500/30 text-red-400"
+                                                    : "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+                                            )}>
+                                                <AlertTriangle size={12} />
+                                                <span className="font-mono">{Math.round(tiltScore * 100)}%</span>
+                                            </div>
+                                        )}
+                                        {echoQueueSize > 0 && (
+                                            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400">
+                                                <RotateCcw size={12} />
+                                                <span className="font-mono">{echoQueueSize}</span>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-primary/10 border border-primary/30 text-primary">
+                                            <Brain size={12} />
+                                            <span className="font-bold">AI</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </motion.div>
                     )}
@@ -572,6 +982,31 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-48 bg-primary/10 rounded-full blur-[80px] -mt-24 pointer-events-none" />
 
                                 <h2 className="text-4xl font-black tracking-tight mb-8">SESSION COMPLETE</h2>
+
+                                {/* Tier Advancement Banner */}
+                                {tierAdvanced && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="mb-8 p-4 rounded-2xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30"
+                                    >
+                                        <div className="flex items-center justify-center gap-3">
+                                            <div className="text-4xl">🎉</div>
+                                            <div>
+                                                <div className="text-[10px] font-bold uppercase tracking-widest text-green-400 mb-1">
+                                                    Tier Unlocked!
+                                                </div>
+                                                <div className="text-2xl font-black text-white">
+                                                    Tier {tierAdvanced.from} → Tier {tierAdvanced.to}
+                                                </div>
+                                            </div>
+                                            <div className="text-4xl">🚀</div>
+                                        </div>
+                                        <p className="text-sm text-green-300/80 mt-2 text-center">
+                                            Complete the mastery test in the practice menu to unlock harder problems!
+                                        </p>
+                                    </motion.div>
+                                )}
 
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
                                     <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
@@ -598,7 +1033,8 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                                {/* Action Buttons - Moved between stats and AI analysis */}
+                                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
                                     <NeonButton onClick={startGame} className="w-full sm:w-auto flex items-center gap-2">
                                         <RotateCcw size={18} /> RETRY
                                     </NeonButton>
@@ -609,6 +1045,113 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                         </button>
                                     </Link>
                                 </div>
+
+                                {/* AI Analysis Section */}
+                                {aiAnalysis?.wasAISession && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 20 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.3 }}
+                                        className="mb-8 p-6 rounded-2xl bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 border border-blue-500/20 text-left"
+                                    >
+                                        <div className="flex items-center gap-2 mb-4">
+                                            <Brain size={20} className="text-blue-400" />
+                                            <h3 className="text-lg font-bold text-white">AI Learning Analysis</h3>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                            {/* Confidence */}
+                                            <div className="p-3 rounded-xl bg-white/5">
+                                                <div className="text-[9px] font-bold uppercase tracking-widest text-blue-400 mb-1">Skill Confidence</div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={cn(
+                                                                "h-full rounded-full transition-all",
+                                                                aiAnalysis.confidenceScore >= 0.8 ? "bg-green-500" :
+                                                                    aiAnalysis.confidenceScore >= 0.6 ? "bg-yellow-500" : "bg-red-500"
+                                                            )}
+                                                            style={{ width: `${aiAnalysis.confidenceScore * 100}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-sm font-mono font-bold text-white">
+                                                        {Math.round(aiAnalysis.confidenceScore * 100)}%
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Tilt Detection */}
+                                            <div className="p-3 rounded-xl bg-white/5">
+                                                <div className="text-[9px] font-bold uppercase tracking-widest text-purple-400 mb-1">Frustration Level</div>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={cn(
+                                                                "h-full rounded-full transition-all",
+                                                                aiAnalysis.finalTiltScore <= 0.3 ? "bg-green-500" :
+                                                                    aiAnalysis.finalTiltScore <= 0.6 ? "bg-yellow-500" : "bg-red-500"
+                                                            )}
+                                                            style={{ width: `${aiAnalysis.finalTiltScore * 100}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-sm font-mono font-bold text-white">
+                                                        {aiAnalysis.finalTiltScore <= 0.3 ? "😊" : aiAnalysis.finalTiltScore <= 0.6 ? "😐" : "😓"}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            {/* Skill Points Earned */}
+                                            <div className="p-3 rounded-xl bg-white/5">
+                                                <div className="text-[9px] font-bold uppercase tracking-widest text-pink-400 mb-1">Skill Points</div>
+                                                <div className={cn(
+                                                    "text-2xl font-black",
+                                                    aiAnalysis.masteryDelta > 0 ? "text-green-400" :
+                                                        aiAnalysis.masteryDelta < 0 ? "text-red-400" : "text-white"
+                                                )}>
+                                                    {aiAnalysis.masteryDelta > 0 ? "+" : ""}{aiAnalysis.masteryDelta}
+                                                    {totalAttempts < 10 && <span className="text-xs text-muted-foreground ml-1">Need 10+ Questions</span>}
+                                                </div>
+                                            </div>
+
+                                            {/* Hints Given */}
+                                            <div className="p-3 rounded-xl bg-white/5">
+                                                <div className="text-[9px] font-bold uppercase tracking-widest text-cyan-400 mb-1">AI Hints Used</div>
+                                                <div className="text-2xl font-black text-white">
+                                                    {aiAnalysis.hintsGiven}
+                                                </div>
+                                            </div>
+
+                                            {/* Echo Items */}
+                                            <div className="p-3 rounded-xl bg-white/5">
+                                                <div className="text-[9px] font-bold uppercase tracking-widest text-orange-400 mb-1">Facts Reinforced</div>
+                                                <div className="text-2xl font-black text-white">
+                                                    {aiAnalysis.echoItemsResolved}
+                                                </div>
+                                            </div>
+
+                                            {/* Current Tier */}
+                                            <div className="p-3 rounded-xl bg-white/5">
+                                                <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 mb-1">Current Tier</div>
+                                                <div className="text-2xl font-black text-white flex items-center gap-2">
+                                                    Tier {currentTier}
+                                                    {tierAdvanced && <span className="text-green-400 text-sm">⬆</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Summary Message */}
+                                        <div className="mt-4 pt-4 border-t border-white/10">
+                                            <p className="text-sm text-white/70">
+                                                {aiAnalysis.confidenceScore >= 0.8
+                                                    ? "🌟 Excellent work! Your skills are progressing well and the AI is confident in your mastery."
+                                                    : aiAnalysis.confidenceScore >= 0.6
+                                                        ? "👍 Good effort! Keep practicing to strengthen these skills further."
+                                                        : "💪 Keep going! The AI will continue to adapt and help you improve."
+                                                }
+                                            </p>
+                                        </div>
+                                    </motion.div>
+                                )}
                             </GlassCard>
                         </motion.div>
                     )}

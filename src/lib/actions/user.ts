@@ -23,45 +23,35 @@ export async function getDashboardStats() {
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
 
     // Tiers map
-    const userTiers = user?.math_tiers || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    let userTiers = user?.math_tiers;
+    if (typeof userTiers === 'string') {
+        try { userTiers = JSON.parse(userTiers); } catch { userTiers = null; }
+    }
+    userTiers = userTiers || { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
+
+    // Skill points for tier completion bar
+    let skillPoints = user?.skill_points;
+    if (typeof skillPoints === 'string') {
+        try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+    }
+    skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
 
     // Calculate mastery % for each op
-    // We blend "Real Mastery" (facts mastered) with "Tier Progress" (placement result)
-    // to give immediate feedback.
+    // Simple system: 100 skill points = 100% tier completion
     const ops = ["Addition", "Subtraction", "Multiplication", "Division"];
     const masteryMap = ops.map(op => {
         const opLower = op.toLowerCase();
-        const opMastery = userMastery.filter((m: any) => m.operation.toLowerCase() === opLower);
-
-        // Calculate progress based on total mastery points earned
-        // Each fact can have mastery 0-5, assume 50 facts per tier, 5 mastery each = 250 max points per tier
-        // But for simpler feedback: count total mastery points / expected points for meaningful progress
-        const totalMasteryPoints = opMastery.reduce((acc: number, m: any) => acc + (m.mastery_level || 0), 0);
-        // 25 facts with avg mastery of 2 = 50 points per 25% tier progress
-        // So let's say 100 points = 100% tier progress for simpler math
-        const realProgress = Math.min(100, Math.round(totalMasteryPoints));
-
-        // Tier Implied Progress
-        // Tier 4 = 75% start (Simulated mastery of tiers 1-3)
-        // Tier 3 = 50% start
-        // Tier 2 = 25% start
-        // Tier 1 = 0% start
         const tier = userTiers[opLower] || 1;
-        const tierBase = (tier - 1) * 25;
+        const points = skillPoints[opLower] || 0;
 
-        // Calculate progress WITHIN the current tier
-        // realProgress is now mastery points earned, which directly contributes to bar fill
-        // Scale: 100 mastery points fills 100% of a tier
-        const effectiveProgress = Math.min(100, tierBase + realProgress);
-
-        // now scale it to 0-100 for just this tier
-        // range of current tier is [tierBase, tierBase + 25]
-        const progressInTier = Math.round(Math.min(100, Math.max(0, (effectiveProgress - tierBase) / 25 * 100)));
+        // Progress is percentage of 100 points needed to complete tier
+        // Each tier requires 100 points to complete
+        const progress = Math.min(100, Math.round(points));
 
         return {
             title: op,
             tier: tier,
-            progress: progressInTier
+            progress: progress
         };
     });
 
@@ -137,6 +127,7 @@ export async function getDashboardStats() {
         equippedTitle,
         userRank: userRank > 0 ? userRank : null, // null if not in league yet
         recentSessions: userSessions.slice(-5).reverse(), // Limit to last 5
+        totalSessions: userSessions.length, // Full count
         masteryMap,
         careerStats: {
             lifetimeAccuracy: careerAccuracy,
@@ -195,5 +186,98 @@ export async function getOperationDetails(operation: string) {
         totalPlays: opSessions.length,
         missedProblems,
         trend
+    };
+}
+
+/**
+ * Get detailed operation stats for graphs and modal view
+ */
+export async function getOperationStats(operation: string) {
+    const session = await auth();
+    if (!session?.user) return null;
+    const userId = (session.user as any).id;
+
+    const db = loadData();
+    const opLower = operation.toLowerCase();
+
+    // Get all sessions for this operation
+    const opSessions = (db.sessions as any[])
+        .filter((s: any) => s.user_id === userId && s.operation?.toLowerCase() === opLower)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    // Session logs (last 50)
+    const sessionLogs = opSessions.slice(-50).map((s, idx) => ({
+        index: idx + 1,
+        date: s.created_at,
+        speed: s.avg_speed || 0,
+        accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
+        correct: s.correct_count || 0,
+        total: s.total_count || 0,
+        xp: s.xp_earned || 0,
+    }));
+
+    // Group by day (last 30 days)
+    const dailyMap = new Map<string, { total: number; correct: number; speed: number; count: number }>();
+    opSessions.forEach(s => {
+        const day = new Date(s.created_at).toISOString().split('T')[0];
+        const existing = dailyMap.get(day) || { total: 0, correct: 0, speed: 0, count: 0 };
+        dailyMap.set(day, {
+            total: existing.total + (s.total_count || 0),
+            correct: existing.correct + (s.correct_count || 0),
+            speed: existing.speed + (s.avg_speed || 0),
+            count: existing.count + 1,
+        });
+    });
+
+    const dailyActivity = Array.from(dailyMap.entries())
+        .map(([day, data]) => ({
+            date: day,
+            accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+            avgSpeed: data.count > 0 ? data.speed / data.count : 0,
+            sessions: data.count,
+        }))
+        .slice(-30);
+
+    // Group by month (last 12 months)
+    const monthlyMap = new Map<string, { total: number; correct: number; speed: number; count: number }>();
+    opSessions.forEach(s => {
+        const month = new Date(s.created_at).toISOString().slice(0, 7); // YYYY-MM
+        const existing = monthlyMap.get(month) || { total: 0, correct: 0, speed: 0, count: 0 };
+        monthlyMap.set(month, {
+            total: existing.total + (s.total_count || 0),
+            correct: existing.correct + (s.correct_count || 0),
+            speed: existing.speed + (s.avg_speed || 0),
+            count: existing.count + 1,
+        });
+    });
+
+    const monthlyActivity = Array.from(monthlyMap.entries())
+        .map(([month, data]) => ({
+            month,
+            accuracy: data.total > 0 ? (data.correct / data.total) * 100 : 0,
+            avgSpeed: data.count > 0 ? data.speed / data.count : 0,
+            sessions: data.count,
+        }))
+        .slice(-12);
+
+    // Top speeds (fastest 10 sessions by avg_speed)
+    const topSpeeds = [...opSessions]
+        .filter(s => s.avg_speed && s.avg_speed > 0)
+        .sort((a, b) => a.avg_speed - b.avg_speed)
+        .slice(0, 10)
+        .map((s, idx) => ({
+            rank: idx + 1,
+            date: s.created_at,
+            speed: s.avg_speed,
+            accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
+        }));
+
+    return {
+        operation: operation.charAt(0).toUpperCase() + operation.slice(1),
+        sessionLogs,
+        dailyActivity,
+        monthlyActivity,
+        topSpeeds,
+        totalSessions: opSessions.length,
     };
 }
