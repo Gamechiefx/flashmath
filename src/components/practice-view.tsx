@@ -1034,7 +1034,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                 </div>
 
                                 {/* Action Buttons - Moved between stats and AI analysis */}
-                                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
+                                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-4">
                                     <NeonButton onClick={startGame} className="w-full sm:w-auto flex items-center gap-2">
                                         <RotateCcw size={18} /> RETRY
                                     </NeonButton>
@@ -1045,6 +1045,28 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                         </button>
                                     </Link>
                                 </div>
+
+                                {/* Sign Up Prompt for non-authenticated users */}
+                                {!session && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: 0.4 }}
+                                        className="mb-8 p-6 rounded-2xl bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border border-primary/20 text-center"
+                                    >
+                                        <div className="text-lg font-bold text-white mb-2">
+                                            🎉 Enjoyed that? There's so much more!
+                                        </div>
+                                        <p className="text-sm text-muted-foreground mb-4">
+                                            Sign up to track your progress, compete on leaderboards, unlock achievements, and level up your skills.
+                                        </p>
+                                        <Link href="/auth/register">
+                                            <button className="px-8 py-3 rounded-xl font-black uppercase tracking-widest border border-primary/30 hover:border-primary/50 bg-gradient-to-r from-primary/20 to-accent/20 transition-all text-primary">
+                                                Sign Up — It's Free!
+                                            </button>
+                                        </Link>
+                                    </motion.div>
+                                )}
 
                                 {/* AI Analysis Section */}
                                 {aiAnalysis?.wasAISession && (

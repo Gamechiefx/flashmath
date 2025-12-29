@@ -147,6 +147,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         (session.user as any).emailVerified = !!user.email_verified;
                         (session.user as any).createdAt = user.created_at;
 
+                        // Update last_active timestamp for online tracking
+                        const db = getDatabase();
+                        db.prepare("UPDATE users SET last_active = ? WHERE id = ?").run(now(), user.id);
+
                         // Lookup equipped title name from database
                         const titleId = user.equipped_items?.title;
                         if (titleId && titleId !== 'default') {

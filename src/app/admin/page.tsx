@@ -4,7 +4,7 @@ import { Item } from "@/lib/items";
 import { ItemEditorRow } from "@/components/admin/item-editor-row";
 import { GlassCard } from "@/components/ui/glass-card";
 import Link from "next/link";
-import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { forceSeedShop } from "@/lib/actions/seed";
 import { NeonButton } from "@/components/ui/neon-button";
 import { UserManager } from "@/components/admin/user-manager";
@@ -12,6 +12,7 @@ import { AdminSection } from "@/components/admin/admin-section";
 import { PriceGuide } from "@/components/admin/price-guide";
 import { SeedButton } from "@/components/admin/seed-button";
 import { SystemControls } from "@/components/admin/system-controls";
+import { OnlinePlayers } from "@/components/admin/online-players";
 import { getAllSystemSettings } from "@/lib/actions/system";
 import { Role, parseRole, hasPermission, Permission, ROLE_LABELS } from "@/lib/rbac";
 
@@ -47,6 +48,15 @@ export default async function AdminPage() {
     // Get system settings
     const systemSettings = await getAllSystemSettings();
 
+    // Count online players (users active in the last 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const onlineCount = db.prepare(`
+        SELECT COUNT(*) as count
+        FROM users
+        WHERE last_active > ?
+    `).get(fiveMinutesAgo) as { count: number };
+    const playersOnline = onlineCount?.count || 0;
+
     return (
         <div className="min-h-screen bg-background text-foreground p-8">
             <div className="max-w-6xl mx-auto space-y-8">
@@ -60,6 +70,10 @@ export default async function AdminPage() {
                     <span className="ml-2 px-3 py-1 text-xs font-bold uppercase rounded-full bg-primary/10 text-primary">
                         {ROLE_LABELS[currentUserRole]}
                     </span>
+
+                    {/* Online Players Badge - Live updating */}
+                    <OnlinePlayers initialCount={playersOnline} />
+
                     {canSeedDatabase && (
                         <div className="ml-auto">
                             <SeedButton />

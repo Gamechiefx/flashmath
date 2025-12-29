@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- Timestamps
     created_at TEXT NOT NULL,
-    updated_at TEXT
+    updated_at TEXT,
+    last_active TEXT
 );
 
 -- Sessions table (for session management)

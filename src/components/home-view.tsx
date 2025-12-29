@@ -90,7 +90,7 @@ export function HomeView({ session, maintenanceMode = false, maintenanceMessage 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                         {/* Quick Practice - always available */}
                         <Link href="/practice">
-                            <NeonButton className="px-8">
+                            <NeonButton className="px-8 shadow-[0_0_30px_rgba(34,211,238,0.4)] hover:shadow-[0_0_40px_rgba(34,211,238,0.6)]">
                                 <span className="flex items-center gap-2 whitespace-nowrap">
                                     Quick Practice
                                     <Play className="fill-current" size={18} />
@@ -106,25 +106,43 @@ export function HomeView({ session, maintenanceMode = false, maintenanceMessage 
                                 </button>
                             </Link>
                         ) : maintenanceMode ? (
-                            /* Sign In disabled during maintenance */
+                            /* Auth disabled during maintenance */
                             <div className="relative group">
                                 <button
                                     disabled
                                     className="px-8 py-4 rounded-xl font-bold border border-foreground/10 bg-foreground/5 text-muted-foreground/50 flex items-center gap-2 cursor-not-allowed"
                                 >
-                                    Sign In
+                                    Sign Up
                                     <ArrowRight size={18} />
                                 </button>
                                 <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-black/90 text-yellow-400 text-xs px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-yellow-500/30">
                                     <AlertTriangle size={12} className="inline mr-1" />
-                                    Sign-in disabled during maintenance
+                                    Registration disabled during maintenance
                                 </div>
                             </div>
                         ) : (
-                            <Link href="/auth/login">
-                                <button className="px-8 py-4 rounded-xl font-bold border border-foreground/10 hover:bg-foreground/5 transition-all text-foreground flex items-center gap-2">
-                                    Sign In
-                                    <ArrowRight size={18} />
+                            /* Sign Up button with shimmer */
+                            <Link href="/auth/register">
+                                <button className="px-8 py-4 rounded-xl font-black uppercase tracking-widest border border-primary/30 hover:border-primary/50 bg-gradient-to-r from-primary/10 to-accent/10 transition-all flex items-center gap-2">
+                                    <motion.span
+                                        animate={{
+                                            backgroundPosition: ["200% center", "-200% center"],
+                                        }}
+                                        transition={{
+                                            duration: 3,
+                                            repeat: Infinity,
+                                            ease: "linear"
+                                        }}
+                                        style={{
+                                            backgroundImage: "linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 25%, #ffffff 50%, var(--color-accent) 75%, var(--color-primary) 100%)",
+                                            backgroundSize: "200% auto",
+                                            WebkitBackgroundClip: "text",
+                                            WebkitTextFillColor: "transparent",
+                                        }}
+                                    >
+                                        Sign Up
+                                    </motion.span>
+                                    <ArrowRight size={18} className="text-primary" />
                                 </button>
                             </Link>
                         )}

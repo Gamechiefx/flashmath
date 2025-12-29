@@ -113,7 +113,7 @@ export async function loginUser(formData: FormData) {
                     if (lockResult.locked) {
                         return { error: "Too many failed attempts. Account locked for 15 minutes." };
                     }
-                    return { error: `Invalid credentials. ${lockResult.attemptsRemaining} attempts remaining.` };
+                    return { error: "Invalid email or password." };
                 case "CallbackRouteError":
                     // Sometimes the ban error comes through here if thrown in authorize
                     if (error.message.includes("Account suspended")) {

@@ -100,9 +100,31 @@ export default function LoginPage() {
                             </div>
                         </div>
 
-                        <NeonButton className="w-full mt-4" type="submit" disabled={loading}>
-                            {loading ? "AUTHENTICATING..." : "LOGIN"}
-                        </NeonButton>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full mt-4 relative py-4 px-8 rounded-xl font-black uppercase tracking-widest overflow-hidden bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 hover:border-primary/50 transition-all disabled:opacity-50"
+                        >
+                            <motion.span
+                                animate={{
+                                    backgroundPosition: ["200% center", "-200% center"],
+                                }}
+                                transition={{
+                                    duration: 3,
+                                    repeat: Infinity,
+                                    ease: "linear"
+                                }}
+                                style={{
+                                    backgroundImage: "linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 25%, #ffffff 50%, var(--color-accent) 75%, var(--color-primary) 100%)",
+                                    backgroundSize: "200% auto",
+                                    WebkitBackgroundClip: "text",
+                                    WebkitTextFillColor: "transparent",
+                                }}
+                                className="inline-block"
+                            >
+                                {loading ? "AUTHENTICATING..." : "SIGN IN"}
+                            </motion.span>
+                        </button>
                     </form>
 
                     {/* OAuth Separator */}

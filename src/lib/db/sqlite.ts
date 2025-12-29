@@ -92,6 +92,16 @@ function initializeSchema() {
         }
     }
 
+    // Add last_active column for tracking online users
+    try {
+        database.exec("ALTER TABLE users ADD COLUMN last_active TEXT");
+        console.log('[SQLite] Added last_active column');
+    } catch (e: any) {
+        if (!e.message.includes('duplicate column')) {
+            // Expected if column already exists
+        }
+    }
+
     // Ensure security_activity table exists
     database.exec(`
         CREATE TABLE IF NOT EXISTS security_activity (
