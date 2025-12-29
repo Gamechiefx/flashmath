@@ -62,8 +62,11 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
     }, [itemModalUser, shopItems.length]);
 
     // Sorting state
-    const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp" | "coins">("created_at");
+    const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp" | "coins" | "status" | "role">("created_at");
     const [sortAsc, setSortAsc] = useState(false); // Default: newest first
+
+    // Helper to check if user is banned
+    const isBannedUser = (u: User) => u.is_banned || (u.banned_until && new Date(u.banned_until) > new Date());
 
     // Filter and sort users
     const filteredUsers = users
@@ -86,6 +89,17 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                     break;
                 case 'coins':
                     comparison = (a.coins || 0) - (b.coins || 0);
+                    break;
+                case 'status':
+                    // Banned users sorted after active (ascending) or before (descending)
+                    comparison = (isBannedUser(a) ? 1 : 0) - (isBannedUser(b) ? 1 : 0);
+                    break;
+                case 'role':
+                    // Sort by role hierarchy (higher roles first when descending)
+                    const roleOrder = { 'super_admin': 4, 'admin': 3, 'mod': 2, 'user': 1 };
+                    const aRole = parseRole(a.role, !!a.is_admin);
+                    const bRole = parseRole(b.role, !!b.is_admin);
+                    comparison = (roleOrder[aRole] || 0) - (roleOrder[bRole] || 0);
                     break;
             }
             return sortAsc ? comparison : -comparison;
@@ -455,6 +469,8 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                         >
                             <option value="created_at">Created</option>
                             <option value="name">Name</option>
+                            <option value="role">Role</option>
+                            <option value="status">Status</option>
                             <option value="xp">XP</option>
                             <option value="coins">Coins</option>
                         </select>
@@ -498,6 +514,11 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                             <div className="font-bold text-white">{user.name || "Unknown"}</div>
                                             <div className="text-xs text-muted-foreground font-mono">{user.id}</div>
                                             {user.email && <div className="text-xs text-muted-foreground">{user.email}</div>}
+                                            {user.created_at && (
+                                                <div className="text-[10px] text-muted-foreground/60 mt-1">
+                                                    Joined {new Date(user.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="p-4 relative z-30">
                                             <RoleManager
