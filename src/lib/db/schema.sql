@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS users (
     failed_login_attempts INTEGER DEFAULT 0,
     locked_until TEXT,
     
+    -- Arena stats
+    arena_elo INTEGER DEFAULT 1000,
+    arena_wins INTEGER DEFAULT 0,
+    arena_losses INTEGER DEFAULT 0,
+    
     -- 2FA
     two_factor_enabled INTEGER DEFAULT 0,
     two_factor_secret TEXT,
@@ -265,3 +270,22 @@ CREATE INDEX IF NOT EXISTS idx_learner_sessions_user ON learner_sessions(user_id
 CREATE INDEX IF NOT EXISTS idx_echo_queue_user ON echo_queue(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_skill_mastery_user ON skill_mastery(user_id);
 
+-- Arena Matches history
+CREATE TABLE IF NOT EXISTS arena_matches (
+    id TEXT PRIMARY KEY,
+    winner_id TEXT NOT NULL,
+    loser_id TEXT NOT NULL,
+    winner_score INTEGER NOT NULL,
+    loser_score INTEGER NOT NULL,
+    operation TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    winner_elo_change INTEGER DEFAULT 0,
+    loser_elo_change INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (winner_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (loser_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_arena_matches_winner ON arena_matches(winner_id);
+CREATE INDEX IF NOT EXISTS idx_arena_matches_loser ON arena_matches(loser_id);
+CREATE INDEX IF NOT EXISTS idx_arena_matches_created ON arena_matches(created_at);

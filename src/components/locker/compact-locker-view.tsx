@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Item, ItemType, RARITY_COLORS } from "@/lib/items";
+import { motion, AnimatePresence } from "framer-motion";
+import { Item, ItemType, RARITY_COLORS, Rarity } from "@/lib/items";
 import { GlassCard } from "@/components/ui/glass-card";
-import { Shield, ChevronDown, Check, X } from "lucide-react";
+import { Shield, ChevronDown, Check, X, Sparkles } from "lucide-react";
 import { equipItem } from "@/lib/actions/shop";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useItemPreview } from "@/components/item-preview-provider";
+import { cn } from "@/lib/utils";
 
 interface CompactLockerItemProps {
     item: Item;
@@ -15,9 +17,10 @@ interface CompactLockerItemProps {
     type: string;
     onEquip: (itemId: string, type: string) => void;
     isLoading: boolean;
+    index?: number;
 }
 
-function CompactLockerItem({ item, isEquipped, type, onEquip, isLoading }: CompactLockerItemProps) {
+function CompactLockerItem({ item, isEquipped, type, onEquip, isLoading, index = 0 }: CompactLockerItemProps) {
     const { setPreviewItem } = useItemPreview();
     const Icon = item.icon || Shield;
 
@@ -47,36 +50,68 @@ function CompactLockerItem({ item, isEquipped, type, onEquip, isLoading }: Compa
         uncommon: "hover:shadow-[0_0_15px_rgba(34,197,94,0.2)]",
         rare: "hover:shadow-[0_0_15px_rgba(59,130,246,0.2)]",
         epic: "hover:shadow-[0_0_15px_rgba(147,51,234,0.2)]",
-        legendary: "hover:shadow-[0_0_15px_rgba(245,158,11,0.3)]",
+        legendary: "hover:shadow-[0_0_20px_rgba(245,158,11,0.4)]",
     }[item.rarity] || "";
 
     return (
-        <button
+        <motion.button
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{
+                duration: 0.3,
+                delay: index * 0.03,
+                ease: "easeOut"
+            }}
+            whileHover={{ scale: 1.05, y: -2 }}
+            whileTap={{ scale: 0.95 }}
             onClick={() => !isLoading && onEquip(item.id, type)}
             disabled={isLoading}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            className={`
-                relative p-2 rounded-lg border transition-all text-left w-full
-                ${rarityBg} ${rarityGlow}
-                ${isEquipped
+            className={cn(
+                "relative p-2 rounded-lg border transition-all text-left w-full group",
+                rarityBg, rarityGlow,
+                isEquipped
                     ? "border-accent shadow-[0_0_20px_rgba(34,211,238,0.3)] ring-1 ring-accent/50 hover:border-red-500/50 hover:shadow-[0_0_20px_rgba(239,68,68,0.3)]"
-                    : "hover:bg-white/5 cursor-pointer"
-                }
-                ${isLoading ? "opacity-50 cursor-wait" : ""}
-            `}
+                    : "hover:bg-white/5 cursor-pointer",
+                isLoading && "opacity-50 cursor-wait"
+            )}
         >
-            {/* Equipped checkmark */}
-            {isEquipped && (
-                <div className="absolute -top-1 -right-1 w-5 h-5 bg-accent group-hover:bg-red-500 rounded-full flex items-center justify-center shadow-lg">
-                    <Check size={12} className="text-black" strokeWidth={3} />
+            {/* Legendary sparkle effect */}
+            {item.rarity === Rarity.LEGENDARY && (
+                <div className="absolute inset-0 overflow-hidden rounded-lg pointer-events-none">
+                    <div className="absolute inset-0 bg-gradient-to-r from-amber-500/0 via-amber-500/20 to-amber-500/0 animate-banner-shimmer" />
                 </div>
             )}
 
-            <div className="flex items-center gap-2">
-                <div className={`p-1.5 rounded-md ${RARITY_COLORS[item.rarity].split(' ')[0]} bg-black/20`}>
+            {/* Equipped checkmark */}
+            <AnimatePresence>
+                {isEquipped && (
+                    <motion.div
+                        initial={{ scale: 0, rotate: -180 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        exit={{ scale: 0, rotate: 180 }}
+                        className="absolute -top-1 -right-1 w-5 h-5 bg-accent group-hover:bg-red-500 rounded-full flex items-center justify-center shadow-lg transition-colors z-10"
+                    >
+                        <Check size={12} className="text-black" strokeWidth={3} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            <div className="flex items-center gap-2 relative z-10">
+                <motion.div
+                    whileHover={{ rotate: [0, -10, 10, 0] }}
+                    transition={{ duration: 0.3 }}
+                    className={cn(
+                        "p-1.5 rounded-md bg-black/20",
+                        RARITY_COLORS[item.rarity].split(' ')[0]
+                    )}
+                >
                     <Icon size={16} />
-                </div>
+                    {item.rarity === Rarity.LEGENDARY && (
+                        <Sparkles size={8} className="absolute -top-0.5 -right-0.5 text-amber-400 animate-pulse" />
+                    )}
+                </motion.div>
                 <div className="flex-1 min-w-0">
                     <div
                         className="text-xs font-medium truncate"
@@ -86,7 +121,7 @@ function CompactLockerItem({ item, isEquipped, type, onEquip, isLoading }: Compa
                     </div>
                 </div>
             </div>
-        </button>
+        </motion.button>
     );
 }
 
@@ -161,22 +196,33 @@ function LockerAccordion({ category, items, equipped, onEquip, loadingItem, defa
                 </div>
             </div>
 
-            {isOpen && (
-                <div className="p-3 bg-black/20">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-                        {sortedItems.map(item => (
-                            <CompactLockerItem
-                                key={item.id}
-                                item={item}
-                                isEquipped={equipped[category] === item.id}
-                                type={category}
-                                onEquip={onEquip}
-                                isLoading={loadingItem === item.id}
-                            />
-                        ))}
-                    </div>
-                </div>
-            )}
+            <AnimatePresence>
+                {isOpen && (
+                    <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeInOut" }}
+                        className="overflow-hidden"
+                    >
+                        <div className="p-3 bg-black/20">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+                                {sortedItems.map((item, index) => (
+                                    <CompactLockerItem
+                                        key={item.id}
+                                        item={item}
+                                        isEquipped={equipped[category] === item.id}
+                                        type={category}
+                                        onEquip={onEquip}
+                                        isLoading={loadingItem === item.id}
+                                        index={index}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

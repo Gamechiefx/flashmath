@@ -290,19 +290,19 @@ export const execute = (text: string, params: any[] = []): { changes: number } =
 export const initSchema = () => {
     const database = ensureDb();
 
-    // Seed shop items if empty
-    const itemCount = database.prepare('SELECT COUNT(*) as count FROM shop_items').get() as { count: number };
-    if (itemCount.count === 0) {
-        const insertItem = database.prepare(`
-            INSERT INTO shop_items (id, name, description, type, rarity, price, asset_value)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
+    // Sync shop items from static definition to database
+    const insertItem = database.prepare(`
+        INSERT OR REPLACE INTO shop_items (id, name, description, type, rarity, price, asset_value)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
 
+    database.transaction(() => {
         for (const item of ITEMS) {
             insertItem.run(item.id, item.name, item.description, item.type, item.rarity, item.price, item.assetValue);
         }
-        console.log(`[DB] Seeded ${ITEMS.length} items into database.`);
-    }
+    })();
+    console.log(`[DB] Synced ${ITEMS.length} shop items to database.`);
+
 };
 
 // Initialize on module load

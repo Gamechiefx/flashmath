@@ -145,7 +145,7 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
 
     // 1. INPUT LISTENER EFFECT
     useEffect(() => {
-        const allowedPaths = ['/practice', '/placement', '/shop', '/locker'];
+        const allowedPaths = ['/practice', '/placement', '/shop', '/locker', '/arena'];
         if (effectType === 'default' || !allowedPaths.some(p => pathname.includes(p))) return;
 
         const handleInput = (e: KeyboardEvent) => {

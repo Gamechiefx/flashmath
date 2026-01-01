@@ -56,9 +56,14 @@ export default async function LockerPage() {
                         </div>
                     </div>
 
-                    <Link href="/shop">
-                        <NeonButton variant="accent" className="text-sm">Visit Shop</NeonButton>
-                    </Link>
+                    <div className="flex gap-3">
+                        <Link href="/locker/banner">
+                            <NeonButton variant="primary" className="text-sm">Customize Banner</NeonButton>
+                        </Link>
+                        <Link href="/shop">
+                            <NeonButton variant="accent" className="text-sm">Visit Shop</NeonButton>
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Compact Locker View */}

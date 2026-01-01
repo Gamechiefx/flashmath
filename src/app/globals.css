@@ -59,6 +59,17 @@ body {
   min-height: 100vh;
 }
 
+/* Hide number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
 /* Theme Overrides */
 .theme-matrix {
   --background: #000000;
@@ -168,6 +179,168 @@ body {
   --glass-bg: rgba(46, 16, 101, 0.8);
   --glass-border: rgba(236, 72, 153, 0.3);
   --muted-foreground: #c084fc;
+}
+
+/* Arena UI Optimized Animations */
+@keyframes float-particle {
+  0% {
+    transform: translateY(100vh) rotate(0deg);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 0.6;
+  }
+
+  80% {
+    opacity: 0.6;
+  }
+
+  100% {
+    transform: translateY(-100px) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+@keyframes stripe-flow {
+  from {
+    background-position: 0 0;
+  }
+
+  to {
+    background-position: 60px 0;
+  }
+}
+
+@keyframes shine {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(200%);
+  }
+}
+
+.animate-float-particle {
+  animation: float-particle linear infinite;
+}
+
+.animate-stripe-flow {
+  animation: stripe-flow 3s linear infinite;
+}
+
+.animate-shine {
+  animation: shine 1.5s ease-in-out infinite;
+}
+
+/* ========================================
+   Arena Banner Animations
+   ======================================== */
+
+/* Caution - Diagonal stripes scrolling */
+@keyframes banner-stripe-scroll {
+  from {
+    background-position: 0 0;
+  }
+
+  to {
+    background-position: 60px 60px;
+  }
+}
+
+/* Matrices - Matrix rain dots */
+@keyframes banner-matrix-rain {
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 0 100px;
+  }
+}
+
+/* Synthwave - Horizontal scan lines */
+@keyframes banner-scan-lines {
+  0% {
+    background-position: 0 0;
+  }
+
+  100% {
+    background-position: 0 20px;
+  }
+}
+
+/* Royal - Shimmer sweep */
+@keyframes banner-shimmer {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Legendary - Sparkle pulse */
+@keyframes banner-sparkle {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+/* Plasma - Gradient wave */
+@keyframes banner-plasma {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-banner-stripe-scroll {
+  animation: banner-stripe-scroll 2s linear infinite;
+}
+
+.animate-banner-matrix-rain {
+  animation: banner-matrix-rain 3s linear infinite;
+}
+
+.animate-banner-scan-lines {
+  animation: banner-scan-lines 0.5s linear infinite;
+}
+
+.animate-banner-shimmer {
+  animation: banner-shimmer 3s ease-in-out infinite;
+}
+
+.animate-banner-sparkle {
+  animation: banner-sparkle 2s ease-in-out infinite;
+}
+
+.animate-banner-plasma {
+  animation: banner-plasma 4s ease-in-out infinite;
+  background-size: 200% 200%;
 }
 
 @layer utilities {

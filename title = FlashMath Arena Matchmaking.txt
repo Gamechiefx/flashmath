@@ -1,0 +1,202 @@
+title = "FlashMath Arena Matchmaking System"
+version = "1.0"
+status = "Authoritative Specification"
+philosophy = "Practice-first, skill-gated, performance-ranked matchmaking"
+
+[overview]
+description = """
+FlashMath matchmaking is designed to ensure fair, skill-appropriate, and educationally
+sound Arena matches. The system prioritizes demonstrated learning ability from Practice
+sessions before allowing competitive comparisons through Arena play.
+
+Matchmaking is intentionally layered. Practice measures a player’s ability, Arena measures
+their performance under pressure, and ELO ranks that performance relative to peers.
+
+No Arena match may occur without satisfying practice-based eligibility requirements.
+"""
+
+core_principle = """
+Practice measures ability.
+Arena measures performance.
+Ability gates competition.
+Performance determines ranking.
+"""
+
+[practice_tier_system]
+description = """
+Practice Tier is the foundational signal for matchmaking eligibility. It represents a
+player’s demonstrated fluency in arithmetic without time pressure, competition, or stress.
+
+Practice Tier is immutable during Arena play and may only be increased or decreased through
+Practice sessions.
+"""
+
+immutable_during_arena = true
+operation_specific = true
+
+tiers_definition = """
+Each arithmetic operation (addition, subtraction, multiplication, division) maintains its
+own Practice Tier. Arena matchmaking uses the lowest relevant operation tier required by the
+selected game mode to prevent skill masking.
+"""
+
+tier_ranges = """
+Bronze: 0–299
+Silver: 300–599
+Gold: 600–799
+Platinum: 800–949
+Diamond: 950–1000
+"""
+
+tier_stability_rules = """
+Practice Tier progression is slow, deliberate, and resistant to short-term variance.
+High-volume practice with consistent accuracy is required to advance tiers.
+"""
+
+[arena_eligibility]
+description = """
+Arena access is gated by Practice Tier eligibility. Players must meet minimum tier
+requirements before entering any competitive matchmaking queue.
+"""
+
+general_requirements = """
+- Minimum Practice Tier met for selected mode
+- Recent practice activity present
+- Practice accuracy above instability threshold
+"""
+
+mode_specific_requirements = """
+More complex Arena modes require higher Practice Tier thresholds. This prevents cognitive
+overload and ensures that Arena difficulty scales with demonstrated ability.
+"""
+
+[matchmaking_pipeline]
+description = """
+Matchmaking occurs in a strict, multi-stage pipeline. A player must pass every stage
+sequentially to be matched into an Arena game.
+"""
+
+pipeline_order = """
+1. Practice Tier Compatibility Filter
+2. Mode Eligibility Validation
+3. ELO Proximity Search
+4. Latency and Region Check
+5. Final Match Assembly
+"""
+
+[practice_tier_filter]
+description = """
+Practice Tier is the primary and non-negotiable filter for matchmaking. Players are only
+eligible to face opponents within a narrow Practice Tier range to ensure fair cognitive
+competition.
+"""
+
+allowed_tier_delta = """
+Players may only match with opponents whose Practice Tier is within ±1 tier of their own.
+
+Example:
+- Silver II players may match with Silver I, Silver II, or Silver III
+- Gold I players may match with Silver III, Gold I, or Gold II
+"""
+
+non_bypassable = """
+High ELO does not override Practice Tier restrictions. A player may never match outside
+the allowed tier delta regardless of Arena rank.
+"""
+
+[elo_role]
+description = """
+ELO is a secondary matchmaking factor used only after Practice Tier compatibility is
+confirmed. ELO represents competitive performance, not learning ability.
+"""
+
+elo_usage = """
+Once Practice Tier compatibility is satisfied, matchmaking prefers opponents with
+similar ELO ratings to ensure balanced win probability.
+"""
+
+elo_search_expansion = """
+If no suitable opponent is found within the initial ELO window, the search range may
+expand gradually. Practice Tier restrictions remain absolute during expansion.
+"""
+
+[practice_confidence_modifier]
+description = """
+Practice Confidence influences how aggressively a player’s ELO is allowed to move but
+does not affect matchmaking eligibility.
+"""
+
+confidence_inputs = """
+- Recent practice volume
+- Recent practice accuracy
+- Practice consistency trends
+"""
+
+confidence_effects = """
+Players with unstable or insufficient practice history experience dampened ELO changes.
+Players with stable practice history experience normal or accelerated ELO movement.
+"""
+
+[queue_behavior]
+description = """
+While waiting in queue, players may optionally enter a Flash Practice warm-up state.
+This warm-up does not affect matchmaking but prepares the player cognitively for Arena play.
+"""
+
+warmup_rules = """
+- Warm-up mirrors the operation and difficulty of the upcoming Arena match
+- Warm-up results do not affect Practice Tier
+- Warm-up is optional and non-competitive
+"""
+
+[edge_case_handling]
+description = """
+The matchmaking system includes safeguards to handle population imbalance, skill scarcity,
+and player churn without compromising fairness.
+"""
+
+low_population_behavior = """
+If no opponent is found within acceptable parameters, matchmaking may delay match creation
+rather than widen Practice Tier constraints.
+"""
+
+new_player_protection = """
+New Arena entrants are matched preferentially with other low-experience Arena players
+within the same Practice Tier to reduce intimidation and churn.
+"""
+
+[anti_exploit_protections]
+description = """
+Matchmaking actively resists common competitive exploits.
+"""
+
+smurfing_prevention = """
+Smurfing is prevented by Practice Tier gating. Players cannot access lower-tier opponents
+without deliberately suppressing their practice performance, which also limits Arena gains.
+"""
+
+boosting_prevention = """
+ELO gains are limited when Practice Confidence is low, preventing rank inflation through
+opponent manipulation.
+"""
+
+tilt_protection = """
+Loss streaks do not cause abrupt matchmaking difficulty changes. Practice is recommended
+after repeated losses to stabilize performance.
+"""
+
+[player_experience_outcome]
+description = """
+The matchmaking system is designed to feel fair, predictable, and educationally supportive.
+"""
+
+intended_player_feelings = """
+- Matches feel competitive but not overwhelming
+- Losses feel explainable and actionable
+- Improvement paths are always clear
+"""
+
+educational_alignment = """
+Players learn that practice improves match quality, consistency stabilizes rank, and
+accuracy is more valuable than speed alone.
+"""

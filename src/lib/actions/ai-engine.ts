@@ -255,16 +255,29 @@ export async function endAISession(
     const accuracy = stats.correctCount / Math.max(1, stats.totalQuestions);
     const tiltScore = state.coachAgent.tiltScore;
 
+    // Log all conditions for debugging
+    console.log(`[AI] Tier advancement check for ${operation}:`, {
+        confidence: (confidence * 100).toFixed(1) + '%',
+        accuracy: (accuracy * 100).toFixed(1) + '%',
+        estimatedTier,
+        previousTier,
+        totalQuestions: stats.totalQuestions,
+        tiltScore: tiltScore.toFixed(2),
+        maxStreak: stats.maxStreak,
+    });
+
     // Determine if tier should advance
     // VERY STRICT requirements - must demonstrate consistent mastery
     let newTier = previousTier;
     const shouldAdvance =
-        confidence >= 0.85 &&            // AI must be very confident in estimate
-        accuracy >= 0.90 &&              // 90%+ accuracy
+        confidence >= 0.90 &&            // AI must be 90%+ confident in estimate (tier completion)
+        accuracy >= 0.90 &&              // 90%+ accuracy required
         estimatedTier > previousTier &&  // AI estimates higher ability
         stats.totalQuestions >= 25 &&    // At least 25 questions (substantial session)
         tiltScore < 0.3 &&               // Low frustration (not struggling)
         stats.maxStreak >= 8;            // Strong consistency with a longer streak
+
+    console.log(`[AI] Should advance: ${shouldAdvance} (all conditions must be true)`);
 
     if (shouldAdvance) {
         // Advance by 1 tier (conservative)

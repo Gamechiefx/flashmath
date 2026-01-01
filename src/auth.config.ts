@@ -16,6 +16,29 @@ export const authConfig = {
             }
             return true;
         },
+        redirect({ url, baseUrl }) {
+            // Fix localhost redirect issue - always use relative paths or NEXTAUTH_URL
+            const nextAuthUrl = process.env.NEXTAUTH_URL || baseUrl;
+
+            // If URL contains localhost, replace with proper base URL
+            if (url.includes('localhost')) {
+                const urlPath = new URL(url).pathname;
+                return `${nextAuthUrl}${urlPath}`;
+            }
+
+            // If it's a relative URL, prepend the base URL
+            if (url.startsWith('/')) {
+                return `${nextAuthUrl}${url}`;
+            }
+
+            // If it's the same origin, allow it
+            if (url.startsWith(nextAuthUrl)) {
+                return url;
+            }
+
+            // Default to dashboard
+            return `${nextAuthUrl}/dashboard`;
+        },
     },
     trustHost: true,
     providers: [], // Empty array, we'll add it in auth.ts

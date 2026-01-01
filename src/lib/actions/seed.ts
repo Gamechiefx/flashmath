@@ -1,24 +1,42 @@
 "use server";
 
-import { loadData, saveData } from "@/lib/db";
+import { loadData, saveData, getDatabase } from "@/lib/db";
 import { ITEMS } from "@/lib/items";
 import { revalidatePath } from "next/cache";
 
 export async function forceSeedShop() {
     try {
-        const data = loadData();
-        console.log(`[SEED] Logic requested. Static ITEMS count: ${ITEMS.length}`);
+        const db = getDatabase();
+        console.log(`[SEED] Force seeding shop. Static ITEMS count: ${ITEMS.length}`);
 
-        // Strip icons for DB
-        const dbItems = ITEMS.map(({ icon, ...rest }) => rest);
-        data.shop_items = dbItems;
+        // Run in transaction for performance and safety
+        db.transaction(() => {
+            // 1. Clear existing shop items
+            db.prepare('DELETE FROM shop_items').run();
 
-        saveData();
+            // 2. Insert all items from ITEMS array
+            const insertItem = db.prepare(`
+                INSERT INTO shop_items (id, name, description, type, rarity, price, asset_value)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `);
 
-        console.log(`[SEED] Success. DB shop_items count: ${data.shop_items.length}`);
+            for (const item of ITEMS) {
+                insertItem.run(
+                    item.id,
+                    item.name,
+                    item.description,
+                    item.type,
+                    item.rarity,
+                    item.price,
+                    item.assetValue
+                );
+            }
+        })();
+
+        console.log(`[SEED] Success. Seeded ${ITEMS.length} items.`);
         revalidatePath("/shop");
         revalidatePath("/admin");
-        return { success: true, count: data.shop_items.length };
+        return { success: true, count: ITEMS.length };
     } catch (e) {
         console.error("[SEED] Failed:", e);
         return { error: "Failed to seed shop items" };

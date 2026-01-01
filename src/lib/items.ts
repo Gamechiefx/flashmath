@@ -8,7 +8,8 @@ export enum ItemType {
     SOUND = 'sound',
     BGM = 'bgm',
     TITLE = 'title',
-    FRAME = 'frame'
+    FRAME = 'frame',
+    BANNER = 'banner'
 }
 
 export enum Rarity {
@@ -306,4 +307,12 @@ export const ITEMS: Item[] = [
     { id: 'frame_hologram', name: 'Hologram', description: 'Unstable photonic containment.', type: ItemType.FRAME, rarity: Rarity.RARE, price: 5000, assetValue: 'frame-hologram', icon: Monitor },
     { id: 'frame_rainbow', name: 'Rainbow Glitch', description: 'Taste the spectrum error.', type: ItemType.FRAME, rarity: Rarity.EPIC, price: 20000, assetValue: 'frame-rainbow', icon: Zap },
     { id: 'frame_diamond', name: 'Diamond', description: 'Indestructible brilliance.', type: ItemType.FRAME, rarity: Rarity.LEGENDARY, price: 60000, assetValue: 'frame-diamond', icon: Hexagon },
+
+    // --- 8. Arena Banners ---
+    { id: 'banner_caution', name: 'Caution High Math', description: 'Animated amber hazard stripes.', type: ItemType.BANNER, rarity: Rarity.UNCOMMON, price: 500, assetValue: 'caution', icon: Shield },
+    { id: 'banner_matrices', name: 'System Override', description: 'Matrix rain dots falling.', type: ItemType.BANNER, rarity: Rarity.RARE, price: 2500, assetValue: 'matrices', icon: Monitor },
+    { id: 'banner_synthwave', name: 'Retro Pulse', description: 'Neon scan lines sweep.', type: ItemType.BANNER, rarity: Rarity.EPIC, price: 10000, assetValue: 'synthwave', icon: Zap },
+    { id: 'banner_royal', name: 'The King', description: 'Subtle royal shimmer.', type: ItemType.BANNER, rarity: Rarity.EPIC, price: 15000, assetValue: 'royal', icon: Crown },
+    { id: 'banner_legendary', name: 'Grand Champion', description: 'Golden sparkle particles.', type: ItemType.BANNER, rarity: Rarity.LEGENDARY, price: 50000, assetValue: 'legendary', icon: Trophy },
+    { id: 'banner_plasma', name: 'Plasma Core', description: 'Pulsing gradient wave.', type: ItemType.BANNER, rarity: Rarity.LEGENDARY, price: 60000, assetValue: 'plasma', icon: Flame },
 ];

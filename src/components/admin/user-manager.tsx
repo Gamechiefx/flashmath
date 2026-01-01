@@ -515,7 +515,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                             <div className="text-xs text-muted-foreground font-mono">{user.id}</div>
                                             {user.email && <div className="text-xs text-muted-foreground">{user.email}</div>}
                                             {user.created_at && (
-                                                <div className="text-[10px] text-muted-foreground/60 mt-1">
+                                                <div className="text-[10px] text-muted-foreground/60 mt-1" suppressHydrationWarning>
                                                     Joined {new Date(user.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                                 </div>
                                             )}
@@ -538,7 +538,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                                         <Ban size={12} /> BANNED
                                                     </span>
                                                     {(user as any).banned_until && (
-                                                        <span className="text-[10px] text-red-300/60 font-mono">
+                                                        <span className="text-[10px] text-red-300/60 font-mono" suppressHydrationWarning>
                                                             Until: {new Date((user as any).banned_until).toLocaleDateString()}
                                                         </span>
                                                     )}

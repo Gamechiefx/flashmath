@@ -1,0 +1,65 @@
+services:
+  flashmath-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: flashmath-dev
+    ports:
+      - "3001:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - flashmath_dev_data:/app/data
+    environment:
+      - NODE_ENV=development
+      - NEXTAUTH_URL=https://dev.flashmath.io
+      - AUTH_SECRET=${AUTH_SECRET:-dev-secret-here}
+      - DATABASE_PATH=/app/data/flashmath.db
+      # PostgreSQL for Arena
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=flashmath_arena
+      - POSTGRES_USER=flashmath
+      - POSTGRES_PASSWORD=flashmath_dev_password
+      # Redis for Arena matchmaking
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      # SMTP Email Configuration
+      - SMTP_HOST=mail.lanit.services
+      - SMTP_PORT=587
+      - SMTP_USER=auth-mailer@flashmath.io
+      - SMTP_PASS=${SMTP_PASS:-authmailer1234}
+      - SMTP_SECURE=false
+      - EMAIL_FROM=Flash Math <auth-mailer@flashmath.io>
+      - EMAIL_REPLY_TO=support@flashmath.io
+    depends_on:
+      - postgres
+      - redis
+    restart: always
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: flashmath-postgres
+    environment:
+      - POSTGRES_DB=flashmath_arena
+      - POSTGRES_USER=flashmath
+      - POSTGRES_PASSWORD=flashmath_dev_password
+    volumes:
+      - flashmath_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: flashmath-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - flashmath_redis_data:/data
+    restart: always
+
+volumes:
+  flashmath_dev_data:
+  flashmath_postgres_data:
+  flashmath_redis_data:

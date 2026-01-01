@@ -67,7 +67,8 @@ export function getDailyShopSelection(): Item[] {
         ItemType.SOUND,
         ItemType.BGM,
         ItemType.TITLE,
-        ItemType.FRAME
+        ItemType.FRAME,
+        ItemType.BANNER
     ];
 
     slots.forEach((slotType, index) => {

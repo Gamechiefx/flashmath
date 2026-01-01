@@ -523,7 +523,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                 question = `${a} × ${b}`;
         }
 
-        return { question, answer, explanation: `${question} = ${answer}` };
+        return { question, answer, explanation: `${question} = ${answer}`, type: 'basic' as const, tier };
     };
 
     // Format key code for display

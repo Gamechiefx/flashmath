@@ -32,6 +32,7 @@ import { AuthProvider } from "@/components/auth-provider";
 import { ItemPreviewProvider } from "@/components/item-preview-provider";
 import { AudioSettingsProvider } from "@/components/audio-settings-provider";
 import { SessionGuard } from "@/components/session-guard";
+import { DevFooter } from "@/components/dev-footer";
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -68,6 +69,7 @@ export default async function RootLayout({
             </ItemPreviewProvider>
           </AudioSettingsProvider>
         </AuthProvider>
+        <DevFooter />
       </body>
     </html>
   );
