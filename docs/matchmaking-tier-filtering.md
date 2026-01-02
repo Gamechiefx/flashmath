@@ -19,10 +19,12 @@ Tier → Mode → ELO
 The tier range is configurable in `src/lib/actions/matchmaking.ts`:
 
 ```typescript
-const TIER_RANGE = 5; // Match with players ±5 tiers
+const TIER_RANGE = 20; // Match with players ±20 tiers (one band width)
 ```
 
 Adjust this value to make matching stricter (lower) or more lenient (higher).
+
+Current setting allows players to match within one full band of each other (e.g., Foundation tiers 1-20 can match with Intermediate tiers 1-20).
 
 ## How It Works
 

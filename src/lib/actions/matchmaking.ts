@@ -51,7 +51,7 @@ interface MatchResult {
 const QUEUE_PREFIX = 'arena:queue:';
 const MATCH_PREFIX = 'arena:match:';
 const ELO_RANGE = 200; // Match with players ±200 ELO
-const TIER_RANGE = 5; // Match with players ±5 tiers
+const TIER_RANGE = 20; // Match with players ±20 tiers (one band width)
 const AI_TIMEOUT_MS = 15000; // Start AI match after 15 seconds
 
 /**
