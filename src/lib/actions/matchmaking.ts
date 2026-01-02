@@ -520,18 +520,51 @@ export async function saveMatchResult(params: {
 
         console.log(`[Match] saveMatchResult called: matchId=${params.matchId}, winnerId=${params.winnerId}, loserId=${params.loserId}`);
 
-        // Check if this match was already saved (prevents double-save when both players call this)
+        // Use Redis SETNX to atomically claim the right to save this match
+        // This prevents race condition where both players pass the DB check before either inserts
+        const redis = await getRedis();
+        const saveLockKey = `arena:save_lock:${params.matchId}`;
+
+        if (redis) {
+            // Try to set the lock - only succeeds if key doesn't exist (atomic operation)
+            const lockAcquired = await redis.setnx(saveLockKey, userId);
+            if (!lockAcquired) {
+                // Another player is saving or already saved this match
+                console.log(`[Match] Match ${params.matchId} is being saved by another player, waiting...`);
+                // Wait a moment for the other save to complete, then return cached result
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as any;
+                if (existingMatch) {
+                    const winnerStats = await getArenaStats(params.winnerId);
+                    const loserStats = await getArenaStats(params.loserId);
+                    return {
+                        success: true,
+                        winnerEloChange: existingMatch.winner_elo_change,
+                        loserEloChange: existingMatch.loser_elo_change,
+                        winnerCoinsEarned: 0,
+                        loserCoinsEarned: 0,
+                        winnerStats,
+                        loserStats
+                    };
+                }
+                // If still not in DB, the other save might have failed - continue with ours
+            }
+            // Set lock expiry (30 seconds) in case save fails
+            await redis.expire(saveLockKey, 30);
+        }
+
+        // Double-check database (handles case where Redis is unavailable)
         const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as any;
         if (existingMatch) {
             console.log(`[Match] Match ${params.matchId} already saved, returning cached result`);
-            // Return the already-saved result without updating stats again
             const winnerStats = await getArenaStats(params.winnerId);
             const loserStats = await getArenaStats(params.loserId);
             return {
                 success: true,
                 winnerEloChange: existingMatch.winner_elo_change,
                 loserEloChange: existingMatch.loser_elo_change,
-                winnerCoinsEarned: 0, // Already awarded
+                winnerCoinsEarned: 0,
                 loserCoinsEarned: 0,
                 winnerStats,
                 loserStats
