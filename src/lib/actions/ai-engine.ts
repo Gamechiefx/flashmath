@@ -329,8 +329,10 @@ export async function endAISession(
 
     // Update database if tier changed
     if (newTier > previousTier) {
-        const { execute, queryOne: dbQueryOne } = await import("@/lib/db");
-        const user = dbQueryOne("SELECT math_tiers, coins, total_xp FROM users WHERE id = ?", [userId]) as any;
+        const { getDatabase } = await import("@/lib/db/sqlite");
+        const db = getDatabase();
+
+        const user = db.prepare("SELECT math_tiers, coins, total_xp FROM users WHERE id = ?").get(userId) as any;
 
         if (user) {
             let mathTiers = user.math_tiers;
@@ -356,10 +358,10 @@ export async function endAISession(
             const newCoins = (Number(user.coins) || 0) + coinsToAdd;
             const newXp = (Number(user.total_xp) || 0) + xpToAdd;
 
-            execute(
-                "UPDATE users SET math_tiers = ?, coins = ?, total_xp = ? WHERE id = ?",
-                [JSON.stringify(mathTiers), newCoins, newXp, userId]
-            );
+            // Use direct database access to avoid pattern-matching issues
+            db.prepare(
+                "UPDATE users SET math_tiers = ?, coins = ?, total_xp = ? WHERE id = ?"
+            ).run(JSON.stringify(mathTiers), newCoins, newXp, userId);
 
             const band = getBandForTier(newTier);
             console.log(`[AI] Tier advanced for ${userId}: ${operation} ${previousTier} → ${newTier} (${band.name} band)`);
