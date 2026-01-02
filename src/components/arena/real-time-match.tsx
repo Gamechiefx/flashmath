@@ -112,14 +112,28 @@ export function RealTimeMatch({
 
     // Save match result when game ends
     useEffect(() => {
-        if (!matchEnded || hasSavedResult || !you || !opponent) return;
+        console.log('[Match] Save effect check:', { matchEnded, hasSavedResult, you: !!you, opponent: !!opponent, youScore: you?.odScore, oppScore: opponent?.odScore });
+
+        if (!matchEnded || hasSavedResult) return;
+
+        // Wait for player data to be available
+        if (!you || !opponent) {
+            console.log('[Match] Waiting for player data...');
+            return;
+        }
 
         async function saveResult() {
-            const winnerId = you!.odScore > opponent!.odScore ? currentUserId : opponentId!;
-            const loserId = you!.odScore > opponent!.odScore ? opponentId! : currentUserId;
-            const winnerScore = Math.max(you!.odScore, opponent!.odScore);
-            const loserScore = Math.min(you!.odScore, opponent!.odScore);
-            const isWinner = winnerId === currentUserId;
+            const yourScore = you!.odScore || 0;
+            const oppScore = opponent!.odScore || 0;
+
+            // Determine winner (ties go to opponent for simplicity)
+            const youWon = yourScore > oppScore;
+            const winnerId = youWon ? currentUserId : opponentId!;
+            const loserId = youWon ? opponentId! : currentUserId;
+            const winnerScore = Math.max(yourScore, oppScore);
+            const loserScore = Math.min(yourScore, oppScore);
+
+            console.log('[Match] Saving result:', { winnerId, loserId, winnerScore, loserScore, youWon });
 
             const { saveMatchResult } = await import('@/lib/actions/matchmaking');
             const result = await saveMatchResult({
@@ -132,9 +146,11 @@ export function RealTimeMatch({
                 mode: '1v1',
             });
 
+            console.log('[Match] Save result response:', result);
+
             if (result.success) {
-                setEloChange(isWinner ? result.winnerEloChange || 0 : result.loserEloChange || 0);
-                setCoinsEarned(isWinner ? result.winnerCoinsEarned || 0 : result.loserCoinsEarned || 0);
+                setEloChange(youWon ? result.winnerEloChange || 0 : result.loserEloChange || 0);
+                setCoinsEarned(youWon ? result.winnerCoinsEarned || 0 : result.loserCoinsEarned || 0);
                 setResultData(result);
 
                 // Refresh Next.js server components
@@ -149,7 +165,7 @@ export function RealTimeMatch({
         }
 
         saveResult();
-    }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation, router]);
+    }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation, router, update]);
 
     const handleSubmit = useCallback(() => {
         if (!answer.trim() || !currentQuestion) return;
