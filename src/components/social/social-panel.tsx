@@ -24,6 +24,7 @@ import { FriendListItem } from './friend-list-item';
 import { FriendRequestCard } from './friend-request-card';
 import { PartySection } from './party-section';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import {
     getFriendsList,
     getPendingRequests,
@@ -287,6 +288,9 @@ export function SocialPanel() {
         if (result.success && result.inviteeId && result.inviterName && result.partyId) {
             // Notify the invitee in real-time
             notifyPartyInvite(result.inviteeId, result.inviterName, result.partyId);
+            toast.success('Party invite sent!');
+        } else if (result.error) {
+            toast.error(result.error);
         }
         setProcessingId(null);
     };
@@ -299,8 +303,11 @@ export function SocialPanel() {
             if (result.partyMemberIds && result.joinerName && result.joinerId) {
                 notifyPartyJoined(result.partyMemberIds, result.joinerName, result.joinerId);
             }
+            toast.success('Joined party!');
             loadData();
             refreshStats();
+        } else if (result.error) {
+            toast.error(result.error);
         }
         setProcessingId(null);
     };

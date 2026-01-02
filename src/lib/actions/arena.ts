@@ -25,8 +25,8 @@ export async function getArenaEligibilityData() {
     const userId = session.user.id;
     const userRole = (session.user as any)?.role;
 
-    // Admin bypass - flashadmin skips requirements
-    const isAdmin = userRole === 'admin' || userRole === 'super_admin';
+    // Admin and moderator bypass - skip requirements
+    const isAdmin = userRole === 'admin' || userRole === 'super_admin' || userRole === 'moderator';
 
     // Get user data
     const db = getDatabase();
