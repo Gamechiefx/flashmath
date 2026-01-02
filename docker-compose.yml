@@ -23,6 +23,8 @@ services:
       - SMTP_SECURE=false
       - EMAIL_FROM=Flash Math <noreply@flashmath.io>
       - EMAIL_REPLY_TO=support@flashmath.io
+      # Redis for Arena matchmaking and Presence (optional - falls back to in-memory)
+      # - REDIS_URL=redis://your-redis-host:6379
     restart: always
 
 volumes:

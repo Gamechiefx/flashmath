@@ -829,7 +829,10 @@ export function RealTimeMatch({
                                     className="text-center w-full"
                                 >
                                     {/* Question Format: 8 + 4 = ? */}
-                                    <div className="flex items-center justify-center gap-3 text-5xl lg:text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(34,211,238,0.4)]">
+                                    <div
+                                        data-particle-target="arena-answer"
+                                        className="flex items-center justify-center gap-3 text-5xl lg:text-7xl font-black text-white tracking-tighter drop-shadow-[0_0_30px_rgba(34,211,238,0.4)]"
+                                    >
                                         <span>{currentQuestion?.question ? currentQuestion.question.split(' ')[0] : '?'}</span>
                                         <span className="text-cyan-400">{currentQuestion?.question ? currentQuestion.question.split(' ')[1] : '+'}</span>
                                         <span>{currentQuestion?.question ? currentQuestion.question.split(' ')[2] : '?'}</span>

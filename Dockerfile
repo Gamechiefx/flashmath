@@ -47,6 +47,9 @@ RUN chown nextjs:nodejs .next
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy the custom server.js with Socket.io support (overrides standalone's server.js)
+COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
+
 # Create data directory for SQLite database with correct ownership
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
@@ -58,6 +61,5 @@ ENV PORT 3000
 # set hostname to localhost
 ENV HOSTNAME "0.0.0.0"
 
-# server.js is created by next build from the standalone output
-# https://nextjs.org/docs/pages/api-reference/next-config-js/output
+# Run the custom server.js with Socket.io for arena matches and presence
 CMD ["node", "server.js"]

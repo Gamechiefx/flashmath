@@ -25,14 +25,27 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
             width = previewRect.width;
             height = previewRect.height;
         } else {
-            // Gameplay fallback: Active Input
-            const active = document.activeElement;
-            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-                const rect = active.getBoundingClientRect();
+            // Check for arena answer display first (more specific targeting)
+            const arenaAnswer = document.querySelector('[data-particle-target="arena-answer"]');
+            if (arenaAnswer) {
+                const rect = arenaAnswer.getBoundingClientRect();
                 x = rect.left + rect.width / 2;
                 y = rect.top + rect.height / 2;
                 width = rect.width;
                 height = rect.height;
+            } else {
+                // Fallback: Active Input (practice mode, etc.)
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                    const rect = active.getBoundingClientRect();
+                    // Skip if input covers entire viewport (arena hidden input)
+                    if (rect.width < window.innerWidth * 0.8) {
+                        x = rect.left + rect.width / 2;
+                        y = rect.top + rect.height / 2;
+                        width = rect.width;
+                        height = rect.height;
+                    }
+                }
             }
         }
         return { x, y, width, height };

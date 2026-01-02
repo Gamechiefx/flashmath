@@ -607,6 +607,43 @@ app.prepare().then(() => {
             });
         });
         
+        // Friend removed notification
+        socket.on('presence:notify_friend_removed', async (data) => {
+            const { removedUserId, removerName } = data;
+            presenceNs.to(`user:${removedUserId}`).emit('friend:removed', {
+                removerName,
+                timestamp: Date.now(),
+            });
+        });
+        
+        // Party member joined notification (notify all party members)
+        socket.on('presence:notify_party_joined', async (data) => {
+            const { partyMemberIds, joinerName, joinerId } = data;
+            // Notify all party members except the joiner
+            for (const memberId of partyMemberIds) {
+                if (memberId !== joinerId) {
+                    presenceNs.to(`user:${memberId}`).emit('party:member_joined', {
+                        joinerName,
+                        joinerId,
+                        timestamp: Date.now(),
+                    });
+                }
+            }
+        });
+        
+        // Party member left notification (notify all remaining party members)
+        socket.on('presence:notify_party_left', async (data) => {
+            const { partyMemberIds, leaverName, leaverId, disbanded } = data;
+            for (const memberId of partyMemberIds) {
+                presenceNs.to(`user:${memberId}`).emit('party:member_left', {
+                    leaverName,
+                    leaverId,
+                    disbanded: disbanded || false,
+                    timestamp: Date.now(),
+                });
+            }
+        });
+        
         // Disconnect
         socket.on('disconnect', async () => {
             const userId = presenceSocketToUser.get(socket.id);

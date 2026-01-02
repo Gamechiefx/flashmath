@@ -53,6 +53,10 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         { inviterName: string; partyId: string; timestamp: number }[]
     >([]);
     
+    // Change notification flags (trigger data refresh)
+    const [friendsChanged, setFriendsChanged] = useState(0);
+    const [partyChanged, setPartyChanged] = useState(0);
+    
     const userIdRef = useRef<string | null>(null);
     const statusRef = useRef<PresenceStatus>('online');
     
@@ -135,6 +139,21 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             setPendingPartyInvites(prev => [...prev, data]);
         };
         
+        const handleFriendRemoved = (data: { removerName: string; timestamp: number }) => {
+            console.log('[Presence] Friend removed by:', data.removerName);
+            setFriendsChanged(prev => prev + 1);
+        };
+        
+        const handlePartyMemberJoined = (data: { joinerName: string; joinerId: string; timestamp: number }) => {
+            console.log('[Presence] Party member joined:', data.joinerName);
+            setPartyChanged(prev => prev + 1);
+        };
+        
+        const handlePartyMemberLeft = (data: { leaverName: string; leaverId: string; disbanded: boolean; timestamp: number }) => {
+            console.log('[Presence] Party member left:', data.leaverName, 'Disbanded:', data.disbanded);
+            setPartyChanged(prev => prev + 1);
+        };
+        
         // Register handlers
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
@@ -142,7 +161,10 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         socket.on('presence:friends_status', handleFriendsStatus);
         socket.on('friend:accepted', handleFriendAccepted);
         socket.on('friend:request', handleFriendRequest);
+        socket.on('friend:removed', handleFriendRemoved);
         socket.on('party:invite', handlePartyInvite);
+        socket.on('party:member_joined', handlePartyMemberJoined);
+        socket.on('party:member_left', handlePartyMemberLeft);
         
         // Connect if not already
         if (!socket.connected) {

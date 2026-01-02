@@ -21,7 +21,8 @@ services:
       - POSTGRES_DB=flashmath_arena
       - POSTGRES_USER=flashmath
       - POSTGRES_PASSWORD=flashmath_dev_password
-      # Redis for Arena matchmaking
+      # Redis for Arena matchmaking and Presence
+      - REDIS_URL=redis://redis:6379
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       # SMTP Email Configuration
