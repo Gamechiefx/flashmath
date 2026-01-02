@@ -22,6 +22,13 @@ import {
     AIDirectiveEnvelope,
     DEFAULT_AI_CONFIG,
 } from "@/lib/ai-engine";
+import {
+    MAX_TIER,
+    getBandForTier,
+    isAtBandBoundary,
+    checkMilestoneReward,
+    getTierOperandRange,
+} from "@/lib/tier-system";
 
 // In-memory session store (in production, use Redis or similar)
 const activeSessions = new Map<string, OrchestratorState>();
@@ -216,7 +223,13 @@ export async function requestAIHint(
 
 /**
  * End an AI session and save results
- * Persists AI-estimated tier if learner showed strong fluency
+ *
+ * 100-Tier System Advancement:
+ * - 85%+ accuracy, 80%+ confidence → +1 tier
+ * - 90%+ accuracy, 85%+ confidence, 8+ streak → +2 tiers
+ * - 95%+ accuracy, 90%+ confidence, 10+ streak → +3 tiers
+ * - Band boundaries block advancement (require mastery test)
+ * - Milestone rewards at 5/10/20 tier intervals
  */
 export async function endAISession(
     sessionId: string,
@@ -234,6 +247,14 @@ export async function endAISession(
         previousTier: number;
         newTier: number;
         advanced: boolean;
+        tiersGained: number;
+        bandName: string;
+        blockedByBandBoundary?: boolean;
+        milestone?: {
+            type: string;
+            coins: number;
+            xp: number;
+        };
     };
 } | { error: string }> {
     const session = await auth();
@@ -266,41 +287,90 @@ export async function endAISession(
         maxStreak: stats.maxStreak,
     });
 
-    // Determine if tier should advance
-    // VERY STRICT requirements - must demonstrate consistent mastery
+    // Determine tier advancement (100-tier system)
+    let tierAdvance = 0;
     let newTier = previousTier;
-    const shouldAdvance =
-        confidence >= 0.90 &&            // AI must be 90%+ confident in estimate (tier completion)
-        accuracy >= 0.90 &&              // 90%+ accuracy required
-        estimatedTier > previousTier &&  // AI estimates higher ability
-        stats.totalQuestions >= 25 &&    // At least 25 questions (substantial session)
-        tiltScore < 0.3 &&               // Low frustration (not struggling)
-        stats.maxStreak >= 8;            // Strong consistency with a longer streak
 
-    console.log(`[AI] Should advance: ${shouldAdvance} (all conditions must be true)`);
+    // Must have minimum questions and low frustration
+    if (stats.totalQuestions >= 15 && tiltScore < 0.4) {
+        // Calculate tier advancement based on performance
+        if (accuracy >= 0.95 && confidence >= 0.90 && stats.maxStreak >= 10) {
+            tierAdvance = 3;  // Exceptional performance
+        } else if (accuracy >= 0.90 && confidence >= 0.85 && stats.maxStreak >= 8) {
+            tierAdvance = 2;  // Strong performance
+        } else if (accuracy >= 0.85 && confidence >= 0.80) {
+            tierAdvance = 1;  // Good performance
+        }
+    }
 
-    if (shouldAdvance) {
-        // Advance by 1 tier (conservative)
-        newTier = Math.min(4, previousTier + 1);
+    console.log(`[AI] Calculated tier advance: ${tierAdvance} (max streak: ${stats.maxStreak})`);
 
-        // Update user's math_tiers in database
+    // Check if band boundary blocks advancement
+    let blockedByBandBoundary = false;
+    let milestone = null;
+
+    if (tierAdvance > 0) {
+        const currentBand = getBandForTier(previousTier);
+        const proposedTier = Math.min(MAX_TIER, previousTier + tierAdvance);
+        const proposedBand = getBandForTier(proposedTier);
+
+        // Check if crossing band boundary
+        if (proposedBand.id > currentBand.id) {
+            // Cap at current band's end tier
+            newTier = Math.min(currentBand.tierRange[1], proposedTier);
+            if (newTier === currentBand.tierRange[1]) {
+                blockedByBandBoundary = true;
+                console.log(`[AI] Advancement blocked at band boundary (tier ${newTier}). Mastery test required.`);
+            }
+        } else {
+            newTier = proposedTier;
+        }
+
+        // Check for milestone rewards
+        if (newTier > previousTier) {
+            milestone = checkMilestoneReward(previousTier, newTier);
+        }
+    }
+
+    // Update database if tier changed
+    if (newTier > previousTier) {
         const { execute, queryOne: dbQueryOne } = await import("@/lib/db");
-        const user = dbQueryOne("SELECT math_tiers FROM users WHERE id = ?", [userId]) as any;
+        const user = dbQueryOne("SELECT math_tiers, coins, total_xp FROM users WHERE id = ?", [userId]) as any;
 
         if (user) {
             let mathTiers = user.math_tiers;
             if (typeof mathTiers === 'string') {
-                mathTiers = JSON.parse(mathTiers);
+                try {
+                    mathTiers = JSON.parse(mathTiers);
+                } catch {
+                    mathTiers = {};
+                }
             }
             mathTiers = mathTiers || {};
             mathTiers[operation] = newTier;
 
+            // Prepare updates
+            let coinsToAdd = 0;
+            let xpToAdd = 0;
+
+            if (milestone) {
+                coinsToAdd = milestone.coins;
+                xpToAdd = milestone.xp;
+            }
+
+            const newCoins = (Number(user.coins) || 0) + coinsToAdd;
+            const newXp = (Number(user.total_xp) || 0) + xpToAdd;
+
             execute(
-                "UPDATE users SET math_tiers = ? WHERE id = ?",
-                [JSON.stringify(mathTiers), userId]
+                "UPDATE users SET math_tiers = ?, coins = ?, total_xp = ? WHERE id = ?",
+                [JSON.stringify(mathTiers), newCoins, newXp, userId]
             );
 
-            console.log(`[AI] Tier advanced for ${userId}: ${operation} ${previousTier} → ${newTier} (accuracy: ${(accuracy * 100).toFixed(0)}%, confidence: ${(confidence * 100).toFixed(0)}%, streak: ${stats.maxStreak})`);
+            const band = getBandForTier(newTier);
+            console.log(`[AI] Tier advanced for ${userId}: ${operation} ${previousTier} → ${newTier} (${band.name} band)`);
+            if (milestone) {
+                console.log(`[AI] Milestone reward: ${milestone.type} - ${coinsToAdd} coins, ${xpToAdd} XP`);
+            }
         }
     }
 
@@ -310,13 +380,23 @@ export async function endAISession(
     // Clean up
     activeSessions.delete(sessionId);
 
+    const band = getBandForTier(newTier);
+
     return {
         success: true,
         tierProgression: {
             operation,
             previousTier,
             newTier,
-            advanced: shouldAdvance,
+            advanced: newTier > previousTier,
+            tiersGained: newTier - previousTier,
+            bandName: band.name,
+            blockedByBandBoundary,
+            milestone: milestone ? {
+                type: milestone.type,
+                coins: milestone.coins,
+                xp: milestone.xp,
+            } : undefined,
         }
     };
 }
@@ -352,6 +432,8 @@ export async function getAISessionStatus(
 /**
  * Get problems using AI engine (drop-in replacement for getNextProblems)
  * This provides backward compatibility with the existing practice flow
+ *
+ * Uses 100-tier system with parametric operand scaling
  */
 export async function getAIProblems(
     operation: string,
@@ -359,32 +441,34 @@ export async function getAIProblems(
 ): Promise<{
     problems: ContentItem[];
     currentTier: number;
+    bandName?: string;
     sessionId?: string;
 } | { error: string }> {
     const session = await auth();
 
-    // For unauthenticated users, fall back to simple generation
+    // For unauthenticated users, fall back to simple generation at tier 1
     if (!session?.user) {
         const { generateVariantFromProblem } = await import("@/lib/ai-engine/content-variants");
         const op = operation.toLowerCase() as MathOperation;
+        const [minOp, maxOp] = getTierOperandRange(1, op);
 
         const problems: ContentItem[] = [];
         for (let i = 0; i < count; i++) {
             let op1: number, op2: number;
             if (op === 'division') {
                 // For division, ensure clean integer answers
-                const divisor = Math.floor(Math.random() * 8) + 2;
-                const quotient = Math.floor(Math.random() * 8) + 2;
+                const divisor = Math.floor(Math.random() * (maxOp - minOp + 1)) + minOp;
+                const quotient = Math.floor(Math.random() * (maxOp - minOp + 1)) + minOp;
                 op1 = divisor * quotient;
                 op2 = divisor;
             } else {
-                op1 = Math.floor(Math.random() * 9) + 2;
-                op2 = Math.floor(Math.random() * 9) + 2;
+                op1 = Math.floor(Math.random() * (maxOp - minOp + 1)) + minOp;
+                op2 = Math.floor(Math.random() * (maxOp - minOp + 1)) + minOp;
             }
             problems.push(generateVariantFromProblem(op, op1, op2, 'direct', 1));
         }
 
-        return { problems, currentTier: 1 };
+        return { problems, currentTier: 1, bandName: 'Foundation' };
     }
 
     // For authenticated users, use full AI engine
@@ -394,34 +478,40 @@ export async function getAIProblems(
         return { error: result.error };
     }
 
-    // Generate initial batch of problems
+    // Get tier from envelope (normalized difficulty 0-1 → tier 1-100)
     const { generateVariantFromProblem } = await import("@/lib/ai-engine/content-variants");
     const op = operation.toLowerCase() as MathOperation;
-    const tier = result.envelope.directives.placement.targetDifficulty.level;
-    const tierNum = Math.min(4, Math.max(1, Math.round(tier * 4)));
+    const difficulty = result.envelope.directives.placement.targetDifficulty.level;
+
+    // Convert difficulty (0.05-0.95) to tier (1-100)
+    const tierNum = Math.round(1 + (difficulty - 0.05) / 0.9 * 99);
+    const clampedTier = Math.max(1, Math.min(MAX_TIER, tierNum));
+    const [minOp, maxOp] = getTierOperandRange(clampedTier, op);
 
     const problems: ContentItem[] = [result.firstQuestion];
 
-    // Generate more problems at the estimated difficulty
+    // Generate more problems at the estimated difficulty using tier ranges
     for (let i = 1; i < count; i++) {
-        const [minOp, maxOp] = tierNum <= 2 ? [2, 9] : [2, 12];
         let op1: number, op2: number;
         if (op === 'division') {
             // For division, ensure clean integer answers
             const divisor = Math.floor(Math.random() * (maxOp - minOp + 1)) + minOp;
             const quotient = Math.floor(Math.random() * (maxOp - minOp + 1)) + minOp;
             op1 = divisor * quotient;
-            op2 = divisor;
+            op2 = Math.max(2, divisor);
         } else {
             op1 = Math.floor(Math.random() * (maxOp - minOp + 1)) + minOp;
             op2 = Math.floor(Math.random() * (maxOp - minOp + 1)) + minOp;
         }
-        problems.push(generateVariantFromProblem(op, op1, op2, 'direct', tierNum));
+        problems.push(generateVariantFromProblem(op, op1, op2, 'direct', clampedTier));
     }
+
+    const band = getBandForTier(clampedTier);
 
     return {
         problems,
-        currentTier: tierNum,
+        currentTier: clampedTier,
+        bandName: band.name,
         sessionId: result.sessionId,
     };
 }

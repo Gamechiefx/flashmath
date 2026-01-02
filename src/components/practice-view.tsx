@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import { useSearchParams } from "next/navigation";
 import { soundEngine } from "@/lib/sound-engine";
 import type { ContentItem, HintPayload } from "@/lib/ai-engine/types";
+import { getBandForTier, getTierWithinBand, getTierOperandRange, isMasteryTestAvailable, MAX_TIER } from "@/lib/tier-system";
 
 interface PracticeViewProps {
     session?: any;
@@ -489,12 +490,10 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     };
 
     // Generate a random fallback problem when AI times out
+    // Uses 100-tier parametric scaling
     const generateFallbackProblem = (op: Operation, tier: number): MathProblem => {
-        // Tier ranges: 1=[2-5], 2=[2-9], 3=[2-12], 4=[5-15]
-        const ranges: Record<number, [number, number]> = {
-            1: [2, 5], 2: [2, 9], 3: [2, 12], 4: [5, 15]
-        };
-        const [min, max] = ranges[tier] || [2, 9];
+        const opLower = op.toLowerCase() as 'addition' | 'subtraction' | 'multiplication' | 'division';
+        const [min, max] = getTierOperandRange(tier, opLower);
 
         let a = Math.floor(Math.random() * (max - min + 1)) + min;
         let b = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -514,6 +513,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                 break;
             case 'Division':
                 // Ensure clean division
+                b = Math.max(2, b);
                 answer = a;
                 a = a * b;
                 question = `${a} ÷ ${b}`;
@@ -523,7 +523,8 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                 question = `${a} × ${b}`;
         }
 
-        return { question, answer, explanation: `${question} = ${answer}`, type: 'basic' as const, tier };
+        const band = getBandForTier(tier);
+        return { question, answer, explanation: `${question} = ${answer}`, type: 'basic' as const, tier, band: band.name };
     };
 
     // Format key code for display
@@ -709,7 +710,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                 <NeonButton onClick={startGame} className="px-8 py-4 text-lg w-full sm:w-auto">
                                     START SIMULATION
                                 </NeonButton>
-                                {currentTier < 4 && opAccuracy >= 90 && (
+                                {currentTier < MAX_TIER && isMasteryTestAvailable(currentTier) && opAccuracy >= 80 && (
                                     <button
                                         onClick={() => setShowMasteryTest(true)}
                                         className="px-8 py-4 text-lg rounded-xl bg-accent/20 border border-accent/30 text-accent font-bold uppercase hover:bg-accent/30 transition-colors flex items-center justify-center gap-2"
@@ -719,13 +720,26 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                     </button>
                                 )}
                             </div>
-                            {currentTier < 4 && (
-                                <p className="text-center text-muted-foreground text-xs mt-2">
-                                    Tier {currentTier} • {opAccuracy >= 90
-                                        ? 'Mastery test available!'
-                                        : `${opAccuracy.toFixed(0)}% progress → 90% to unlock mastery test`}
-                                </p>
-                            )}
+                            {(() => {
+                                const band = getBandForTier(currentTier);
+                                const tierInBand = getTierWithinBand(currentTier);
+                                const canTest = isMasteryTestAvailable(currentTier) && opAccuracy >= 80;
+                                return currentTier < MAX_TIER ? (
+                                    <p className="text-center text-muted-foreground text-xs mt-2">
+                                        <span className={band.textColor}>{band.shortName}{tierInBand}</span>
+                                        <span className="text-zinc-500"> • {band.name} Band</span>
+                                        <span className="text-zinc-600"> • </span>
+                                        {canTest
+                                            ? <span className="text-accent">Mastery test available!</span>
+                                            : <span>{opAccuracy.toFixed(0)}% progress</span>
+                                        }
+                                    </p>
+                                ) : (
+                                    <p className="text-center text-accent text-xs mt-2">
+                                        Master Tier 100 Achieved!
+                                    </p>
+                                );
+                            })()}
 
                             <div className="pt-12 w-full max-w-2xl mx-auto">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -982,29 +996,51 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                 <h2 className="text-4xl font-black tracking-tight mb-8">SESSION COMPLETE</h2>
 
                                 {/* Tier Advancement Banner */}
-                                {tierAdvanced && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -20 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="mb-8 p-4 rounded-2xl bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/30"
-                                    >
-                                        <div className="flex items-center justify-center gap-3">
-                                            <div className="text-4xl">🎉</div>
-                                            <div>
-                                                <div className="text-[10px] font-bold uppercase tracking-widest text-green-400 mb-1">
-                                                    Tier Unlocked!
+                                {tierAdvanced && (() => {
+                                    const fromBand = getBandForTier(tierAdvanced.from);
+                                    const toBand = getBandForTier(tierAdvanced.to);
+                                    const fromTierInBand = getTierWithinBand(tierAdvanced.from);
+                                    const toTierInBand = getTierWithinBand(tierAdvanced.to);
+                                    const crossedBand = toBand.id > fromBand.id;
+                                    return (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            className={cn(
+                                                "mb-8 p-4 rounded-2xl border",
+                                                crossedBand
+                                                    ? "bg-gradient-to-r from-purple-500/20 to-pink-500/20 border-purple-500/30"
+                                                    : "bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-500/30"
+                                            )}
+                                        >
+                                            <div className="flex items-center justify-center gap-3">
+                                                <div className="text-4xl">{crossedBand ? '🏆' : '🎉'}</div>
+                                                <div>
+                                                    <div className={cn(
+                                                        "text-[10px] font-bold uppercase tracking-widest mb-1",
+                                                        crossedBand ? "text-purple-400" : "text-green-400"
+                                                    )}>
+                                                        {crossedBand ? 'Band Promotion!' : 'Tier Unlocked!'}
+                                                    </div>
+                                                    <div className="text-2xl font-black text-white flex items-center gap-2">
+                                                        <span className={fromBand.textColor}>{fromBand.shortName}{fromTierInBand}</span>
+                                                        <span className="text-white/50">→</span>
+                                                        <span className={toBand.textColor}>{toBand.shortName}{toTierInBand}</span>
+                                                    </div>
                                                 </div>
-                                                <div className="text-2xl font-black text-white">
-                                                    Tier {tierAdvanced.from} → Tier {tierAdvanced.to}
-                                                </div>
+                                                <div className="text-4xl">{crossedBand ? '🌟' : '🚀'}</div>
                                             </div>
-                                            <div className="text-4xl">🚀</div>
-                                        </div>
-                                        <p className="text-sm text-green-300/80 mt-2 text-center">
-                                            Complete the mastery test in the practice menu to unlock harder problems!
-                                        </p>
-                                    </motion.div>
-                                )}
+                                            <p className={cn(
+                                                "text-sm mt-2 text-center",
+                                                crossedBand ? "text-purple-300/80" : "text-green-300/80"
+                                            )}>
+                                                {crossedBand
+                                                    ? `Welcome to the ${toBand.name} band!`
+                                                    : 'Keep practicing to unlock harder problems!'}
+                                            </p>
+                                        </motion.div>
+                                    );
+                                })()}
 
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
                                     <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
@@ -1150,13 +1186,20 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                             </div>
 
                                             {/* Current Tier */}
-                                            <div className="p-3 rounded-xl bg-white/5">
-                                                <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 mb-1">Current Tier</div>
-                                                <div className="text-2xl font-black text-white flex items-center gap-2">
-                                                    Tier {currentTier}
-                                                    {tierAdvanced && <span className="text-green-400 text-sm">⬆</span>}
-                                                </div>
-                                            </div>
+                                            {(() => {
+                                                const band = getBandForTier(currentTier);
+                                                const tierInBand = getTierWithinBand(currentTier);
+                                                return (
+                                                    <div className="p-3 rounded-xl bg-white/5">
+                                                        <div className="text-[9px] font-bold uppercase tracking-widest text-emerald-400 mb-1">Current Tier</div>
+                                                        <div className="text-2xl font-black text-white flex items-center gap-2">
+                                                            <span className={band.textColor}>{band.shortName}{tierInBand}</span>
+                                                            {tierAdvanced && <span className="text-green-400 text-sm">⬆</span>}
+                                                        </div>
+                                                        <div className="text-[10px] text-zinc-500 mt-1">{band.name}</div>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
 
                                         {/* Summary Message */}

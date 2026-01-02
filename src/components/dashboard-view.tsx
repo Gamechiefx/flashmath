@@ -23,6 +23,7 @@ import { PlacementTest } from "@/components/placement-test";
 import { useState, useEffect, useRef } from "react";
 import { updateTiers } from "@/lib/actions/game";
 import { useRouter } from "next/navigation";
+import { getBandForTier, getTierWithinBand, getProgressWithinBand, formatTierShort } from "@/lib/tier-system";
 
 interface DashboardViewProps {
     stats: any;
@@ -140,11 +141,13 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
         router.refresh();
     };
 
-    const toRoman = (num: number) => {
-        const romans = ["I", "II", "III", "IV"];
-        return romans[num - 1] || "I";
+    // Helper to get tier display info for 100-tier system
+    const getTierDisplayInfo = (tier: number) => {
+        const band = getBandForTier(tier);
+        const tierInBand = getTierWithinBand(tier);
+        const progress = getProgressWithinBand(tier) * 100;
+        return { band, tierInBand, progress };
     };
-
 
     return (
         <motion.div
@@ -434,59 +437,74 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                                         )}
                                         onClick={() => setSelectedOp(selectedOp === op.title ? null : op.title)}
                                     >
-                                        <div className="flex justify-between items-start mb-6">
-                                            <div className="flex flex-col">
-                                                <span className="font-bold text-sm text-zinc-400 uppercase tracking-widest">{op.title}</span>
-                                                <span className="text-xs font-black text-primary uppercase tracking-widest">
-                                                    Tier {toRoman(op.tier || 1)}
-                                                </span>
-                                            </div>
-                                            <motion.span
-                                                className={cn(
-                                                    "text-3xl font-black truncate max-w-[80px]",
-                                                    selectedOp === op.title ? "text-primary" : "text-zinc-700"
-                                                )}
-                                                animate={{
-                                                    scale: selectedOp === op.title ? [1, 1.2, 1] : 1,
-                                                    rotate: selectedOp === op.title ? [0, 5, -5, 0] : 0
-                                                }}
-                                                transition={{ duration: 0.4 }}
-                                            >
-                                                {op.title === "Addition" ? "+" : op.title === "Subtraction" ? "-" : op.title === "Multiplication" ? "×" : "÷"}
-                                            </motion.span>
-                                        </div>
+                                        {(() => {
+                                            const tierInfo = getTierDisplayInfo(op.tier || 1);
+                                            return (
+                                                <>
+                                                    <div className="flex justify-between items-start mb-6">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-sm text-zinc-400 uppercase tracking-widest">{op.title}</span>
+                                                            <span className={cn(
+                                                                "text-xs font-black uppercase tracking-widest",
+                                                                tierInfo.band.textColor
+                                                            )}>
+                                                                {tierInfo.band.shortName}{tierInfo.tierInBand}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex flex-col items-end gap-1">
+                                                            <motion.span
+                                                                className={cn(
+                                                                    "text-3xl font-black truncate max-w-[80px]",
+                                                                    selectedOp === op.title ? "text-primary" : "text-zinc-700"
+                                                                )}
+                                                                animate={{
+                                                                    scale: selectedOp === op.title ? [1, 1.2, 1] : 1,
+                                                                    rotate: selectedOp === op.title ? [0, 5, -5, 0] : 0
+                                                                }}
+                                                                transition={{ duration: 0.4 }}
+                                                            >
+                                                                {op.title === "Addition" ? "+" : op.title === "Subtraction" ? "-" : op.title === "Multiplication" ? "×" : "÷"}
+                                                            </motion.span>
+                                                            <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                                                                {tierInfo.band.name}
+                                                            </span>
+                                                        </div>
+                                                    </div>
 
-                                        <div className="space-y-3 mb-6">
-                                            <div className="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
-                                                <span>Tier Completion</span>
-                                                <motion.span
-                                                    className={cn(selectedOp === op.title ? "text-primary" : "")}
-                                                    key={op.progress}
-                                                    initial={{ scale: 1.5, opacity: 0 }}
-                                                    animate={{ scale: 1, opacity: 1 }}
-                                                >
-                                                    {op.progress}%
-                                                </motion.span>
-                                            </div>
+                                                    <div className="space-y-3 mb-6">
+                                                        <div className="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
+                                                            <span>Band Progress</span>
+                                                            <motion.span
+                                                                className={cn(selectedOp === op.title ? tierInfo.band.textColor : "")}
+                                                                key={tierInfo.progress}
+                                                                initial={{ scale: 1.5, opacity: 0 }}
+                                                                animate={{ scale: 1, opacity: 1 }}
+                                                            >
+                                                                {tierInfo.progress.toFixed(0)}%
+                                                            </motion.span>
+                                                        </div>
 
-                                            <div className="h-2 w-full bg-zinc-800/50 rounded-full overflow-hidden">
-                                                <motion.div
-                                                    initial={{ width: 0 }}
-                                                    animate={{ width: `${op.progress}%` }}
-                                                    transition={{
-                                                        duration: 1,
-                                                        delay: 0.3 + index * 0.15,
-                                                        ease: [0.34, 1.56, 0.64, 1]
-                                                    }}
-                                                    className={cn(
-                                                        "h-full transition-all",
-                                                        selectedOp === op.title
-                                                            ? "bg-primary shadow-[0_0_10px_rgba(34,211,238,0.5)]"
-                                                            : "bg-gradient-to-r from-zinc-600 to-zinc-500"
-                                                    )}
-                                                />
-                                            </div>
-                                        </div>
+                                                        <div className="h-2 w-full bg-zinc-800/50 rounded-full overflow-hidden">
+                                                            <motion.div
+                                                                initial={{ width: 0 }}
+                                                                animate={{ width: `${tierInfo.progress}%` }}
+                                                                transition={{
+                                                                    duration: 1,
+                                                                    delay: 0.3 + index * 0.15,
+                                                                    ease: [0.34, 1.56, 0.64, 1]
+                                                                }}
+                                                                className={cn(
+                                                                    "h-full transition-all",
+                                                                    selectedOp === op.title
+                                                                        ? `bg-gradient-to-r ${tierInfo.band.bgGradient} shadow-lg`
+                                                                        : "bg-gradient-to-r from-zinc-600 to-zinc-500"
+                                                                )}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
 
                                         {/* Action Area (Visible when selected) */}
                                         <motion.div
