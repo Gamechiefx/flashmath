@@ -63,20 +63,25 @@ export async function registerUser(formData: FormData) {
             return { error: "Email already registered" };
         }
 
-        // Ensure dob column exists
+        // Ensure dob column exists (for databases created before this column was added)
         try {
             db.prepare("ALTER TABLE users ADD COLUMN dob TEXT").run();
+            console.log('[Auth] Added dob column to users table');
         } catch (e) {
-            // Column likely already exists
+            // Column likely already exists - this is expected
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const id = uuidv4();
 
-        execute(
-            "INSERT INTO users (id, name, email, password_hash, created_at, dob) VALUES (?, ?, ?, ?, ?, ?)",
-            [id, name, email, hashedPassword, now(), dob]
-        );
+        console.log(`[Auth] Registering user: ${email}, DOB: ${dob}`);
+
+        // Insert user with DOB
+        db.prepare(
+            "INSERT INTO users (id, name, email, password_hash, created_at, dob) VALUES (?, ?, ?, ?, ?, ?)"
+        ).run(id, name, email, hashedPassword, now(), dob);
+
+        console.log(`[Auth] User registered successfully with DOB: ${dob}`);
 
         // Send verification email (fire-and-forget to avoid slow registration)
         sendVerificationEmail(email).catch(err => {
