@@ -119,12 +119,22 @@ export function SocialPanel() {
         const realtimeStatus = friendStatuses.get(f.odUserId);
         // If we have real-time status info, use it exclusively
         // Otherwise fall back to database last_active timestamp
-        const isOnline = realtimeStatus !== undefined
-            ? realtimeStatus === 'online' || realtimeStatus === 'away'
-            : f.odOnline;
+        let displayStatus: 'online' | 'away' | 'offline' = 'offline';
+        
+        if (realtimeStatus !== undefined) {
+            // We have real-time status
+            if (realtimeStatus === 'online') displayStatus = 'online';
+            else if (realtimeStatus === 'away') displayStatus = 'away';
+            else displayStatus = 'offline';
+        } else {
+            // Fall back to DB last_active
+            displayStatus = f.odOnline ? 'online' : 'offline';
+        }
+        
         return {
             ...f,
-            odOnline: isOnline,
+            odOnline: displayStatus !== 'offline',
+            odStatus: displayStatus,
         };
     });
     
@@ -144,8 +154,9 @@ export function SocialPanel() {
     }, [isPanelOpen, loadData]);
 
     // Filter friends by online status (using real-time data)
-    const onlineFriends = friendsWithRealTimeStatus.filter(f => f.odOnline);
-    const offlineFriends = friendsWithRealTimeStatus.filter(f => !f.odOnline);
+    // "Online" section includes both 'online' and 'away' statuses
+    const onlineFriends = friendsWithRealTimeStatus.filter(f => f.odStatus === 'online' || f.odStatus === 'away');
+    const offlineFriends = friendsWithRealTimeStatus.filter(f => f.odStatus === 'offline');
     
     // Sync status with presence hook
     const handleStatusChange = (status: OnlineStatus) => {
@@ -475,6 +486,7 @@ export function SocialPanel() {
                                                         <FriendListItem
                                                             key={friend.id}
                                                             friend={friend}
+                                                            status={friend.odStatus}
                                                             inParty={!!party}
                                                             onInviteToParty={handleInviteToParty}
                                                             onRemoveFriend={handleRemoveFriend}
@@ -511,6 +523,7 @@ export function SocialPanel() {
                                                                 <FriendListItem
                                                                     key={friend.id}
                                                                     friend={friend}
+                                                                    status="offline"
                                                                     inParty={!!party}
                                                                     onRemoveFriend={handleRemoveFriend}
                                                                 />

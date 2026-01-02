@@ -79,6 +79,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
                 : 'http://localhost:3000';
             
             presenceSocket = io(`${socketUrl}/presence`, {
+                path: '/api/socket/arena',
                 autoConnect: false,
                 reconnection: true,
                 reconnectionAttempts: 5,
