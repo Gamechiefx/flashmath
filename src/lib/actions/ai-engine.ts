@@ -293,12 +293,9 @@ export async function endAISession(
     let tierAdvance = 0;
     let newTier = previousTier;
 
-    // Must have minimum questions and low frustration
-    if (stats.totalQuestions >= 15 && tiltScore < 0.4) {
-        // Advance by 1 tier if performance is good
-        if (accuracy >= 0.85 && confidence >= 0.80) {
-            tierAdvance = 1;
-        }
+    // Requirements: 10+ questions, 85%+ accuracy, low frustration
+    if (stats.totalQuestions >= 10 && accuracy >= 0.85 && tiltScore < 0.5) {
+        tierAdvance = 1;
     }
 
     console.log(`[AI] Calculated tier advance: ${tierAdvance} (max streak: ${stats.maxStreak})`);
