@@ -289,18 +289,15 @@ export async function endAISession(
     });
 
     // Determine tier advancement (100-tier system)
+    // Limited to +1 tier per session for gradual progression
     let tierAdvance = 0;
     let newTier = previousTier;
 
     // Must have minimum questions and low frustration
     if (stats.totalQuestions >= 15 && tiltScore < 0.4) {
-        // Calculate tier advancement based on performance
-        if (accuracy >= 0.95 && confidence >= 0.90 && stats.maxStreak >= 10) {
-            tierAdvance = 3;  // Exceptional performance
-        } else if (accuracy >= 0.90 && confidence >= 0.85 && stats.maxStreak >= 8) {
-            tierAdvance = 2;  // Strong performance
-        } else if (accuracy >= 0.85 && confidence >= 0.80) {
-            tierAdvance = 1;  // Good performance
+        // Advance by 1 tier if performance is good
+        if (accuracy >= 0.85 && confidence >= 0.80) {
+            tierAdvance = 1;
         }
     }
 
