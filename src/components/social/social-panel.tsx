@@ -60,7 +60,7 @@ type OnlineStatus = 'online' | 'away' | 'invisible';
 
 export function SocialPanel() {
     const { data: session } = useSession();
-    const { isPanelOpen, closePanel, refreshStats, stats } = useSocial();
+    const { isPanelOpen, openPanel, closePanel, refreshStats, stats } = useSocial();
     
     // Real-time presence
     const { 
@@ -150,13 +150,42 @@ export function SocialPanel() {
         };
     });
     
-    // Reload data when real-time notifications arrive
+    // Reload data when real-time notifications arrive and show toast
     useEffect(() => {
-        if (realtimeFriendRequests.length > 0 || realtimePartyInvites.length > 0) {
+        if (realtimeFriendRequests.length > 0) {
+            const latestRequest = realtimeFriendRequests[realtimeFriendRequests.length - 1];
+            // Show toast for new friend requests (check if it's a real request, not an accepted notification)
+            if (!latestRequest.senderName.includes('(accepted)')) {
+                toast.info(`${latestRequest.senderName} sent you a friend request!`, {
+                    action: {
+                        label: 'View',
+                        onClick: () => openPanel(),
+                    },
+                });
+            } else {
+                // It's a friend accepted notification
+                const name = latestRequest.senderName.replace(' (accepted)', '');
+                toast.success(`${name} accepted your friend request!`);
+            }
             loadData();
             refreshStats();
         }
-    }, [realtimeFriendRequests, realtimePartyInvites, loadData, refreshStats]);
+    }, [realtimeFriendRequests, loadData, refreshStats, openPanel]);
+    
+    // Handle party invites separately
+    useEffect(() => {
+        if (realtimePartyInvites.length > 0) {
+            const latestInvite = realtimePartyInvites[realtimePartyInvites.length - 1];
+            toast.info(`${latestInvite.inviterName} invited you to their party!`, {
+                action: {
+                    label: 'View',
+                    onClick: () => openPanel(),
+                },
+            });
+            loadData();
+            refreshStats();
+        }
+    }, [realtimePartyInvites, loadData, refreshStats, openPanel]);
     
     // Reload friends when friendsChanged updates (friend removed by someone else)
     useEffect(() => {

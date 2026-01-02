@@ -6,8 +6,8 @@
  */
 
 import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { UserPlus, UserMinus, Moon, Coffee } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { UserPlus, UserMinus, Coffee, X, Check } from 'lucide-react';
 import { UserAvatar } from '@/components/user-avatar';
 import { cn } from '@/lib/utils';
 import type { Friend } from '@/lib/actions/social';
@@ -57,10 +57,27 @@ export function FriendListItem({
     isInviting,
 }: FriendListItemProps) {
     const [showActions, setShowActions] = useState(false);
+    const [confirmingRemove, setConfirmingRemove] = useState(false);
     
     // Determine status from prop or fallback to odOnline
     const friendStatus: FriendStatus = status || (friend.odOnline ? 'online' : 'offline');
     const config = STATUS_CONFIG[friendStatus];
+    
+    const handleRemoveClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setConfirmingRemove(true);
+    };
+    
+    const handleConfirmRemove = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onRemoveFriend?.(friend.odUserId);
+        setConfirmingRemove(false);
+    };
+    
+    const handleCancelRemove = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setConfirmingRemove(false);
+    };
 
     return (
         <motion.div
@@ -116,45 +133,72 @@ export function FriendListItem({
             </div>
 
             {/* Actions */}
-            <div className={cn(
-                "flex items-center gap-1 transition-opacity",
-                showActions ? "opacity-100" : "opacity-0"
-            )}>
-                {/* Invite to party (only if in party and friend is online) */}
-                {inParty && friend.odOnline && onInviteToParty && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onInviteToParty(friend.odUserId);
-                        }}
-                        disabled={isInviting}
-                        className={cn(
-                            "p-2 rounded-lg transition-colors",
-                            "hover:bg-primary/20 text-primary",
-                            isInviting && "opacity-50"
+            <AnimatePresence mode="wait">
+                {confirmingRemove ? (
+                    <motion.div
+                        key="confirm"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="flex items-center gap-1"
+                    >
+                        <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider mr-1">
+                            Remove?
+                        </span>
+                        <button
+                            onClick={handleConfirmRemove}
+                            className="p-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-400 transition-colors"
+                            title="Confirm remove"
+                        >
+                            <Check size={12} />
+                        </button>
+                        <button
+                            onClick={handleCancelRemove}
+                            className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-muted-foreground transition-colors"
+                            title="Cancel"
+                        >
+                            <X size={12} />
+                        </button>
+                    </motion.div>
+                ) : (
+                    <motion.div
+                        key="actions"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: showActions ? 1 : 0 }}
+                        className="flex items-center gap-1"
+                    >
+                        {/* Invite to party (only if in party and friend is online) */}
+                        {inParty && friend.odOnline && onInviteToParty && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onInviteToParty(friend.odUserId);
+                                }}
+                                disabled={isInviting}
+                                className={cn(
+                                    "p-2 rounded-lg transition-colors",
+                                    "hover:bg-primary/20 text-primary",
+                                    isInviting && "opacity-50"
+                                )}
+                                title="Invite to party"
+                            >
+                                <UserPlus size={14} />
+                            </button>
                         )}
-                        title="Invite to party"
-                    >
-                        <UserPlus size={14} />
-                    </button>
-                )}
 
-                {/* Remove friend */}
-                {onRemoveFriend && (
-                    <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm(`Remove ${friend.odName} from friends?`)) {
-                                onRemoveFriend(friend.odUserId);
-                            }
-                        }}
-                        className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
-                        title="Remove friend"
-                    >
-                        <UserMinus size={14} />
-                    </button>
+                        {/* Remove friend */}
+                        {onRemoveFriend && (
+                            <button
+                                onClick={handleRemoveClick}
+                                className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
+                                title="Remove friend"
+                            >
+                                <UserMinus size={14} />
+                            </button>
+                        )}
+                    </motion.div>
                 )}
-            </div>
+            </AnimatePresence>
         </motion.div>
     );
 }

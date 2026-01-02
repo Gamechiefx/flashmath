@@ -34,6 +34,7 @@ import { AudioSettingsProvider } from "@/components/audio-settings-provider";
 import { SessionGuard } from "@/components/session-guard";
 import { DevFooter } from "@/components/dev-footer";
 import { SocialProvider, SocialFAB, SocialPanel } from "@/components/social";
+import { Toaster } from "sonner";
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -69,6 +70,25 @@ export default async function RootLayout({
                   {children}
                   <SocialFAB />
                   <SocialPanel />
+                  <Toaster 
+                    position="top-center" 
+                    closeButton
+                    theme="dark"
+                    toastOptions={{
+                      className: 'font-sans',
+                      style: {
+                        background: 'rgba(15, 23, 42, 0.95)',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: '#f8fafc',
+                      },
+                      classNames: {
+                        success: '!border-green-500/30 !text-green-400',
+                        error: '!border-red-500/30 !text-red-400',
+                        info: '!border-primary/30 !text-primary',
+                      },
+                    }}
+                  />
                 </SocialProvider>
               </ThemeProvider>
             </ItemPreviewProvider>
