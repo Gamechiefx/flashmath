@@ -31,16 +31,58 @@ export async function resetUserData() {
         db.prepare('DELETE FROM user_achievements WHERE user_id = ?').run(userId);
 
         // Reset user's total XP, level, coins, math_tiers, and equipped_items
-        db.prepare(`
-            UPDATE users SET 
-                total_xp = 0, 
-                level = 1, 
-                coins = 0, 
-                math_tiers = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
-                equipped_items = '{"theme":"default","particle":"default","font":"default","sound":"default","bgm":"default","title":"default","frame":"default"}',
-                updated_at = ?
-            WHERE id = ?
-        `).run(now(), userId);
+        try {
+            // Try with new arena columns first
+            db.prepare(`
+                UPDATE users SET 
+                    total_xp = 0, 
+                    level = 1, 
+                    coins = 0, 
+                    math_tiers = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
+                    skill_points = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
+                    equipped_items = '{"theme":"default","particle":"default","font":"default","sound":"default","bgm":"default","title":"default","frame":"default"}',
+                    arena_elo = 500,
+                    arena_elo_1v1 = 500,
+                    arena_elo_2v2 = 400,
+                    arena_elo_3v3 = 350,
+                    arena_wins = 0,
+                    arena_losses = 0,
+                    arena_win_streak = 0,
+                    arena_best_win_streak = 0,
+                    current_league_id = 'neon-league',
+                    updated_at = ?
+                WHERE id = ?
+            `).run(now(), userId);
+        } catch (e) {
+            // Fallback for databases without new columns
+            console.log('[SETTINGS] Using fallback reset (new columns may not exist)');
+            db.prepare(`
+                UPDATE users SET 
+                    total_xp = 0, 
+                    level = 1, 
+                    coins = 0, 
+                    math_tiers = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
+                    skill_points = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
+                    equipped_items = '{"theme":"default","particle":"default","font":"default","sound":"default","bgm":"default","title":"default","frame":"default"}',
+                    arena_elo = 500,
+                    arena_wins = 0,
+                    arena_losses = 0,
+                    current_league_id = 'neon-league',
+                    updated_at = ?
+                WHERE id = ?
+            `).run(now(), userId);
+        }
+
+        // Clear user from Redis queue  if any
+        try {
+            const { getRedis } = await import("@/lib/redis");
+            const redis = getRedis();
+            if (redis) {
+                await redis.del(`arena:queue:${userId}`);
+            }
+        } catch (e) {
+            // Redis may not be available
+        }
 
         console.log(`[SETTINGS] Reset all data for user: ${userId}`);
 
@@ -51,6 +93,9 @@ export async function resetUserData() {
         revalidatePath("/locker");
         revalidatePath("/shop");
         revalidatePath("/stats/[op]", "page");
+        revalidatePath("/arena");
+        revalidatePath("/arena/modes");
+        revalidatePath("/stats");
         revalidatePath("/", "layout");
 
         return { success: true };
@@ -101,8 +146,12 @@ export async function updateUsername(newUsername: string) {
 
     const userId = (session.user as any).id;
 
-    if (!newUsername || newUsername.trim().length < 3) {
-        return { error: "Username must be at least 3 characters" };
+    // Validate username format, profanity, and reserved words
+    const { validateUsername, isUsernameAvailable } = await import("@/lib/username-validator");
+
+    const validation = validateUsername(newUsername);
+    if (!validation.valid) {
+        return { error: validation.error || "Invalid username" };
     }
 
     try {
@@ -123,10 +172,10 @@ export async function updateUsername(newUsername: string) {
             }
         }
 
-        // Check if username is already taken
-        const existingUser = db.prepare('SELECT id FROM users WHERE name = ? AND id != ?').get(newUsername, userId);
-        if (existingUser) {
-            return { error: "Username already taken" };
+        // Check if username is already taken (case-insensitive)
+        const available = await isUsernameAvailable(newUsername, userId);
+        if (!available) {
+            return { error: "Username is already taken" };
         }
 
         // Update username
@@ -145,5 +194,48 @@ export async function updateUsername(newUsername: string) {
     } catch (error) {
         console.error("Error updating username:", error);
         return { error: "Failed to update username" };
+    }
+}
+
+export async function updateDOB(dob: string) {
+    const session = await auth();
+    if (!session?.user) {
+        return { error: "Unauthorized" };
+    }
+
+    const userId = (session.user as any).id;
+
+    try {
+        const db = getDatabase();
+
+        // Check if user already has DOB set
+        try {
+            const existing = db.prepare('SELECT dob FROM users WHERE id = ?').get(userId) as any;
+            if (existing?.dob) {
+                return { error: "Date of Birth has already been set and cannot be changed" };
+            }
+        } catch (e) {
+            // Column might not exist yet, continue
+        }
+
+        // Ensure dob column exists
+        try {
+            db.prepare("ALTER TABLE users ADD COLUMN dob TEXT").run();
+        } catch (e) {
+            // Column likely already exists
+        }
+
+        db.prepare('UPDATE users SET dob = ?, updated_at = ? WHERE id = ?').run(dob, now(), userId);
+
+        console.log(`[SETTINGS] Updated DOB for user ${userId}`);
+
+        revalidatePath("/dashboard");
+        revalidatePath("/settings");
+        revalidatePath("/arena");
+
+        return { success: true };
+    } catch (error) {
+        console.error("Error updating DOB:", error);
+        return { error: "Failed to update date of birth" };
     }
 }

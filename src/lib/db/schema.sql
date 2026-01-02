@@ -53,9 +53,14 @@ CREATE TABLE IF NOT EXISTS users (
     locked_until TEXT,
     
     -- Arena stats
-    arena_elo INTEGER DEFAULT 1000,
+    arena_elo INTEGER DEFAULT 500,
+    arena_elo_1v1 INTEGER DEFAULT 500,
+    arena_elo_2v2 INTEGER DEFAULT 400,
+    arena_elo_3v3 INTEGER DEFAULT 350,
     arena_wins INTEGER DEFAULT 0,
     arena_losses INTEGER DEFAULT 0,
+    arena_win_streak INTEGER DEFAULT 0,
+    arena_best_win_streak INTEGER DEFAULT 0,
     
     -- 2FA
     two_factor_enabled INTEGER DEFAULT 0,

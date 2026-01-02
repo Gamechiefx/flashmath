@@ -1,39 +1,13 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { MatchmakingQueue } from "@/components/arena/matchmaking-queue";
 import { getMatchmakingData } from "@/lib/actions/arena";
 import { getArenaStats } from "@/lib/actions/matchmaking";
-import { Suspense } from "react";
+import { ArenaQueueClient } from "@/components/arena/arena-queue-client";
 
 export const dynamic = 'force-dynamic';
 
 interface PageProps {
     searchParams: Promise<{ mode?: string; operation?: string }>;
-}
-
-interface QueueContentProps {
-    data: any;
-    operation: string;
-    arenaStats: {
-        elo: number;
-        rank: string;
-        division: string;
-    };
-}
-
-function QueueContent({ data, operation, arenaStats }: QueueContentProps) {
-    return (
-        <MatchmakingQueue
-            userId={data.userId}
-            userName={data.name || 'Player'}
-            level={data.level || 1}
-            tier={arenaStats.rank}
-            elo={arenaStats.elo}
-            operation={operation}
-            equippedBanner={data.equippedBanner || 'default'}
-            equippedTitle={data.equippedTitle || 'Challenger'}
-        />
-    );
 }
 
 export default async function ArenaQueuePage({ searchParams }: PageProps) {
@@ -61,13 +35,6 @@ export default async function ArenaQueuePage({ searchParams }: PageProps) {
     };
 
     return (
-        <main className="h-screen bg-background text-foreground flex flex-col relative">
-            {/* Main Content - Full Screen Immersive */}
-            <div className="flex-1 w-full max-w-7xl mx-auto relative z-10 flex items-center justify-center">
-                <Suspense fallback={<div className="text-center font-black text-white/20 uppercase tracking-widest">Entering Queue...</div>}>
-                    <QueueContent data={data} operation={operation} arenaStats={arenaStats} />
-                </Suspense>
-            </div>
-        </main>
+        <ArenaQueueClient data={data} operation={operation} arenaStats={arenaStats} />
     );
 }

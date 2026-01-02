@@ -1,7 +1,7 @@
 'use server';
 
 import { auth } from "@/auth";
-import { queryOne, query } from "@/lib/db";
+import { queryOne, query, getDatabase } from "@/lib/db";
 import { ITEMS } from "@/lib/items";
 
 /**
@@ -29,26 +29,61 @@ export async function getArenaEligibilityData() {
     const isAdmin = userRole === 'admin' || userRole === 'super_admin';
 
     // Get user data
-    const user = queryOne(
-        "SELECT total_xp, level, created_at, last_active FROM users WHERE id = ?",
-        [userId]
-    ) as any;
+    const db = getDatabase();
+
+    // User data query
+    // User data query
+    let user;
+    try {
+        user = db.prepare(
+            "SELECT total_xp, level, created_at, last_active, dob FROM users WHERE id = ?"
+        ).get(userId) as any;
+    } catch (error: any) {
+        // If column doesn't exist, add it and retry
+        if (error.message && error.message.includes('no such column: dob')) {
+            try {
+                db.prepare("ALTER TABLE users ADD COLUMN dob TEXT").run();
+                user = db.prepare(
+                    "SELECT total_xp, level, created_at, last_active, dob FROM users WHERE id = ?"
+                ).get(userId) as any;
+            } catch (e) {
+                // Fallback to query without dob if migration fails (concurrency safe-ish)
+                user = db.prepare(
+                    "SELECT total_xp, level, created_at, last_active FROM users WHERE id = ?"
+                ).get(userId) as any;
+            }
+        } else {
+            throw error;
+        }
+    }
+
+    let userAge: number | null = null;
+    if (user?.dob) {
+        // Parse DOB as local time to avoid timezone shift
+        const [year, month, day] = user.dob.split('-').map(Number);
+        const birthDate = new Date(year, month - 1, day); // Month is 0-indexed
+        const today = new Date();
+        userAge = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            userAge--;
+        }
+    }
 
     // Count practice sessions
-    const sessionCount = queryOne(
-        "SELECT COUNT(*) as count FROM practice_sessions WHERE user_id = ?",
-        [userId]
-    ) as any;
+    const sessionCount = db.prepare(
+        "SELECT COUNT(*) as count FROM practice_sessions WHERE user_id = ?"
+    ).get(userId) as any;
 
     // Get recent practice stats (last 7 days)
-    const recentStats = queryOne(`
+    const recentStats = db.prepare(`
         SELECT 
             SUM(correct_count) as total_correct,
             SUM(total_count) as total_questions,
             MAX(created_at) as last_session
         FROM practice_sessions
         WHERE user_id = ? AND created_at > datetime('now', '-7 days')
-    `, [userId]) as any;
+    `).get(userId) as any;
 
     // Calculate days since last practice
     let daysSinceLastPractice = 30;
@@ -86,7 +121,7 @@ export async function getArenaEligibilityData() {
             daysSinceLastPractice,
             confidence: Math.round(confidence * 100) / 100
         },
-        userAge: null,
+        userAge,
         isAdmin // Admin bypasses all requirements
     };
 }

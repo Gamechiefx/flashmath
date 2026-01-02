@@ -281,7 +281,29 @@ export const execute = (text: string, params: any[] = []): { changes: number } =
         return { changes: 1 };
     }
 
-    return { changes: 0 };
+    // Arena stats updates - execute directly
+    if (lowerText.includes('arena_elo') || lowerText.includes('arena_wins') || lowerText.includes('arena_losses') || lowerText.includes('arena_win_streak')) {
+        console.log('[DB] Executing arena stats update:', text.substring(0, 100));
+        const result = database.prepare(text).run(...params);
+        console.log('[DB] Arena update result:', result);
+        return { changes: result.changes };
+    }
+
+    // Arena matches table
+    if (lowerText.includes('arena_matches')) {
+        const result = database.prepare(text).run(...params);
+        return { changes: result.changes };
+    }
+
+    // Fallback: try to execute the SQL directly for any unrecognized patterns
+    console.warn('[DB] Unrecognized SQL pattern, attempting direct execution:', text.substring(0, 80));
+    try {
+        const result = database.prepare(text).run(...params);
+        return { changes: result.changes };
+    } catch (e) {
+        console.error('[DB] Direct execution failed:', e);
+        return { changes: 0 };
+    }
 };
 
 /**

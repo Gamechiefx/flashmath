@@ -53,88 +53,91 @@ export default async function ShopPage() {
     const dailySelection = getDailyShopSelection().map(({ icon, ...rest }) => rest);
 
     return (
-        <div className="min-h-screen bg-background text-foreground p-6 md:p-12 relative">
+        <div className="min-h-screen bg-background text-foreground relative">
             {/* Background Ambience */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] right-[-20%] w-[800px] h-[800px] bg-primary/5 rounded-full blur-[120px]" />
                 <div className="absolute bottom-[-10%] left-[-10%] w-[600px] h-[600px] bg-accent/5 rounded-full blur-[100px]" />
             </div>
 
-            <div className="w-full max-w-7xl mx-auto">
-                <AuthHeader session={session} />
-            </div>
+            {/* Auth Header - Full Width */}
+            <AuthHeader session={session} />
 
-            <div className="max-w-6xl mx-auto relative z-10 space-y-8">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                    <div>
-                        <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 mb-2">
-                            <ShoppingBag size={14} />
-                            Daily Shop
+            <div className="p-6 md:p-12">
+                <div className="max-w-6xl mx-auto relative z-10 space-y-8">
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2 mb-2">
+                                <ShoppingBag size={14} />
+                                Daily Shop
+                            </div>
+                            <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-primary">
+                                Today's Picks
+                            </h1>
+                            <p className="text-muted-foreground mt-2 max-w-lg">
+                                Fresh items every day. Don't miss out!
+                            </p>
                         </div>
-                        <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-primary">
-                            Today's Picks
-                        </h1>
-                        <p className="text-muted-foreground mt-2 max-w-lg">
-                            Fresh items every day. Don't miss out!
-                        </p>
+
+                        <GlassCard className="p-4 px-6 flex items-center gap-4 bg-primary/10 border-primary/20">
+                            <div className="flex flex-col items-end">
+                                <span className="text-xs font-bold uppercase tracking-widest text-primary/70">Balance</span>
+                                <span className="text-2xl font-black text-primary flex items-center gap-2">
+                                    <Coins size={20} />
+                                    {user.coins.toLocaleString()}
+                                </span>
+                            </div>
+                        </GlassCard>
                     </div>
 
-                    <GlassCard className="p-4 px-6 flex items-center gap-4 bg-primary/10 border-primary/20">
-                        <div className="flex flex-col items-end">
-                            <span className="text-xs font-bold uppercase tracking-widest text-primary/70">Balance</span>
-                            <span className="text-2xl font-black text-primary flex items-center gap-2">
-                                <Coins size={20} />
-                                {user.coins.toLocaleString()}
-                            </span>
-                        </div>
-                    </GlassCard>
-                </div>
+                    {/* Timer Banner */}
+                    <div className="w-full p-4 rounded-xl bg-gradient-to-r from-primary/5 via-white/5 to-accent/5 border border-white/10 flex justify-center items-center gap-3">
+                        <RefreshCw size={16} className="text-primary animate-spin" style={{ animationDuration: '3s' }} />
+                        <span className="text-sm font-bold uppercase tracking-widest text-white/60">
+                            New items in: <span className="text-primary"><ShopTimer /></span>
+                        </span>
+                    </div>
 
-                {/* Timer Banner */}
-                <div className="w-full p-4 rounded-xl bg-gradient-to-r from-primary/5 via-white/5 to-accent/5 border border-white/10 flex justify-center items-center gap-3">
-                    <RefreshCw size={16} className="text-primary animate-spin" style={{ animationDuration: '3s' }} />
-                    <span className="text-sm font-bold uppercase tracking-widest text-white/60">
-                        New items in: <span className="text-primary"><ShopTimer /></span>
-                    </span>
-                </div>
-
-                {/* Daily Items Grid - Organized by Category */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {dailySelection.map((item, index) => {
-                        const isOwned = inventory.includes(item.id);
-                        const config = CATEGORY_CONFIG[item.type];
-                        return (
-                            <div key={item.id} className="space-y-2">
-                                {/* Category Tag */}
-                                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40">
-                                    <span>{config?.icon}</span>
-                                    <span>{config?.label}</span>
+                    {/* Daily Items Grid - Organized by Category */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
+                        {dailySelection.map((item, index) => {
+                            const isOwned = inventory.includes(item.id);
+                            const config = CATEGORY_CONFIG[item.type];
+                            return (
+                                <div key={item.id} className="flex flex-col">
+                                    {/* Category Tag */}
+                                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-white/40 mb-2 h-5">
+                                        <span>{config?.icon}</span>
+                                        <span>{config?.label}</span>
+                                    </div>
+                                    <div className="flex-1">
+                                        <ShopItemCard
+                                            item={item}
+                                            isOwned={isOwned}
+                                            userCoins={user.coins}
+                                            index={index}
+                                        />
+                                    </div>
                                 </div>
-                                <ShopItemCard
-                                    item={item}
-                                    isOwned={isOwned}
-                                    userCoins={user.coins}
-                                    index={index}
-                                />
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
+                    </div>
                 </div>
-            </div>
 
-            {/* Spacer for fixed footer */}
-            <div className="h-24" />
+                {/* Spacer for fixed footer */}
+                <div className="h-24" />
 
-            {/* Nav Footer */}
-            <div className="fixed bottom-0 left-0 w-full p-4 bg-background/80 backdrop-blur-md border-t border-white/10 flex justify-center z-50">
-                <div className="flex gap-4">
-                    <Link href="/dashboard">
-                        <NeonButton variant="secondary">Dashboard</NeonButton>
-                    </Link>
-                    <Link href="/locker">
-                        <NeonButton variant="accent">Open Locker</NeonButton>
-                    </Link>
+                {/* Nav Footer */}
+                <div className="fixed bottom-0 left-0 w-full p-4 bg-background/80 backdrop-blur-md border-t border-white/10 flex justify-center z-50">
+                    <div className="flex gap-4">
+                        <Link href="/dashboard">
+                            <NeonButton variant="secondary">Dashboard</NeonButton>
+                        </Link>
+                        <Link href="/locker">
+                            <NeonButton variant="accent">Open Locker</NeonButton>
+                        </Link>
+                    </div>
                 </div>
             </div>
         </div>

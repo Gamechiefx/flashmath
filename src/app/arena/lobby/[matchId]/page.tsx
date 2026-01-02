@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { MatchLobby } from "@/components/arena/match-lobby";
-import { getMatch } from "@/lib/actions/matchmaking";
+import { getMatch, getArenaStats } from "@/lib/actions/matchmaking";
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +21,8 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
 
     const userId = session.user.id as string;
 
-    // Get real match data
+    // Get real stats for the current user to ensure rank/division is up to date
+    const userStats = await getArenaStats(userId);
     const matchResult = await getMatch(matchId);
 
     let players;
@@ -36,8 +37,9 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
             {
                 id: userId,
                 name: currentPlayer?.odUserName || session.user.name || 'You',
-                tier: currentPlayer?.odTier || 'Silver',
-                elo: currentPlayer?.odElo || 1000,
+                rank: userStats.rank || 'Bronze',
+                division: userStats.division || 'I',
+                elo: userStats.elo || 500,
                 ready: true,
                 banner: currentPlayer?.odEquippedBanner || 'default',
                 title: currentPlayer?.odEquippedTitle || 'Challenger',
@@ -46,8 +48,9 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
             {
                 id: opponent?.odUserId || 'ai-opponent',
                 name: opponent?.odUserName || 'AI Challenger',
-                tier: opponent?.odTier || 'Silver',
-                elo: opponent?.odElo || 1000,
+                rank: opponent?.odTier || 'Bronze', // AI uses tier as rank
+                division: 'I', // AI defaults to division I for now
+                elo: opponent?.odElo || 500,
                 ready: true,
                 banner: opponent?.odEquippedBanner || 'default',
                 title: opponent?.odEquippedTitle || 'Challenger',
@@ -60,8 +63,9 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
             {
                 id: userId,
                 name: session.user.name || 'You',
-                tier: 'Silver',
-                elo: 1000,
+                rank: userStats.rank || 'Bronze',
+                division: userStats.division || 'I',
+                elo: userStats.elo || 500,
                 ready: true,
                 banner: 'default',
                 title: 'Challenger',
@@ -70,8 +74,9 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
             {
                 id: 'ai-opponent',
                 name: 'AI Challenger',
-                tier: 'Silver',
-                elo: 1000,
+                rank: 'Bronze',
+                division: 'I',
+                elo: 500,
                 ready: true,
                 banner: 'default',
                 title: 'Challenger',

@@ -147,6 +147,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         (session.user as any).emailVerified = !!user.email_verified;
                         (session.user as any).createdAt = user.created_at;
                         (session.user as any).role = user.role; // For admin bypass
+                        (session.user as any).dob = user.dob; // Date of birth for settings
 
                         // Update last_active timestamp for online tracking
                         const db = getDatabase();

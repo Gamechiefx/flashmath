@@ -15,6 +15,10 @@ interface Player {
     odQuestionsAnswered: number;
     odLastAnswerCorrect: boolean | null;
     odCurrentQuestion?: Question;
+    odEquippedBanner?: string;
+    odEquippedTitle?: string;
+    odLevel?: number;
+    odTier?: string;
 }
 
 interface Question {
@@ -36,6 +40,7 @@ interface UseArenaSocketOptions {
     onPlayerJoined?: (data: { players: Record<string, Player>; playerId: string; playerName: string }) => void;
     onPlayerLeft?: (data: { odUserId: string }) => void;
     onPlayerForfeit?: (data: { odForfeitedUserId: string; odForfeitedUserName: string }) => void;
+    isAiMatch?: boolean;
 }
 
 export function useArenaSocket({
@@ -43,6 +48,7 @@ export function useArenaSocket({
     userId,
     userName,
     operation,
+    isAiMatch,
     onMatchStart,
     onAnswerResult,
     onNewQuestion,
@@ -81,6 +87,7 @@ export function useArenaSocket({
                 userId,
                 userName,
                 operation,
+                isAiMatch,
             });
         });
 
@@ -186,7 +193,7 @@ export function useArenaSocket({
             socket.emit('leave_match', { matchId, userId });
             socket.disconnect();
         };
-    }, [matchId, userId, userName, operation]);
+    }, [matchId, userId, userName, operation, isAiMatch]);
 
     const submitAnswer = useCallback((userAnswer: number) => {
         if (socketRef.current && connected) {

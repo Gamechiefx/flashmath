@@ -28,8 +28,9 @@ export async function registerUser(formData: FormData) {
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
+    const dob = formData.get("dob") as string;
 
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !dob) {
         return { error: "Missing required fields" };
     }
 
@@ -40,19 +41,41 @@ export async function registerUser(formData: FormData) {
         return { error: "Registration is currently disabled. Please try again later." };
     }
 
+    // Validate username
+    const { validateUsername, isUsernameAvailable } = await import("@/lib/username-validator");
+
+    const usernameValidation = validateUsername(name);
+    if (!usernameValidation.valid) {
+        return { error: usernameValidation.error || "Invalid username" };
+    }
+
+    const usernameAvailable = await isUsernameAvailable(name);
+    if (!usernameAvailable) {
+        return { error: "Username is already taken" };
+    }
+
     try {
+        const db = getDatabase();
+
         // Check if user exists
         const existing = queryOne("SELECT id FROM users WHERE email = ?", [email]);
         if (existing) {
             return { error: "Email already registered" };
         }
 
+        // Ensure dob column exists
+        try {
+            db.prepare("ALTER TABLE users ADD COLUMN dob TEXT").run();
+        } catch (e) {
+            // Column likely already exists
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const id = uuidv4();
 
         execute(
-            "INSERT INTO users (id, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-            [id, name, email, hashedPassword, now()]
+            "INSERT INTO users (id, name, email, password_hash, created_at, dob) VALUES (?, ?, ?, ?, ?, ?)",
+            [id, name, email, hashedPassword, now(), dob]
         );
 
         // Send verification email (fire-and-forget to avoid slow registration)

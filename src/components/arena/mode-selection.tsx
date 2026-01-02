@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { soundEngine } from '@/lib/sound-engine';
 
 interface GameMode {
     id: string;
@@ -102,7 +103,13 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
             whileHover={mode.available ? { scale: 1.02, y: -4 } : {}}
-            onClick={mode.available ? onSelect : undefined}
+            onClick={() => {
+                if (mode.available) {
+                    soundEngine.playClick();
+                    onSelect();
+                }
+            }}
+            onMouseEnter={() => mode.available && soundEngine.playHover()}
             className={cn(
                 "relative group flex flex-col justify-between p-5 rounded-[2rem] cursor-pointer overflow-hidden h-full transform-gpu will-change-transform",
                 isSelected
@@ -152,7 +159,7 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                                 ? "bg-white/20 border-white/30 text-white"
                                 : "bg-primary/20 border-primary/30 text-primary"
                         )}>
-                            <span className={cn("animate-pulse", isSelected ? "text-white" : "text-amber-400")}>⚡</span> {mode.rating}
+                            <span className={cn(isSelected ? "text-white" : "text-amber-400")}>ELO</span> {mode.rating}
                         </div>
                     )}
                 </div>
@@ -177,8 +184,10 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
+                                    soundEngine.playClick();
                                     onOperationSelect(op);
                                 }}
+                                onMouseEnter={() => soundEngine.playHover()}
                                 onMouseDown={(e) => e.stopPropagation()}
                                 className={cn(
                                     "w-12 h-12 rounded-xl border-2 flex flex-col items-center justify-center text-lg font-black transition-all cursor-pointer",
@@ -254,7 +263,6 @@ export function ModeSelection({ userRank = 'Silver', userDivision = 'II', userEl
                     <div className="flex flex-col">
                         <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Competitive Rank</span>
                         <span className="text-base font-black text-white">{userRank} {userDivision}</span>
-                        <span className="text-xs font-bold text-primary">{userElo} ELO</span>
                     </div>
                 </div>
 
@@ -312,10 +320,11 @@ export function ModeSelection({ userRank = 'Silver', userDivision = 'II', userEl
             <div className="pt-6 pb-2 flex flex-col items-center gap-3 shrink-0">
                 <AnimatePresence mode="wait">
                     {selectedModeData?.available ? (
-                        <Link href={queueHref}>
+                        <Link href={queueHref} onClick={() => soundEngine.playClick()}>
                             <motion.button
                                 whileHover={{ scale: 1.05, boxShadow: "0 0 40px rgba(245, 158, 11, 0.4)" }}
                                 whileTap={{ scale: 0.95 }}
+                                onMouseEnter={() => soundEngine.playHover()}
                                 className="group relative px-28 py-5 rounded-[1.5rem] font-[1000] text-xl uppercase tracking-[0.2em] bg-gradient-to-r from-amber-400 to-orange-500 text-black shadow-[0_20px_40px_rgba(0,0,0,0.3)] transition-all"
                             >
                                 <span className="relative z-10 transition-transform group-hover:scale-110 inline-block">
@@ -331,9 +340,9 @@ export function ModeSelection({ userRank = 'Silver', userDivision = 'II', userEl
                     )}
                 </AnimatePresence>
 
-                <Link href="/arena" className="flex items-center gap-2 group">
-                    <span className="text-[10px] font-black text-white/30 group-hover:text-white uppercase tracking-[0.2em] transition-colors">
-                        Esc to Return to Base
+                <Link href="/dashboard" className="flex items-center gap-2 group">
+                    <span className="text-xs font-black text-white/60 group-hover:text-white uppercase tracking-[0.2em] transition-colors">
+                        ← Go To Dashboard
                     </span>
                 </Link>
             </div>

@@ -59,21 +59,12 @@ export default async function ArenaMatchPage({ params, searchParams }: PageProps
     }
 
     return (
-        <main className="min-h-screen bg-background text-foreground flex flex-col relative overflow-hidden">
-            {/* Minimal Header during match */}
-            <div className="w-full max-w-7xl mx-auto p-4">
-                <div className="text-sm text-muted-foreground flex items-center gap-2">
-                    <span>Match {matchId.slice(0, 8)}...</span>
-                    {isAiMatch && <span className="text-xs text-amber-400 px-2 py-0.5 bg-amber-500/20 rounded">vs AI</span>}
-                    <span className="text-xs text-primary/60 px-2 py-0.5 bg-primary/10 rounded">LIVE</span>
-                </div>
-            </div>
-
+        <main className="h-screen bg-background text-foreground flex flex-col relative overflow-hidden">
             {/* Background Effects */}
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] -mr-64 -mt-64" />
             <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] -ml-64 -mb-64" />
 
-            <div className="flex-1 p-6 w-full max-w-[1400px] mx-auto relative z-10 flex flex-col items-center justify-center">
+            <div className="flex-1 w-full relative z-10 overflow-hidden">
                 <RealTimeMatch
                     matchId={matchId}
                     currentUserId={userId}

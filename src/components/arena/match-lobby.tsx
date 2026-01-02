@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { PlayerBanner } from '@/components/arena/player-banner';
+import { soundEngine } from '@/lib/sound-engine';
 import { sendMatchEmoji, getMatchEmojis } from '@/lib/actions/matchmaking';
 import { cn } from '@/lib/utils';
 
 interface Player {
     id: string;
     name: string;
-    tier: string;
+    rank: string; // "Bronze", "Silver", etc.
+    division: string; // "I", "II", "III"
     elo: number;
     ready: boolean;
     banner: string;
@@ -32,10 +34,12 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
     const [countdown, setCountdown] = useState(15);
     const [chatMessages, setChatMessages] = useState<{ emoji: string; senderId: string; timestamp: number }[]>([]);
     const [shouldNavigate, setShouldNavigate] = useState(false);
+    const lastMsgTimeRef = useRef<number>(0);
 
     // Navigate when countdown reaches 0
     useEffect(() => {
         if (shouldNavigate) {
+            // Immediate navigation attempt
             router.push(`/arena/match/${matchId}?operation=${operation}`);
         }
     }, [shouldNavigate, matchId, operation, router]);
@@ -47,13 +51,26 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
                 if (c <= 1) {
                     clearInterval(interval);
                     setShouldNavigate(true);
+                    // Direct navigation as backup
+                    setTimeout(() => {
+                        router.push(`/arena/match/${matchId}?operation=${operation}`);
+                    }, 100);
                     return 0;
                 }
                 return c - 1;
             });
         }, 1000);
-        return () => clearInterval(interval);
-    }, []);
+
+        // Safety timeout - if still on this page after 20 seconds, force navigate
+        const safetyTimeout = setTimeout(() => {
+            router.push(`/arena/match/${matchId}?operation=${operation}`);
+        }, 20000);
+
+        return () => {
+            clearInterval(interval);
+            clearTimeout(safetyTimeout);
+        };
+    }, [matchId, operation, router]);
 
     // Poll for emojis
     useEffect(() => {
@@ -67,7 +84,22 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
         return () => clearInterval(interval);
     }, [matchId]);
 
+    // Play sound on received messages
+    useEffect(() => {
+        if (chatMessages.length > 0) {
+            const latest = chatMessages[chatMessages.length - 1];
+            if (latest.timestamp > lastMsgTimeRef.current) {
+                lastMsgTimeRef.current = latest.timestamp;
+                // Only play sound for messages from others (we play our own sound on click)
+                if (latest.senderId !== currentUserId) {
+                    soundEngine.playChat();
+                }
+            }
+        }
+    }, [chatMessages, currentUserId]);
+
     const handleSendEmoji = async (emoji: string) => {
+        soundEngine.playChat();
         // Optimistic update
         const newMessage = { emoji, senderId: currentUserId, timestamp: Date.now() };
         setChatMessages(prev => [...prev.slice(-10), newMessage]);
@@ -104,6 +136,7 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="6"
+                            strokeDasharray="327"
                             strokeDasharray="327"
                             initial={{ strokeDashoffset: 0 }}
                             animate={{ strokeDashoffset: 327 * (1 - countdown / 15) }}
@@ -142,8 +175,8 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
                         <PlayerBanner
                             name={you?.name || 'You'}
                             level={you?.level || 1}
-                            rank={you?.tier || 'Silver'}
-                            division="II"
+                            rank={you?.rank || 'Bronze'}
+                            division={you?.division || "I"}
                             styleId={you?.banner || 'default'}
                             title={you?.title || 'Challenger'}
                             className="shadow-2xl border-primary/20 scale-95 lg:scale-100 transition-transform"
@@ -195,8 +228,8 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
                         <PlayerBanner
                             name={opponent?.name || 'Opponent'}
                             level={opponent?.level || 1}
-                            rank={opponent?.tier || 'Silver'}
-                            division="II"
+                            rank={opponent?.rank || 'Bronze'}
+                            division={opponent?.division || "I"}
                             styleId={opponent?.banner || 'default'}
                             title={opponent?.title || 'Challenger'}
                             className="shadow-2xl border-accent/20 grayscale-[0.2] scale-95 lg:scale-100 transition-transform"

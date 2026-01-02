@@ -37,9 +37,7 @@ export function HomeView({ session, maintenanceMode = false, maintenanceMessage 
             )}
 
             {/* Auth Header */}
-            <div className="w-full max-w-7xl mx-auto px-4 relative z-50">
-                <AuthHeader session={session} />
-            </div>
+            <AuthHeader session={session} />
 
             {/* Background Animated Geometry */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">

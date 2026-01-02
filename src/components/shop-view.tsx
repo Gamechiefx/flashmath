@@ -56,7 +56,7 @@ export function ShopView({ data }: ShopViewProps) {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {data.items.map((item: any) => {
                     const isOwned = data.inventory.includes(item.id);
                     const canAfford = data.coins >= item.cost;
@@ -65,7 +65,7 @@ export function ShopView({ data }: ShopViewProps) {
                         <GlassCard
                             key={item.id}
                             className={cn(
-                                "flex flex-col h-full transition-all group overflow-hidden",
+                                "flex flex-col h-full transition-all group overflow-hidden cursor-pointer hover:scale-[1.02] hover:shadow-xl",
                                 isOwned && "border-green-500/40 opacity-90"
                             )}
                         >
@@ -83,10 +83,10 @@ export function ShopView({ data }: ShopViewProps) {
                             </div>
 
                             <div className="p-6 bg-white/5 border-t border-white/5 mt-auto">
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="flex items-center gap-1.5">
-                                        <div className="text-xs font-bold text-white/40 uppercase tracking-widest">Price</div>
-                                        <div className="text-lg font-mono font-bold text-yellow-400">§{item.cost}</div>
+                                <div className="flex items-center justify-between gap-6">
+                                    <div>
+                                        <div className="text-[10px] font-bold text-white/40 uppercase tracking-widest mb-1">Price</div>
+                                        <div className="text-xl font-mono font-bold text-yellow-400">§ {item.cost.toLocaleString()}</div>
                                     </div>
 
                                     {isOwned ? (

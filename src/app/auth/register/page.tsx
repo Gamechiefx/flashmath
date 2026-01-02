@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 import { PasswordStrength } from "@/components/ui/password-strength";
-import { Zap, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Zap, Mail, Lock, User, ArrowLeft, Eye, EyeOff, Calendar } from "lucide-react";
 import Link from "next/link";
 import { registerUser, signInWithGoogle } from "@/lib/actions/auth";
 import { useState } from "react";
@@ -60,7 +60,7 @@ export default function RegisterPage() {
                         )}
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Pilot Name</label>
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Username</label>
                             <div className="relative">
                                 <User className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                                 <input
@@ -83,6 +83,19 @@ export default function RegisterPage() {
                                     placeholder="nexus@mastery.com"
                                     required
                                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Date of Birth</label>
+                            <div className="relative">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                                <input
+                                    type="date"
+                                    name="dob"
+                                    required
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all [color-scheme:dark] text-muted-foreground focus:text-foreground"
                                 />
                             </div>
                         </div>

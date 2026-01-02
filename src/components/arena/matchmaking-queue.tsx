@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { soundEngine } from '@/lib/sound-engine';
 import { PlayerBanner } from './player-banner';
 
 interface MatchmakingQueueProps {
@@ -228,6 +229,7 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
 
                 if (result.matched && result.matchId) {
                     setMatchFound(true);
+                    soundEngine.playMatchFound();
                     setIsSearching(false);
 
                     if (result.opponent) {
@@ -456,10 +458,14 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
                     className="text-center"
                 >
                     <button
-                        onClick={handleCancel}
-                        className="text-white/30 hover:text-red-500 font-black uppercase tracking-[0.3em] text-[10px] py-4 transition-all"
+                        onClick={() => {
+                            soundEngine.playClick();
+                            handleCancel();
+                        }}
+                        onMouseEnter={() => soundEngine.playHover()}
+                        className="px-12 py-4 bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500 rounded-xl text-red-400 hover:text-red-300 font-black uppercase tracking-[0.2em] text-sm transition-all hover:scale-105 shadow-lg shadow-red-500/20"
                     >
-                        Esc to Cancel Matchmaking
+                        Stop Matchmaking
                     </button>
                 </motion.div>
             )}

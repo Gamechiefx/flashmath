@@ -113,6 +113,22 @@ eloChange = K * (actualScore - expectedScore)
 
 Each rank has 4 divisions (IV, III, II, I) worth 100 ELO each.
 
+## Coin Rewards
+
+Players earn Flux Coins (§) for Arena matches based on performance:
+
+| Reward Type | Amount |
+|-------------|--------|
+| Per Correct Answer | 2 § |
+| Victory Bonus | +10 § |
+
+**Example**: A player who wins with a score of 800 (8 correct answers) earns:
+- Base: 8 × 2 = 16 §
+- Win Bonus: +10 §
+- **Total: 26 §**
+
+The losing player still earns coins for their correct answers (no win bonus).
+
 ## Match Flow
 
 ### 1. Queue Phase

@@ -677,9 +677,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                     onNext={handleHelpNext}
                 />
             )}
-            <div className="w-full max-w-7xl mx-auto">
-                <AuthHeader session={session} />
-            </div>
+            <AuthHeader session={session} />
 
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary/5 rounded-full blur-[120px] pointer-events-none" />
 

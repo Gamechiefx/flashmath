@@ -90,7 +90,7 @@ app.prepare().then(() => {
 
         // Player joins a match
         socket.on('join_match', (data) => {
-            const { matchId, userId, userName, operation } = data;
+            const { matchId, userId, userName, operation, isAiMatch } = data;
 
             socket.join(matchId);
             socketToMatch.set(socket.id, matchId);
@@ -107,8 +107,15 @@ app.prepare().then(() => {
                     odEnded: false,
                     odOperation: operation,
                     timer: null,
+                    botInterval: null,
+                    isAiMatch: !!isAiMatch,
                 };
                 activeMatches.set(matchId, match);
+            } else {
+                // Update isAiMatch if provided (in case match was created before socket joined)
+                if (isAiMatch) {
+                    match.isAiMatch = true;
+                }
             }
 
             // Add player to match with their own question
@@ -123,7 +130,7 @@ app.prepare().then(() => {
                 odCurrentQuestion: playerQuestion,
             };
 
-            console.log(`[Arena Socket] ${userName} joined match ${matchId} (${Object.keys(match.players).length} players)`);
+            console.log(`[Arena Socket] ${userName} joined match ${matchId} (AI: ${match.isAiMatch}, ${Object.keys(match.players).length} players)`);
 
             // Notify all players in match
             io.to(matchId).emit('player_joined', {
@@ -132,12 +139,82 @@ app.prepare().then(() => {
                 playerName: userName,
             });
 
-            // If 2 players, start the match
-            if (Object.keys(match.players).length >= 2 && !match.odStarted) {
+            // Handle AI Match or 2nd Player
+            const shouldStart = (match.isAiMatch && Object.keys(match.players).length >= 1) ||
+                (!match.isAiMatch && Object.keys(match.players).length >= 2);
+
+            if (shouldStart && !match.odStarted) {
                 match.odStarted = true;
+
+                // Add Bot if AI match
+                if (match.isAiMatch) {
+                    const botId = 'ai_bot_' + matchId;
+                    const botQuestion = generateQuestion(match.odOperation);
+                    match.players[botId] = {
+                        odName: 'FlashBot 3000',
+                        odScore: 0,
+                        odStreak: 0,
+                        odQuestionsAnswered: 0,
+                        odLastAnswerCorrect: null,
+                        odSocketId: 'bot',
+                        odCurrentQuestion: botQuestion,
+                        isBot: true,
+                        // Visuals
+                        odEquippedBanner: 'matrix',
+                        odEquippedTitle: 'AI Overlord',
+                        odLevel: 99,
+                        odTier: 'Diamond'
+                    };
+
+                    // Notify about bot
+                    io.to(matchId).emit('player_joined', {
+                        players: match.players,
+                        playerId: botId,
+                        playerName: 'FlashBot 3000',
+                    });
+
+                    // Bot Logic Loop
+                    match.botInterval = setInterval(() => {
+                        if (match.odEnded) {
+                            clearInterval(match.botInterval);
+                            return;
+                        }
+
+                        // Bot answers every 3-6 seconds
+                        if (Math.random() > 0.7) {
+                            const botData = match.players[botId];
+                            if (!botData) return;
+
+                            // 80% chance to be correct
+                            const isCorrect = Math.random() > 0.2;
+                            const answer = isCorrect ? botData.odCurrentQuestion.answer : botData.odCurrentQuestion.answer + 1;
+
+                            if (isCorrect) {
+                                botData.odScore += 100;
+                                botData.odStreak++;
+                            } else {
+                                botData.odStreak = 0;
+                            }
+                            botData.odCurrentQuestion = generateQuestion(match.odOperation);
+
+                            io.to(matchId).emit('answer_result', {
+                                odUserId: botId,
+                                odIsCorrect: isCorrect,
+                                odPlayers: match.players,
+                            });
+
+                            socket.emit('opponent_question_update', {
+                                odUserId: botId,
+                                question: botData.odCurrentQuestion,
+                            });
+                        }
+                    }, 2000);
+                }
 
                 // Send match_start to each player with their own question
                 for (const [playerId, playerData] of Object.entries(match.players)) {
+                    if (playerData.isBot) continue;
+
                     const playerSocket = io.sockets.sockets.get(playerData.odSocketId);
                     if (playerSocket) {
                         playerSocket.emit('match_start', {
@@ -152,7 +229,10 @@ app.prepare().then(() => {
                 match.timer = setInterval(() => {
                     const m = activeMatches.get(matchId);
                     if (!m || m.odEnded) {
-                        if (m && m.timer) clearInterval(m.timer);
+                        if (m) {
+                            if (m.timer) clearInterval(m.timer);
+                            if (m.botInterval) clearInterval(m.botInterval);
+                        }
                         return;
                     }
 
@@ -161,6 +241,7 @@ app.prepare().then(() => {
 
                     if (m.odTimeLeft <= 0) {
                         clearInterval(m.timer);
+                        if (m.botInterval) clearInterval(m.botInterval);
                         m.odEnded = true;
                         io.to(matchId).emit('match_end', { players: m.players });
 

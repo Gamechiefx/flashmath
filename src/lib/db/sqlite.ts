@@ -102,6 +102,25 @@ function initializeSchema() {
         }
     }
 
+    // Add per-mode arena ELO columns
+    const arenaColumns = [
+        { name: 'arena_elo_1v1', default: 500 },
+        { name: 'arena_elo_2v2', default: 400 },
+        { name: 'arena_elo_3v3', default: 350 },
+        { name: 'arena_win_streak', default: 0 },
+        { name: 'arena_best_win_streak', default: 0 },
+    ];
+    for (const col of arenaColumns) {
+        try {
+            database.exec(`ALTER TABLE users ADD COLUMN ${col.name} INTEGER DEFAULT ${col.default}`);
+            console.log(`[SQLite] Added ${col.name} column`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exists
+            }
+        }
+    }
+
     // Ensure security_activity table exists
     database.exec(`
         CREATE TABLE IF NOT EXISTS security_activity (

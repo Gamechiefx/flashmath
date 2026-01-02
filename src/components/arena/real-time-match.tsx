@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useArenaSocket } from '@/lib/socket/use-arena-socket';
 
 import { PlayerBanner } from '@/components/arena/player-banner';
 import { soundEngine } from '@/lib/sound-engine';
+import { SoundToggle } from '@/components/sound-toggle';
+import { AuthHeader } from '@/components/auth-header';
 
 interface RealTimeMatchProps {
     matchId: string;
@@ -33,13 +36,16 @@ export function RealTimeMatch({
     initialPlayers
 }: RealTimeMatchProps) {
     const router = useRouter();
+    const { update } = useSession();
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [answer, setAnswer] = useState('');
     const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
     const [eloChange, setEloChange] = useState<number | null>(null);
+    const [coinsEarned, setCoinsEarned] = useState<number | null>(null);
     const [hasSavedResult, setHasSavedResult] = useState(false);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+    const [resultData, setResultData] = useState<any>(null);
 
     const {
         connected,
@@ -57,6 +63,7 @@ export function RealTimeMatch({
         userId: currentUserId,
         userName,
         operation,
+        isAiMatch,
     });
 
     // Get player data
@@ -126,12 +133,22 @@ export function RealTimeMatch({
 
             if (result.success) {
                 setEloChange(isWinner ? result.winnerEloChange || 0 : result.loserEloChange || 0);
+                setCoinsEarned(isWinner ? result.winnerCoinsEarned || 0 : result.loserCoinsEarned || 0);
+                setResultData(result);
+
+                // Refresh Next.js server components
+                router.refresh();
+
+                // FORCE update of client-side session to show new coins in header
+                await update();
+            } else {
+                console.error('[Match] Failed to save result:', result.error);
             }
             setHasSavedResult(true);
         }
 
         saveResult();
-    }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation]);
+    }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation, router]);
 
     const handleSubmit = useCallback(() => {
         if (!answer.trim() || !currentQuestion) return;
@@ -267,92 +284,304 @@ export function RealTimeMatch({
     }
 
     // Game Over screen (including forfeit wins)
-    if (matchEnded && (you || opponentForfeited)) {
+    if (matchEnded) {
         const wonByForfeit = !!opponentForfeited;
         const isWinner = wonByForfeit || (you && opponent ? you.odScore > opponent.odScore : false);
         const isTie = !wonByForfeit && you && opponent && you.odScore === opponent.odScore;
+        const resultText = wonByForfeit ? 'VICTORY' : isTie ? 'DRAW' : isWinner ? 'VICTORY' : 'DEFEAT';
+
+        // Determine winner and loser data for display
+        const winnerBase = isWinner ? you : opponent;
+        const loserBase = isWinner ? opponent : you;
+
+        // Use fresh stats if available, otherwise fallback to initial data
+        const winnerStats = resultData?.winnerStats;
+        const loserStats = resultData?.loserStats;
+
+        const winnerName = isWinner
+            ? (you?.odName || initialPlayers?.[currentUserId]?.name || userName)
+            : (opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent'));
+
+        const loserName = isWinner
+            ? (opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent'))
+            : (you?.odName || initialPlayers?.[currentUserId]?.name || userName);
+
+        const winnerBanner = isWinner
+            ? (you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default')
+            : (opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default'));
+
+        const loserBanner = isWinner
+            ? (opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default'))
+            : (you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default');
+
+        const winnerTitle = isWinner
+            ? (you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'Champion')
+            : (opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Champion'));
+
+        const loserTitle = isWinner
+            ? (opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Contender'))
+            : (you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'Contender');
+
+        const winnerLevel = isWinner
+            ? (you?.odLevel || initialPlayers?.[currentUserId]?.level || 1)
+            : (opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1));
+
+        const loserLevel = isWinner
+            ? (opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1))
+            : (you?.odLevel || initialPlayers?.[currentUserId]?.level || 1);
+
+        // Rank info - use fresh stats if available
+        const winnerRank = winnerStats?.rank || (isWinner
+            ? (you?.odTier || initialPlayers?.[currentUserId]?.tier || 'Bronze')
+            : (opponent?.odTier || (opponentId ? initialPlayers?.[opponentId]?.tier : 'Bronze')));
+
+        const winnerDivision = winnerStats?.division || "I";
+
+        const loserRank = loserStats?.rank || (isWinner
+            ? (opponent?.odTier || (opponentId ? initialPlayers?.[opponentId]?.tier : 'Bronze'))
+            : (you?.odTier || initialPlayers?.[currentUserId]?.tier || 'Bronze'));
+
+        const loserDivision = loserStats?.division || "I";
 
         return (
             <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="text-center space-y-8"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="h-full w-full flex flex-col"
             >
-                {/* Result Header */}
-                <div className="space-y-2">
+                {/* Header */}
+                <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="shrink-0"
+                >
+                    <AuthHeader />
+                </motion.div>
+
+                {/* Main Content: Winner - Stats - Loser */}
+                <div className="flex-1 w-full max-w-[1600px] mx-auto px-4 grid grid-cols-1 lg:grid-cols-3 gap-8 items-center">
+
+                    {/* Winner Side (Left) */}
                     <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: "spring", damping: 10 }}
-                        className="text-8xl"
+                        initial={{ opacity: 0, x: -50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2, type: "spring", damping: 20 }}
+                        className="flex flex-col items-center gap-6"
                     >
-                        {wonByForfeit ? '🏆' : isTie ? '🤝' : isWinner ? '🏆' : '💪'}
+                        {/* Trophy Icon */}
+                        <motion.div
+                            initial={{ scale: 0, rotate: -20 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ delay: 0.4, type: "spring", damping: 10 }}
+                            className="relative"
+                        >
+                            <div className="text-8xl filter drop-shadow-[0_0_30px_rgba(234,179,8,0.5)]">
+                                🏆
+                            </div>
+                            <motion.div
+                                animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+                                transition={{ repeat: Infinity, duration: 2 }}
+                                className="absolute inset-0 bg-yellow-500/20 blur-3xl rounded-full -z-10"
+                            />
+                        </motion.div>
+
+                        {/* Winner Label */}
+                        <div className="text-center">
+                            <span className="text-xs font-black uppercase tracking-[0.3em] text-yellow-400/60">Winner</span>
+                            {isTie && <span className="block text-xs text-white/40 mt-1">(Draw)</span>}
+                        </div>
+
+                        {/* Winner Banner */}
+                        <div className="w-full max-w-sm">
+                            <PlayerBanner
+                                name={wonByForfeit ? userName : (winnerName || 'Winner')}
+                                level={wonByForfeit ? (you?.odLevel || 1) : (winnerLevel || 1)}
+                                rank={wonByForfeit ? (you?.odTier || 'Bronze') : (winnerRank || 'Bronze')}
+                                division={wonByForfeit ? "I" : (winnerDivision || "I")}
+                                styleId={wonByForfeit ? (you?.odEquippedBanner || 'default') : (winnerBanner || 'default')}
+                                title={wonByForfeit ? (you?.odEquippedTitle || 'Champion') : (winnerTitle || 'Champion')}
+                                className="w-full shadow-2xl shadow-yellow-500/20 border-yellow-500/40"
+                            />
+                        </div>
+
+                        {/* Winner Score */}
+                        <div className="glass rounded-xl px-6 py-3 border border-yellow-500/30">
+                            <span className="text-3xl font-black text-yellow-400">
+                                {wonByForfeit ? (you?.odScore || 0) : (winnerBase?.odScore || 0)}
+                            </span>
+                            <span className="text-sm text-white/40 ml-2">points</span>
+                        </div>
                     </motion.div>
-                    <h1 className={`text-4xl font-bold ${wonByForfeit ? 'text-green-500' : isTie ? 'text-yellow-500' : isWinner ? 'text-green-500' : 'text-accent'}`}>
-                        {wonByForfeit ? 'Victory!' : isTie ? 'Draw!' : isWinner ? 'Victory!' : 'Good Fight!'}
-                    </h1>
-                    {wonByForfeit && (
-                        <p className="text-muted-foreground">
-                            {opponentForfeited} forfeited the match
-                        </p>
-                    )}
-                </div>
 
-                {/* Scoreboard */}
-                <div className="glass rounded-2xl p-6 space-y-4">
-                    <div className="flex justify-between items-center">
-                        <div className="text-left">
-                            <p className="text-sm text-muted-foreground">You</p>
-                            <p className="text-3xl font-bold">{you?.odScore || 0}</p>
-                        </div>
-                        <div className="text-4xl">⚔️</div>
-                        <div className="text-right">
-                            <p className="text-sm text-muted-foreground">{opponentForfeited || opponent?.odName || 'Opponent'}</p>
-                            <p className="text-3xl font-bold">{wonByForfeit ? 'FF' : opponent?.odScore || 0}</p>
-                        </div>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
-                        <div>
-                            <p className="text-sm text-muted-foreground">Questions Answered</p>
-                            <p className="text-xl font-bold">{you?.odQuestionsAnswered || 0}</p>
-                        </div>
-                        <div>
-                            <p className="text-sm text-muted-foreground">Best Streak</p>
-                            <p className="text-xl font-bold">{you?.odStreak || 0}🔥</p>
-                        </div>
-                    </div>
-
-                    {/* ELO Change */}
-                    <div className="pt-4 border-t border-border">
-                        <p className="text-sm text-muted-foreground mb-1">Rating Change</p>
-                        {eloChange !== null ? (
-                            <p className={`text-2xl font-bold ${eloChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                {eloChange >= 0 ? '+' : ''}{eloChange}
-                            </p>
-                        ) : wonByForfeit ? (
-                            <p className="text-2xl font-bold text-green-500">+25</p>
-                        ) : (
-                            <p className="text-2xl font-bold text-muted-foreground animate-pulse">...</p>
-                        )}
-                    </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-4 justify-center">
-                    <button
-                        onClick={() => router.push('/arena/modes')}
-                        className="px-8 py-3 bg-primary hover:bg-primary/80 rounded-xl font-bold transition-colors"
+                    {/* Center: Match Statistics */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 30 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="flex flex-col items-center"
                     >
-                        Play Again
-                    </button>
-                    <button
-                        onClick={() => router.push('/arena/modes')}
-                        className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-medium transition-colors"
+                        <div className="w-full rounded-3xl border-2 border-amber-600/50 bg-gradient-to-b from-amber-900/40 to-amber-950/60 backdrop-blur-sm p-8 shadow-2xl shadow-amber-900/30">
+                            {/* Stats Header */}
+                            <h2 className="text-2xl font-black text-center text-amber-400 uppercase tracking-widest mb-8">
+                                Match Statistics
+                            </h2>
+
+                            {/* Result Banner */}
+                            <div className="text-center mb-8">
+                                <motion.div
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ delay: 0.5, type: "spring", damping: 10 }}
+                                    className={`text-4xl font-black ${wonByForfeit ? 'text-green-400' : isTie ? 'text-yellow-400' : isWinner ? 'text-green-400' : 'text-accent'}`}
+                                >
+                                    {wonByForfeit ? 'VICTORY!' : isTie ? 'DRAW!' : isWinner ? 'VICTORY!' : 'DEFEAT'}
+                                </motion.div>
+                                {wonByForfeit && (
+                                    <p className="text-sm text-white/50 mt-2">
+                                        {opponentForfeited} forfeited the match
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Score Comparison */}
+                            <div className="flex items-center justify-center gap-6 mb-8 p-4 rounded-xl bg-black/30 border border-white/10">
+                                <div className="text-center">
+                                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">You</p>
+                                    <p className="text-3xl font-black text-cyan-400">{you?.odScore || 0}</p>
+                                </div>
+                                <div className="text-3xl text-white/30">⚔️</div>
+                                <div className="text-center">
+                                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">{opponentForfeited || opponent?.odName || 'Opponent'}</p>
+                                    <p className="text-3xl font-black text-amber-400">{wonByForfeit ? 'FF' : opponent?.odScore || 0}</p>
+                                </div>
+                            </div>
+
+                            {/* Detailed Stats */}
+                            <div className="grid grid-cols-2 gap-4 mb-8">
+                                <div className="p-4 rounded-xl bg-black/20 border border-white/5 text-center">
+                                    <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Questions</p>
+                                    <p className="text-2xl font-black text-white">{you?.odQuestionsAnswered || 0}</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-black/20 border border-white/5 text-center">
+                                    <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Best Streak</p>
+                                    <p className="text-2xl font-black text-white">{you?.odStreak || 0} 🔥</p>
+                                </div>
+                            </div>
+
+                            {/* ELO Change & Coins Earned */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 rounded-xl bg-black/30 border border-white/10 text-center">
+                                    <p className="text-xs text-white/40 uppercase tracking-wider mb-2">Rating Change</p>
+                                    {eloChange !== null ? (
+                                        <motion.p
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ delay: 0.6, type: "spring" }}
+                                            className={`text-3xl font-black ${eloChange >= 0 ? 'text-green-400' : 'text-red-400'}`}
+                                        >
+                                            {eloChange >= 0 ? '+' : ''}{eloChange}
+                                        </motion.p>
+                                    ) : wonByForfeit ? (
+                                        <p className="text-3xl font-black text-green-400">+25</p>
+                                    ) : (
+                                        <p className="text-3xl font-black text-white/30 animate-pulse">...</p>
+                                    )}
+                                </div>
+                                <div className="p-4 rounded-xl bg-black/30 border border-yellow-500/20 text-center">
+                                    <p className="text-xs text-yellow-400/60 uppercase tracking-wider mb-2">Coins Earned</p>
+                                    {coinsEarned !== null ? (
+                                        <motion.p
+                                            initial={{ scale: 0 }}
+                                            animate={{ scale: 1 }}
+                                            transition={{ delay: 0.7, type: "spring" }}
+                                            className="text-3xl font-black text-yellow-400"
+                                        >
+                                            +{coinsEarned} §
+                                        </motion.p>
+                                    ) : wonByForfeit ? (
+                                        <p className="text-3xl font-black text-yellow-400">+10 §</p>
+                                    ) : (
+                                        <p className="text-3xl font-black text-white/30 animate-pulse">...</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.7 }}
+                            className="flex gap-4 mt-8"
+                        >
+                            <button
+                                onClick={() => router.push('/arena/modes')}
+                                className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-black uppercase tracking-wider text-white shadow-lg shadow-green-500/30 transition-all hover:scale-105"
+                            >
+                                Play Again
+                            </button>
+                            <button
+                                onClick={() => router.push('/dashboard')}
+                                className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold uppercase tracking-wider text-white/80 border border-white/20 transition-all hover:scale-105"
+                            >
+                                Dashboard
+                            </button>
+                        </motion.div>
+                    </motion.div>
+
+                    {/* Loser Side (Right) */}
+                    <motion.div
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2, type: "spring", damping: 20 }}
+                        className="flex flex-col items-center gap-6"
                     >
-                        Back to Arena
-                    </button>
+                        {/* Muscle Icon */}
+                        <motion.div
+                            initial={{ scale: 0, rotate: 20 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ delay: 0.4, type: "spring", damping: 10 }}
+                            className="relative"
+                        >
+                            <div className="text-8xl filter drop-shadow-[0_0_20px_rgba(251,146,60,0.4)]">
+                                💪
+                            </div>
+                            <motion.div
+                                animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] }}
+                                transition={{ repeat: Infinity, duration: 2.5 }}
+                                className="absolute inset-0 bg-orange-500/20 blur-3xl rounded-full -z-10"
+                            />
+                        </motion.div>
+
+                        {/* Loser Label */}
+                        <div className="text-center">
+                            <span className="text-xs font-black uppercase tracking-[0.3em] text-orange-400/60">
+                                {wonByForfeit ? 'Forfeited' : isTie ? 'Challenger' : 'Challenger'}
+                            </span>
+                        </div>
+
+                        {/* Loser Banner */}
+                        <div className="w-full max-w-sm">
+                            <PlayerBanner
+                                name={wonByForfeit ? (opponentForfeited || 'Opponent') : (loserName || 'Opponent')}
+                                level={wonByForfeit ? 0 : (loserLevel || 1)}
+                                rank={wonByForfeit ? 'Bronze' : (loserRank || 'Bronze')}
+                                division={wonByForfeit ? "I" : (loserDivision || "I")}
+                                styleId={wonByForfeit ? 'default' : (loserBanner || 'default')}
+                                title={wonByForfeit ? 'Forfeited' : (loserTitle || 'Contender')}
+                                className="w-full shadow-2xl shadow-orange-500/20 border-orange-500/40 opacity-80"
+                            />
+                        </div>
+
+                        {/* Loser Score */}
+                        <div className="glass rounded-xl px-6 py-3 border border-orange-500/30 opacity-80">
+                            <span className="text-3xl font-black text-orange-400">
+                                {wonByForfeit ? 'FF' : (loserBase?.odScore || 0)}
+                            </span>
+                            {!wonByForfeit && <span className="text-sm text-white/40 ml-2">points</span>}
+                        </div>
+                    </motion.div>
                 </div>
             </motion.div>
         );
@@ -360,7 +589,7 @@ export function RealTimeMatch({
 
     // Active game
     return (
-        <div className="space-y-6 w-full max-w-[1800px] mx-auto">
+        <div className="h-full w-full max-w-[1800px] mx-auto flex flex-col pt-8">
             {/* Leave Warning Modal */}
             <AnimatePresence>
                 {showLeaveWarning && (
@@ -406,7 +635,7 @@ export function RealTimeMatch({
             </AnimatePresence>
 
             {/* Header: Pro Scoreboard - Clean No-Box Design */}
-            <div className="relative z-20 mb-8 w-full max-w-[1600px] mx-auto">
+            <div className="relative z-20 mb-4 w-full max-w-[1600px] mx-auto shrink-0">
                 <div className="flex items-center justify-between px-12">
 
                     {/* You Stats */}
@@ -469,12 +698,12 @@ export function RealTimeMatch({
             </div>
 
             {/* Main Battle Area - Ultra Wide Split View */}
-            <div className="grid grid-cols-2 gap-24 min-h-[500px] w-full max-w-[1800px] mx-auto px-8">
+            <div className="grid grid-cols-2 gap-16 flex-1 w-full max-w-[1800px] mx-auto px-8 min-h-0">
                 {/* Left Side: You */}
-                <div className="flex flex-col gap-8">
+                <div className="flex flex-col gap-4">
                     <motion.div
                         animate={showResult === 'correct' ? { scale: [1, 1.02, 1] } : {}}
-                        className={`flex-1 rounded-[3rem] bg-cyan-950/10 border-2 relative overflow-hidden transition-all duration-300 shadow-2xl aspect-[4/3] ${showResult === 'correct' ? 'border-green-500 shadow-green-500/20' :
+                        className={`flex-1 rounded-[3rem] bg-cyan-950/10 border-2 relative overflow-hidden transition-all duration-300 shadow-2xl min-h-[300px] ${showResult === 'correct' ? 'border-green-500 shadow-green-500/20' :
                             showResult === 'wrong' ? 'border-red-500 shadow-red-500/20' :
                                 'border-cyan-500/20 group-hover:border-cyan-500/40'
                             }`}
@@ -527,19 +756,19 @@ export function RealTimeMatch({
                     <div className="flex justify-center w-full px-12">
                         <PlayerBanner
                             name={you?.odName || initialPlayers?.[currentUserId]?.name || userName}
-                            level={initialPlayers?.[currentUserId]?.level || 1}
-                            rank={initialPlayers?.[currentUserId]?.tier || 'Bronze'}
+                            level={you?.odLevel || initialPlayers?.[currentUserId]?.level || 1}
+                            rank={you?.odTier || initialPlayers?.[currentUserId]?.tier || 'Bronze'}
                             division=""
-                            styleId={initialPlayers?.[currentUserId]?.banner || 'default'}
-                            title={initialPlayers?.[currentUserId]?.title || 'FlashMath Competitor'}
+                            styleId={you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default'}
+                            title={you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'FlashMath Competitor'}
                             className="w-full h-24 shadow-2xl shadow-cyan-900/20 border-cyan-500/30"
                         />
                     </div>
                 </div>
 
                 {/* Right Side: Opponent */}
-                <div className="flex flex-col gap-8">
-                    <div className="flex-1 rounded-[3rem] bg-amber-950/10 border-2 border-amber-500/20 relative overflow-hidden shadow-2xl aspect-[4/3]">
+                <div className="flex flex-col gap-4">
+                    <div className="flex-1 rounded-[3rem] bg-amber-950/10 border-2 border-amber-500/20 relative overflow-hidden shadow-2xl min-h-[300px]">
                         <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 via-transparent to-transparent opacity-50" />
                         <div className="absolute inset-0 flex flex-col items-center justify-center p-8">
                             <AnimatePresence mode="wait">
@@ -585,27 +814,21 @@ export function RealTimeMatch({
                     <div className="flex justify-center w-full px-12">
                         <PlayerBanner
                             name={opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent') || 'Opponent'}
-                            level={opponentId ? initialPlayers?.[opponentId]?.level || 0 : 0}
-                            rank={opponentId ? initialPlayers?.[opponentId]?.tier || 'Bronze' : 'Bronze'}
+                            level={opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 0) || 0}
+                            rank={opponent?.odTier || (opponentId ? initialPlayers?.[opponentId]?.tier : 'Bronze') || 'Bronze'}
                             division=""
-                            styleId={opponentId ? initialPlayers?.[opponentId]?.banner || 'default' : 'default'}
-                            title={opponentId ? initialPlayers?.[opponentId]?.title || 'Contender' : 'Contender'}
+                            styleId={opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default') || 'default'}
+                            title={opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Contender') || 'Contender'}
                             className="w-full h-24 shadow-2xl shadow-amber-900/20 border-amber-500/30"
                         />
                     </div>
                 </div>
             </div>
 
-            {/* Footer Status */}
-            <div className="flex items-center justify-center gap-6 mt-12 opacity-50">
-                <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-white/40">Network Performance Stabilized</span>
-                </div>
-                <div className="w-[1px] h-4 bg-white/10" />
-                <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40">Secure Arena Hash: {matchId.slice(0, 8)}</span>
-                </div>
+
+            {/* Sound Toggle */}
+            <div className="fixed bottom-8 right-8 z-50">
+                <SoundToggle />
             </div>
         </div>
     );

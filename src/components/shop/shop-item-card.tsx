@@ -66,12 +66,12 @@ export function ShopItemCard({ item, isOwned, userCoins, index = 0 }: ShopItemCa
                 transition: { duration: 0.2 }
             }}
             whileTap={{ scale: 0.98 }}
-            className="relative"
+            className="relative cursor-pointer h-full"
         >
             <GlassCard
                 className={cn(
-                    "p-6 relative overflow-hidden group border transition-all duration-300",
-                    "hover:shadow-2xl",
+                    "p-8 relative overflow-hidden group border transition-all duration-300 h-full",
+                    "hover:shadow-2xl cursor-pointer",
                     RARITY_GLOW[item.rarity],
                     RARITY_BORDER_GLOW[item.rarity],
                     isOwned && "opacity-60 grayscale-[0.3]"
@@ -137,7 +137,7 @@ export function ShopItemCard({ item, isOwned, userCoins, index = 0 }: ShopItemCa
                         </div>
                     </div>
 
-                    <div className="mt-auto pt-4 border-t border-white/5 flex items-center justify-between">
+                    <div className="mt-auto pt-6 border-t border-white/5 flex items-center justify-between gap-4">
                         <motion.div
                             className="text-lg font-bold text-white flex items-center gap-1"
                             whileHover={{ scale: 1.05 }}

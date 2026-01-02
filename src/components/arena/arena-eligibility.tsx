@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import {
-    motion
+    motion,
+    AnimatePresence
 } from 'framer-motion';
 import Link from 'next/link';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface ArenaEligibilityProps {
     practiceStats: {
@@ -20,36 +22,43 @@ interface ArenaEligibilityProps {
 export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: ArenaEligibilityProps) {
     const [ageVerified, setAgeVerified] = useState(false);
     const [isEligible, setIsEligible] = useState(false);
+    const [requirementsExpanded, setRequirementsExpanded] = useState(true);
 
     // Requirements
     const MIN_CONFIDENCE = 0.3;
     const MIN_SESSIONS = 5;
     const MIN_ACCURACY = 60;
-    const MIN_AGE = 6;
+    const MIN_AGE = 13;
 
     // Check eligibility
     const hasEnoughPractice = practiceStats.totalSessions >= MIN_SESSIONS;
     const hasRecentPractice = practiceStats.daysSinceLastPractice <= 7;
     const hasGoodAccuracy = (practiceStats.recentAccuracy ?? 0) >= MIN_ACCURACY;
     const hasConfidence = practiceStats.confidence >= MIN_CONFIDENCE;
-    const meetsAge = ageVerified || (userAge !== null && userAge >= MIN_AGE);
+    const meetsAge = isAdmin || (userAge !== null && userAge >= MIN_AGE);
 
     useEffect(() => {
         // Admin bypasses all requirements
         if (isAdmin) {
             setIsEligible(true);
+            setRequirementsExpanded(false);
             return;
         }
-        setIsEligible(hasEnoughPractice && hasRecentPractice && hasGoodAccuracy && hasConfidence && meetsAge);
+        const eligible = hasEnoughPractice && hasRecentPractice && hasGoodAccuracy && hasConfidence && meetsAge;
+        setIsEligible(eligible);
+        // Auto-collapse when all requirements are met
+        if (eligible) {
+            setRequirementsExpanded(false);
+        }
     }, [isAdmin, hasEnoughPractice, hasRecentPractice, hasGoodAccuracy, hasConfidence, meetsAge]);
 
     const requirements = [
         {
             id: 'age',
             label: 'Age Verification',
-            description: 'I confirm I am 6 years or older',
+            description: meetsAge ? 'Age verified ✓' : 'Must be 13+ years old',
             met: meetsAge,
-            type: 'checkbox'
+            type: 'dob_check'
         },
         {
             id: 'sessions',
@@ -95,78 +104,104 @@ export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: Ar
                 </p>
             </motion.div>
 
-            {/* Requirements Card */}
+            {/* Requirements Card - Collapsible */}
             <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.1 }}
-                className="glass rounded-2xl p-6 space-y-4"
+                className="glass rounded-2xl overflow-hidden"
             >
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                    <span className="text-2xl">🛡️</span>
-                    Arena Requirements
-                </h2>
+                {/* Clickable Header */}
+                <button
+                    onClick={() => setRequirementsExpanded(!requirementsExpanded)}
+                    className="w-full p-6 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
+                >
+                    <h2 className="text-xl font-semibold flex items-center gap-2">
+                        <span className="text-2xl">🛡️</span>
+                        Arena Requirements
+                        {isEligible && (
+                            <span className="ml-2 px-2 py-0.5 text-xs font-bold uppercase bg-green-500/20 text-green-400 rounded-full">
+                                All Met ✓
+                            </span>
+                        )}
+                    </h2>
+                    {requirementsExpanded ? (
+                        <ChevronUp size={20} className="text-muted-foreground" />
+                    ) : (
+                        <ChevronDown size={20} className="text-muted-foreground" />
+                    )}
+                </button>
 
-                <div className="space-y-3">
-                    {requirements.map((req, index) => (
+                {/* Collapsible Content */}
+                <AnimatePresence>
+                    {requirementsExpanded && (
                         <motion.div
-                            key={req.id}
-                            initial={{ opacity: 0, x: -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: 0.1 + index * 0.05 }}
-                            className={`p-4 rounded-xl border transition-all ${req.met
-                                ? 'bg-green-500/10 border-green-500/30'
-                                : 'bg-card border-border'
-                                }`}
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="overflow-hidden"
                         >
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${req.met ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
-                                            }`}>
-                                            {req.met ? '✓' : index + 1}
-                                        </span>
-                                        <span className="font-medium">{req.label}</span>
-                                    </div>
-                                    <p className="text-sm text-muted-foreground mt-1 ml-8">
-                                        {req.description}
-                                    </p>
+                            <div className="px-6 pb-6 space-y-3">
+                                {requirements.map((req, index) => (
+                                    <motion.div
+                                        key={req.id}
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.1 + index * 0.05 }}
+                                        className={`p-4 rounded-xl border transition-all ${req.met
+                                            ? 'bg-green-500/10 border-green-500/30'
+                                            : 'bg-card border-border'
+                                            }`}
+                                    >
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${req.met ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
+                                                        }`}>
+                                                        {req.met ? '✓' : index + 1}
+                                                    </span>
+                                                    <span className="font-medium">{req.label}</span>
+                                                </div>
+                                                <p className="text-sm text-muted-foreground mt-1 ml-8">
+                                                    {req.description}
+                                                </p>
 
-                                    {/* Progress bar for quantifiable requirements */}
-                                    {req.progress !== undefined && (
-                                        <div className="ml-8 mt-2">
-                                            <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                <motion.div
-                                                    initial={{ width: 0 }}
-                                                    animate={{ width: `${Math.min(100, req.progress)}%` }}
-                                                    transition={{ delay: 0.3, duration: 0.5 }}
-                                                    className={`h-full rounded-full ${req.met ? 'bg-green-500' : 'bg-primary'
-                                                        }`}
-                                                />
+                                                {/* Progress bar for quantifiable requirements */}
+                                                {req.progress !== undefined && (
+                                                    <div className="ml-8 mt-2">
+                                                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                                            <motion.div
+                                                                initial={{ width: 0 }}
+                                                                animate={{ width: `${Math.min(100, req.progress)}%` }}
+                                                                transition={{ delay: 0.3, duration: 0.5 }}
+                                                                className={`h-full rounded-full ${req.met ? 'bg-green-500' : 'bg-primary'
+                                                                    }`}
+                                                            />
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground mt-1">
+                                                            {req.current} / {req.required}
+                                                            {req.id === 'accuracy' && '%'}
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                {req.current} / {req.required}
-                                                {req.id === 'accuracy' && '%'}
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
 
-                                {/* Checkbox for age verification */}
-                                {req.type === 'checkbox' && (
-                                    <label className="flex items-center cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={ageVerified}
-                                            onChange={(e) => setAgeVerified(e.target.checked)}
-                                            className="w-5 h-5 rounded border-2 border-primary accent-primary cursor-pointer"
-                                        />
-                                    </label>
-                                )}
+                                            {/* DOB Check Action */}
+                                            {req.type === 'dob_check' && !req.met && (
+                                                <Link href="/settings">
+                                                    <button className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs font-bold uppercase text-primary hover:bg-primary/20 transition-colors">
+                                                        Verify Age
+                                                    </button>
+                                                </Link>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                ))}
                             </div>
                         </motion.div>
-                    ))}
-                </div>
+                    )}
+                </AnimatePresence>
             </motion.div>
 
             {/* Confidence Score Display */}

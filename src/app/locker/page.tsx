@@ -33,13 +33,11 @@ export default async function LockerPage() {
     const totalOwned = ownedItems.length;
 
     return (
-        <div className="min-h-screen bg-background text-foreground p-6 md:p-12 relative">
-            {/* Auth Header */}
-            <div className="w-full max-w-7xl mx-auto">
-                <AuthHeader session={session} />
-            </div>
+        <div className="min-h-screen bg-background text-foreground relative">
+            {/* Auth Header - Full Width */}
+            <AuthHeader session={session} />
 
-            <div className="max-w-5xl mx-auto relative z-10 space-y-6">
+            <div className="p-6 md:p-12">
                 {/* Compact Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
