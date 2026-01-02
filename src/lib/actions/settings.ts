@@ -32,7 +32,7 @@ export async function resetUserData() {
 
         // Reset user's total XP, level, coins, math_tiers, and equipped_items
         try {
-            // Try with new arena columns first
+            // Try with new arena columns first (duel + team structure)
             db.prepare(`
                 UPDATE users SET 
                     total_xp = 0, 
@@ -41,14 +41,47 @@ export async function resetUserData() {
                     math_tiers = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
                     skill_points = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
                     equipped_items = '{"theme":"default","particle":"default","font":"default","sound":"default","bgm":"default","title":"default","frame":"default"}',
-                    arena_elo = 300,
-                    arena_elo_1v1 = 300,
+                    -- Duel stats
+                    arena_elo_duel = 300,
+                    arena_elo_duel_addition = 300,
+                    arena_elo_duel_subtraction = 300,
+                    arena_elo_duel_multiplication = 300,
+                    arena_elo_duel_division = 300,
+                    arena_duel_wins = 0,
+                    arena_duel_losses = 0,
+                    arena_duel_win_streak = 0,
+                    arena_duel_best_win_streak = 0,
+                    -- Team stats
+                    arena_elo_team = 300,
+                    arena_team_wins = 0,
+                    arena_team_losses = 0,
+                    arena_team_win_streak = 0,
+                    arena_team_best_win_streak = 0,
+                    -- 2v2
                     arena_elo_2v2 = 300,
+                    arena_elo_2v2_addition = 300,
+                    arena_elo_2v2_subtraction = 300,
+                    arena_elo_2v2_multiplication = 300,
+                    arena_elo_2v2_division = 300,
+                    -- 3v3
                     arena_elo_3v3 = 300,
-                    arena_wins = 0,
-                    arena_losses = 0,
-                    arena_win_streak = 0,
-                    arena_best_win_streak = 0,
+                    arena_elo_3v3_addition = 300,
+                    arena_elo_3v3_subtraction = 300,
+                    arena_elo_3v3_multiplication = 300,
+                    arena_elo_3v3_division = 300,
+                    -- 4v4
+                    arena_elo_4v4 = 300,
+                    arena_elo_4v4_addition = 300,
+                    arena_elo_4v4_subtraction = 300,
+                    arena_elo_4v4_multiplication = 300,
+                    arena_elo_4v4_division = 300,
+                    -- 5v5
+                    arena_elo_5v5 = 300,
+                    arena_elo_5v5_addition = 300,
+                    arena_elo_5v5_subtraction = 300,
+                    arena_elo_5v5_multiplication = 300,
+                    arena_elo_5v5_division = 300,
+                    -- Common
                     current_league_id = 'neon-league',
                     updated_at = ?
                 WHERE id = ?
@@ -64,9 +97,9 @@ export async function resetUserData() {
                     math_tiers = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
                     skill_points = '{"addition":0,"subtraction":0,"multiplication":0,"division":0}',
                     equipped_items = '{"theme":"default","particle":"default","font":"default","sound":"default","bgm":"default","title":"default","frame":"default"}',
-                    arena_elo = 300,
-                    arena_wins = 0,
-                    arena_losses = 0,
+                    arena_elo_duel = 300,
+                    arena_duel_wins = 0,
+                    arena_duel_losses = 0,
                     current_league_id = 'neon-league',
                     updated_at = ?
                 WHERE id = ?

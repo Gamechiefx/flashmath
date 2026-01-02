@@ -218,22 +218,87 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
     );
 }
 
-interface ModeSelectionProps {
-    userRank?: string;
-    userDivision?: string;
-    userElo?: number;
+interface ArenaStats {
+    duel: {
+        elo: number;
+        addition: number;
+        subtraction: number;
+        multiplication: number;
+        divisionOp: number;
+        rank: string;
+        rankDivision: string;
+    };
+    team: {
+        elo: number;
+        rank: string;
+        rankDivision: string;
+        modes: {
+            '2v2': { elo: number; addition: number; subtraction: number; multiplication: number; divisionOp: number };
+            '3v3': { elo: number; addition: number; subtraction: number; multiplication: number; divisionOp: number };
+            '4v4': { elo: number; addition: number; subtraction: number; multiplication: number; divisionOp: number };
+            '5v5': { elo: number; addition: number; subtraction: number; multiplication: number; divisionOp: number };
+        };
+    };
 }
 
-export function ModeSelection({ userRank = 'Silver', userDivision = 'II', userElo = 1000 }: ModeSelectionProps) {
+interface ModeSelectionProps {
+    arenaStats?: ArenaStats;
+}
+
+const DEFAULT_STATS: ArenaStats = {
+    duel: { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300, rank: 'Bronze', rankDivision: 'I' },
+    team: { 
+        elo: 300, rank: 'Bronze', rankDivision: 'I',
+        modes: {
+            '2v2': { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300 },
+            '3v3': { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300 },
+            '4v4': { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300 },
+            '5v5': { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300 },
+        }
+    }
+};
+
+/**
+ * Get the ELO for a specific mode and operation
+ */
+function getEloForModeAndOperation(stats: ArenaStats, mode: string, operation: Operation): number {
+    if (operation === 'mixed') {
+        // Mixed is unranked, show the overall average for display purposes
+        if (mode === '1v1') return stats.duel.elo;
+        const modeKey = mode as '2v2' | '3v3' | '4v4' | '5v5';
+        return stats.team.modes[modeKey]?.elo || 300;
+    }
+    
+    if (mode === '1v1') {
+        if (operation === 'division') return stats.duel.divisionOp;
+        return stats.duel[operation as 'addition' | 'subtraction' | 'multiplication'] || 300;
+    }
+    
+    const modeKey = mode as '2v2' | '3v3' | '4v4' | '5v5';
+    const modeStats = stats.team.modes[modeKey];
+    if (!modeStats) return 300;
+    
+    if (operation === 'division') return modeStats.divisionOp;
+    return modeStats[operation as 'addition' | 'subtraction' | 'multiplication'] || 300;
+}
+
+export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps) {
     const [selectedMode, setSelectedMode] = useState<string>('1v1');
     const [selectedOperation, setSelectedOperation] = useState<Operation>('mixed');
 
+    // Get rank info based on selected mode
+    const isDuel = selectedMode === '1v1';
+    const userRank = isDuel ? arenaStats.duel.rank : arenaStats.team.rank;
+    const userDivision = isDuel ? arenaStats.duel.rankDivision : arenaStats.team.rankDivision;
+    const userElo = isDuel ? arenaStats.duel.elo : arenaStats.team.elo;
+
+    // Build modes with dynamic ELO based on selected operation
     const vsModes: GameMode[] = [
-        { id: '1v1', name: '1v1', available: true, gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)', rating: userElo },
-        { id: '2v2', name: '2v2', available: false, gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' },
-        { id: '3v3', name: '3v3', available: false, gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' },
-        { id: '4v4', name: '4v4', available: false, gradient: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)' },
-        { id: '5v5', name: '5v5', available: false, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' },
+        { id: '1v1', name: '1v1', available: true, gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)', rating: getEloForModeAndOperation(arenaStats, '1v1', selectedOperation) },
+        { id: '2v2', name: '2v2', available: false, gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', rating: getEloForModeAndOperation(arenaStats, '2v2', selectedOperation) },
+        { id: '3v3', name: '3v3', available: false, gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', rating: getEloForModeAndOperation(arenaStats, '3v3', selectedOperation) },
+        { id: '4v4', name: '4v4', available: false, gradient: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)', rating: getEloForModeAndOperation(arenaStats, '4v4', selectedOperation) },
+        { id: '5v5', name: '5v5', available: false, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', rating: getEloForModeAndOperation(arenaStats, '5v5', selectedOperation) },
     ];
 
     const extraModes: GameMode[] = [

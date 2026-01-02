@@ -105,17 +105,20 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                         onMouseEnter={() => setIsDropdownOpen(true)}
                         onMouseLeave={() => setIsDropdownOpen(false)}
                     >
-                        <div className="flex items-center gap-3 pl-2 cursor-pointer">
+                        <div className="flex items-center gap-4 pl-2 cursor-pointer">
                             <div className="text-right hidden sm:block">
-                                <div className="text-[10px] font-bold uppercase tracking-widest text-primary line-clamp-1">{session.user?.name}</div>
+                                <div className="text-sm font-black uppercase tracking-widest text-primary line-clamp-1">{session.user?.name}</div>
                                 {(session.user as any)?.equippedTitleName && (
-                                    <div className="text-[8px] font-black uppercase tracking-widest text-accent mb-0.5">
+                                    <div className="text-[10px] font-bold uppercase tracking-widest text-accent mb-0.5">
                                         {(session.user as any).equippedTitleName}
                                     </div>
                                 )}
-                                <div className="text-[8px] font-mono text-white/40 uppercase tracking-tighter">LVL {(session.user as any)?.level || 1} • § {(session.user as any)?.coins || 0}</div>
+                                <div className="flex items-center justify-end gap-3 mt-1">
+                                    <span className="text-xs font-bold text-white/70">XP LVL: <span className="text-white">{(session.user as any)?.level || 1}</span></span>
+                                    <span className="text-xs font-bold text-yellow-400/70">§ <span className="text-yellow-400">{(session.user as any)?.coins || 0}</span></span>
+                                </div>
                             </div>
-                            <UserAvatar user={session.user} size="sm" key={session.user?.equipped_items?.frame || 'default'} />
+                            <UserAvatar user={session.user} size="md" key={session.user?.equipped_items?.frame || 'default'} />
                         </div>
 
                         {/* Dropdown Menu */}

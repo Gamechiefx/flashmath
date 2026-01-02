@@ -29,11 +29,7 @@ export function ArenaModesClient({ session, arenaStats }: ArenaModesClientProps)
 
             {/* Main Content Filler */}
             <div className="flex-1 w-full relative z-10 overflow-hidden">
-                <ModeSelection
-                    userRank={arenaStats.rank}
-                    userDivision={arenaStats.division}
-                    userElo={arenaStats.elo}
-                />
+                <ModeSelection arenaStats={arenaStats} />
             </div>
 
         </main>

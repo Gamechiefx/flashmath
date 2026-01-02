@@ -102,11 +102,55 @@ function initializeSchema() {
         }
     }
 
-    // Add per-mode arena ELO columns
+    // Add new arena ELO structure - Duel (1v1) per-operation + Team per-mode per-operation
     const arenaColumns = [
-        { name: 'arena_elo_1v1', default: 500 },
-        { name: 'arena_elo_2v2', default: 400 },
-        { name: 'arena_elo_3v3', default: 350 },
+        // Duel (1v1) stats
+        { name: 'arena_elo_duel', default: 300 },
+        { name: 'arena_elo_duel_addition', default: 300 },
+        { name: 'arena_elo_duel_subtraction', default: 300 },
+        { name: 'arena_elo_duel_multiplication', default: 300 },
+        { name: 'arena_elo_duel_division', default: 300 },
+        { name: 'arena_duel_wins', default: 0 },
+        { name: 'arena_duel_losses', default: 0 },
+        { name: 'arena_duel_win_streak', default: 0 },
+        { name: 'arena_duel_best_win_streak', default: 0 },
+        
+        // Team overall
+        { name: 'arena_elo_team', default: 300 },
+        { name: 'arena_team_wins', default: 0 },
+        { name: 'arena_team_losses', default: 0 },
+        { name: 'arena_team_win_streak', default: 0 },
+        { name: 'arena_team_best_win_streak', default: 0 },
+        
+        // 2v2 per-operation
+        { name: 'arena_elo_2v2', default: 300 },
+        { name: 'arena_elo_2v2_addition', default: 300 },
+        { name: 'arena_elo_2v2_subtraction', default: 300 },
+        { name: 'arena_elo_2v2_multiplication', default: 300 },
+        { name: 'arena_elo_2v2_division', default: 300 },
+        
+        // 3v3 per-operation
+        { name: 'arena_elo_3v3', default: 300 },
+        { name: 'arena_elo_3v3_addition', default: 300 },
+        { name: 'arena_elo_3v3_subtraction', default: 300 },
+        { name: 'arena_elo_3v3_multiplication', default: 300 },
+        { name: 'arena_elo_3v3_division', default: 300 },
+        
+        // 4v4 per-operation
+        { name: 'arena_elo_4v4', default: 300 },
+        { name: 'arena_elo_4v4_addition', default: 300 },
+        { name: 'arena_elo_4v4_subtraction', default: 300 },
+        { name: 'arena_elo_4v4_multiplication', default: 300 },
+        { name: 'arena_elo_4v4_division', default: 300 },
+        
+        // 5v5 per-operation
+        { name: 'arena_elo_5v5', default: 300 },
+        { name: 'arena_elo_5v5_addition', default: 300 },
+        { name: 'arena_elo_5v5_subtraction', default: 300 },
+        { name: 'arena_elo_5v5_multiplication', default: 300 },
+        { name: 'arena_elo_5v5_division', default: 300 },
+        
+        // Legacy columns (kept for backwards compatibility during migration)
         { name: 'arena_win_streak', default: 0 },
         { name: 'arena_best_win_streak', default: 0 },
     ];
@@ -142,6 +186,14 @@ function initializeSchema() {
         console.log('[SQLite] Updated party max_size to 5');
     } catch (e: any) {
         // Table might not exist yet, that's fine
+    }
+
+    // Add party invite_mode column for privacy settings
+    try {
+        database.exec("ALTER TABLE parties ADD COLUMN invite_mode TEXT DEFAULT 'open'");
+        console.log('[SQLite] Added invite_mode column to parties');
+    } catch (e: any) {
+        // Column might already exist, that's fine
     }
 
     // Seed default leagues if empty

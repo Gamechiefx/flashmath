@@ -21,6 +21,12 @@ interface UsePresenceOptions {
     autoConnect?: boolean;
 }
 
+interface PartySettingsUpdate {
+    inviteMode: 'open' | 'invite_only';
+    updaterId: string;
+    timestamp: number;
+}
+
 interface UsePresenceReturn {
     isConnected: boolean;
     myStatus: PresenceStatus;
@@ -33,6 +39,9 @@ interface UsePresenceReturn {
     pendingPartyInvites: { inviterName: string; partyId: string; timestamp: number }[];
     clearFriendRequestNotification: () => void;
     clearPartyInviteNotification: () => void;
+    // Party settings real-time update
+    latestPartySettingsUpdate: PartySettingsUpdate | null;
+    clearPartySettingsUpdate: () => void;
 }
 
 let presenceSocket: Socket | null = null;
@@ -56,6 +65,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     // Change notification flags (trigger data refresh)
     const [friendsChanged, setFriendsChanged] = useState(0);
     const [partyChanged, setPartyChanged] = useState(0);
+    
+    // Direct party settings update for immediate UI update
+    const [latestPartySettingsUpdate, setLatestPartySettingsUpdate] = useState<PartySettingsUpdate | null>(null);
     
     const userIdRef = useRef<string | null>(null);
     const statusRef = useRef<PresenceStatus>('online');
@@ -154,6 +166,11 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             setPartyChanged(prev => prev + 1);
         };
         
+        const handlePartySettingsUpdated = (data: { inviteMode: 'open' | 'invite_only'; updaterId: string; timestamp: number }) => {
+            setLatestPartySettingsUpdate(data);
+            setPartyChanged(prev => prev + 1);
+        };
+        
         // Register handlers
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
@@ -165,6 +182,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         socket.on('party:invite', handlePartyInvite);
         socket.on('party:member_joined', handlePartyMemberJoined);
         socket.on('party:member_left', handlePartyMemberLeft);
+        socket.on('party:settings_updated', handlePartySettingsUpdated);
         
         // Connect if not already
         if (!socket.connected) {
@@ -187,6 +205,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             socket.off('party:invite', handlePartyInvite);
             socket.off('party:member_joined', handlePartyMemberJoined);
             socket.off('party:member_left', handlePartyMemberLeft);
+            socket.off('party:settings_updated', handlePartySettingsUpdated);
         };
     }, [autoConnect, session]);
     
@@ -219,6 +238,10 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         setPendingPartyInvites(prev => prev.slice(1));
     }, []);
     
+    const clearPartySettingsUpdate = useCallback(() => {
+        setLatestPartySettingsUpdate(null);
+    }, []);
+    
     return {
         isConnected,
         myStatus,
@@ -233,6 +256,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         // Change flags for triggering data refresh
         friendsChanged,
         partyChanged,
+        // Direct party settings update
+        latestPartySettingsUpdate,
+        clearPartySettingsUpdate,
     };
 }
 
@@ -280,6 +306,13 @@ export function notifyPartyJoined(partyMemberIds: string[], joinerName: string, 
 export function notifyPartyLeft(partyMemberIds: string[], leaverName: string, leaverId: string, disbanded: boolean = false) {
     if (presenceSocket?.connected) {
         presenceSocket.emit('presence:notify_party_left', { partyMemberIds, leaverName, leaverId, disbanded });
+    }
+}
+
+// Utility to notify when party settings are updated
+export function notifyPartySettingsUpdated(partyMemberIds: string[], inviteMode: 'open' | 'invite_only', updaterId: string) {
+    if (presenceSocket?.connected) {
+        presenceSocket.emit('presence:notify_party_settings', { partyMemberIds, inviteMode, updaterId });
     }
 }
 

@@ -644,6 +644,19 @@ app.prepare().then(() => {
             }
         });
         
+        // Party settings updated notification (notify all party members)
+        socket.on('presence:notify_party_settings', async (data) => {
+            const { partyMemberIds, inviteMode, updaterId } = data;
+            for (const memberId of partyMemberIds) {
+                // Notify all members including the updater (for confirmation)
+                presenceNs.to(`user:${memberId}`).emit('party:settings_updated', {
+                    inviteMode,
+                    updaterId,
+                    timestamp: Date.now(),
+                });
+            }
+        });
+        
         // Disconnect
         socket.on('disconnect', async () => {
             const userId = presenceSocketToUser.get(socket.id);

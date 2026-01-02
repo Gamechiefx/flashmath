@@ -13,6 +13,9 @@ interface User {
     name?: string;
     email?: string;
     total_xp?: number;
+    level?: number;
+    arena_elo_duel?: number;  // Duel ELO (legacy arena_elo will fall back to this)
+    arena_elo?: number;  // Kept for backwards compatibility
     coins?: number;
     is_banned?: boolean;
     banned_until?: string | null;
@@ -62,8 +65,11 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
     }, [itemModalUser, shopItems.length]);
 
     // Sorting state
-    const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp" | "coins" | "status" | "role">("created_at");
+    const [sortBy, setSortBy] = useState<"created_at" | "name" | "xp" | "level" | "elo" | "coins" | "status" | "role">("created_at");
     const [sortAsc, setSortAsc] = useState(false); // Default: newest first
+
+    // Toggle between Level and ELO display
+    const [showElo, setShowElo] = useState(false);
 
     // Helper to check if user is banned
     const isBannedUser = (u: User) => u.is_banned || (u.banned_until && new Date(u.banned_until) > new Date());
@@ -86,6 +92,12 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                     break;
                 case 'xp':
                     comparison = (a.total_xp || 0) - (b.total_xp || 0);
+                    break;
+                case 'level':
+                    comparison = (a.level || 1) - (b.level || 1);
+                    break;
+                case 'elo':
+                    comparison = (a.arena_elo_duel || a.arena_elo || 300) - (b.arena_elo_duel || b.arena_elo || 300);
                     break;
                 case 'coins':
                     comparison = (a.coins || 0) - (b.coins || 0);
@@ -471,6 +483,8 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                             <option value="name">Name</option>
                             <option value="role">Role</option>
                             <option value="status">Status</option>
+                            <option value="level">Level</option>
+                            <option value="elo">ELO</option>
                             <option value="xp">XP</option>
                             <option value="coins">Coins</option>
                         </select>
@@ -499,6 +513,15 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                             <tr className="border-b border-white/10 text-xs font-bold uppercase tracking-widest text-muted-foreground">
                                 <th className="p-4">User</th>
                                 <th className="p-4 relative">Role</th>
+                                <th className="p-4">
+                                    <button
+                                        onClick={() => setShowElo(!showElo)}
+                                        className="hover:text-primary transition-colors"
+                                        title="Click to toggle Level/ELO"
+                                    >
+                                        {showElo ? 'ELO' : 'Level'}
+                                    </button>
+                                </th>
                                 <th className="p-4">XP</th>
                                 <th className="p-4">Coins</th>
                                 <th className="p-4">Status</th>
@@ -528,6 +551,9 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                                 managerRole={currentUserRole}
                                                 onRoleChanged={() => window.location.reload()}
                                             />
+                                        </td>
+                                        <td className="p-4 font-mono text-blue-400">
+                                            {showElo ? (user.arena_elo_duel || user.arena_elo || 300) : (user.level || 1)}
                                         </td>
                                         <td className="p-4 font-mono text-accent">{user.total_xp?.toLocaleString() || 0}</td>
                                         <td className="p-4 font-mono text-yellow-400">{user.coins?.toLocaleString() || 0}</td>

@@ -442,10 +442,6 @@ export async function clearMatch(matchId: string): Promise<{ success: boolean }>
 }
 
 /**
- * Calculate ELO change using standard formula
- * K-factor is higher for newer players
- */
-/**
  * Calculate ELO change with performance bonuses
  * @param playerElo - Current player ELO
  * @param opponentElo - Opponent's ELO
@@ -482,7 +478,43 @@ function calculateEloChange(
 }
 
 /**
+ * Valid ranked operations (mixed is unranked)
+ */
+const RANKED_OPERATIONS = ['addition', 'subtraction', 'multiplication', 'division'];
+
+/**
+ * Check if operation is ranked (not mixed)
+ */
+function isRankedOperation(operation: string): boolean {
+    return RANKED_OPERATIONS.includes(operation);
+}
+
+/**
+ * Get the ELO column name for a mode + operation combination
+ */
+function getEloColumnName(mode: string, operation: string): string {
+    if (mode === '1v1') {
+        return `arena_elo_duel_${operation}`;
+    } else {
+        return `arena_elo_${mode}_${operation}`;
+    }
+}
+
+/**
+ * Calculate average ELO from operation-specific ELOs
+ */
+function calculateAverageElo(elos: Record<string, number>): number {
+    const values = RANKED_OPERATIONS.map(op => elos[op] || 300);
+    return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+}
+
+/**
  * Save match result and update ELO + Award Coins
+ * 
+ * New ELO Structure:
+ * - Duel (1v1): Per-operation ELO (addition, subtraction, multiplication, division)
+ * - Team (2v2-5v5): Per-mode + per-operation ELO
+ * - Mixed operation matches do NOT affect ELO (unranked)
  */
 export async function saveMatchResult(params: {
     matchId: string;
@@ -500,6 +532,7 @@ export async function saveMatchResult(params: {
     loserEloChange?: number;
     winnerCoinsEarned?: number;
     loserCoinsEarned?: number;
+    isRanked?: boolean;
     error?: string
 }> {
     const session = await auth();
@@ -514,224 +547,252 @@ export async function saveMatchResult(params: {
         return { success: false, error: 'Not a match participant' };
     }
 
+    // Determine if this is a ranked match (not mixed operation)
+    const isRanked = isRankedOperation(params.operation);
+    const isDuel = params.mode === '1v1';
+
     try {
         const { execute, getDatabase } = await import("@/lib/db");
         const db = getDatabase();
 
-        console.log(`[Match] saveMatchResult called: matchId=${params.matchId}, winnerId=${params.winnerId}, loserId=${params.loserId}`);
+        console.log(`[Match] saveMatchResult: matchId=${params.matchId}, mode=${params.mode}, op=${params.operation}, ranked=${isRanked}`);
 
         // Use Redis SETNX to atomically claim the right to save this match
-        // This prevents race condition where both players pass the DB check before either inserts
         const redis = await getRedis();
         const saveLockKey = `arena:save_lock:${params.matchId}`;
 
         if (redis) {
-            // Try to set the lock - only succeeds if key doesn't exist (atomic operation)
             const lockAcquired = await redis.setnx(saveLockKey, userId);
-            console.log(`[Match] Lock attempt for ${params.matchId}: acquired=${lockAcquired}, userId=${userId}`);
             if (!lockAcquired) {
-                // Another player is saving or already saved this match
-                console.log(`[Match] Match ${params.matchId} is being saved by another player, waiting...`);
-                // Wait a moment for the other save to complete, then return cached result
                 await new Promise(resolve => setTimeout(resolve, 500));
-
                 const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as any;
                 if (existingMatch) {
-                    // Still revalidate paths so this player sees updated stats
                     const { revalidatePath } = await import("next/cache");
                     revalidatePath("/arena/modes");
                     revalidatePath("/arena");
                     revalidatePath("/stats");
                     revalidatePath("/dashboard");
-
-                    const winnerStats = await getArenaStats(params.winnerId);
-                    const loserStats = await getArenaStats(params.loserId);
                     return {
                         success: true,
                         winnerEloChange: existingMatch.winner_elo_change,
                         loserEloChange: existingMatch.loser_elo_change,
                         winnerCoinsEarned: 0,
                         loserCoinsEarned: 0,
-                        winnerStats,
-                        loserStats
+                        isRanked
                     };
                 }
-                // If still not in DB, the other save might have failed - continue with ours
             }
-            // Set lock expiry (30 seconds) in case save fails
             await redis.expire(saveLockKey, 30);
         }
 
-        // Double-check database (handles case where Redis is unavailable)
+        // Double-check database
         const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as any;
         if (existingMatch) {
-            console.log(`[Match] Match ${params.matchId} already saved, returning cached result`);
-            // Still revalidate paths so this player sees updated stats
             const { revalidatePath } = await import("next/cache");
             revalidatePath("/arena/modes");
             revalidatePath("/arena");
             revalidatePath("/stats");
             revalidatePath("/dashboard");
-
-            const winnerStats = await getArenaStats(params.winnerId);
-            const loserStats = await getArenaStats(params.loserId);
             return {
                 success: true,
                 winnerEloChange: existingMatch.winner_elo_change,
                 loserEloChange: existingMatch.loser_elo_change,
                 winnerCoinsEarned: 0,
                 loserCoinsEarned: 0,
-                winnerStats,
-                loserStats
+                isRanked
             };
         }
 
-        // Get current ELO and streak for both players using direct DB access
-        // (queryOne doesn't support arbitrary SELECT column patterns)
-        let winner: any = null;
-        let loser: any = null;
-
-        if (!params.winnerId.startsWith('ai-') && !params.winnerId.startsWith('ai_bot_')) {
-            winner = db.prepare("SELECT arena_elo, coins, arena_win_streak, arena_best_win_streak FROM users WHERE id = ?").get(params.winnerId);
-        }
-        if (!params.loserId.startsWith('ai-') && !params.loserId.startsWith('ai_bot_')) {
-            loser = db.prepare("SELECT arena_elo, coins FROM users WHERE id = ?").get(params.loserId);
-        }
-
-        console.log(`[Match] Winner data:`, winner);
-        console.log(`[Match] Loser data:`, loser);
-
-        const winnerElo = winner?.arena_elo || 300;
-        const loserElo = loser?.arena_elo || 300;
-        const currentWinStreak = (winner?.arena_win_streak || 0) + 1;
-
-        // Calculate performance bonus based on score margin
-        // If winner dominated (e.g., 1000 vs 200), performance bonus is high
-        // If it was close (e.g., 600 vs 500), performance bonus is neutral
-        const totalScore = params.winnerScore + params.loserScore;
-        const winnerPerformance = totalScore > 0 ? params.winnerScore / totalScore : 0.5;
-        const loserPerformance = totalScore > 0 ? params.loserScore / totalScore : 0.5;
-
-        // Calculate ELO changes with performance and streak bonuses
-        const winnerEloChange = calculateEloChange(winnerElo, loserElo, true, winnerPerformance, currentWinStreak);
-        const loserEloChange = calculateEloChange(loserElo, winnerElo, false, loserPerformance, 0);
-
-        const newWinnerElo = Math.max(100, winnerElo + winnerEloChange);
-        const newLoserElo = Math.max(100, loserElo + loserEloChange);
-
-        // Calculate coin rewards (Arena Premium Rate: 2 coins per correct answer + win bonus)
-        // Score is 100 per correct answer, so questionsCorrect = score / 100
+        // Calculate coin rewards (awarded regardless of ranked status)
         const winnerCorrectAnswers = Math.floor(params.winnerScore / 100);
         const loserCorrectAnswers = Math.floor(params.loserScore / 100);
-
-        // Base: 2 coins per correct answer
-        // Winner bonus: +10 coins for winning
         const winnerCoinsEarned = (winnerCorrectAnswers * 2) + 10;
         const loserCoinsEarned = loserCorrectAnswers * 2;
 
-        // Determine mode-specific ELO column
-        const modeEloColumn = `arena_elo_${params.mode.replace('v', 'v')}`;
+        let winnerEloChange = 0;
+        let loserEloChange = 0;
 
-        // Update winner ELO, wins, streak, and coins (skip if AI opponent)
         const isWinnerHuman = !params.winnerId.startsWith('ai-') && !params.winnerId.startsWith('ai_bot_');
-        console.log(`[Match] isWinnerHuman: ${isWinnerHuman}, winnerId: ${params.winnerId}`);
+        const isLoserHuman = !params.loserId.startsWith('ai-') && !params.loserId.startsWith('ai_bot_');
 
-        if (isWinnerHuman) {
-            const newWinnerCoins = (winner?.coins || 0) + winnerCoinsEarned;
-            const bestStreak = Math.max(winner?.arena_best_win_streak || 0, currentWinStreak);
+        // Only update ELO for ranked matches (not mixed operation)
+        if (isRanked) {
+            // Get the ELO column name based on mode and operation
+            const eloColumn = getEloColumnName(params.mode, params.operation);
+            
+            // Get current ELOs for the specific operation
+            let winnerCurrentElo = 300;
+            let loserCurrentElo = 300;
+            let winnerStreak = 0;
 
-            console.log(`[Match] Updating winner: newElo=${newWinnerElo}, newCoins=${newWinnerCoins}, streak=${currentWinStreak}`);
-
-            // Try to update mode-specific ELO, fall back to general if column doesn't exist
-            try {
-                execute(
-                    `UPDATE users SET 
-                        arena_elo = ?, 
-                        arena_elo_1v1 = CASE WHEN ? = '1v1' THEN ? ELSE COALESCE(arena_elo_1v1, 300) END,
-                        arena_elo_2v2 = CASE WHEN ? = '2v2' THEN ? ELSE COALESCE(arena_elo_2v2, 300) END,
-                        arena_elo_3v3 = CASE WHEN ? = '3v3' THEN ? ELSE COALESCE(arena_elo_3v3, 300) END,
-                        arena_wins = COALESCE(arena_wins, 0) + 1, 
-                        arena_win_streak = ?,
-                        arena_best_win_streak = ?,
-                        coins = ? 
-                    WHERE id = ?`,
-                    [newWinnerElo, params.mode, newWinnerElo, params.mode, newWinnerElo, params.mode, newWinnerElo, currentWinStreak, bestStreak, newWinnerCoins, params.winnerId]
-                );
-                console.log(`[Match] Winner update executed successfully`);
-            } catch (e) {
-                console.error(`[Match] Winner update failed, trying fallback:`, e);
-                // Fallback if new columns don't exist
-                execute(
-                    "UPDATE users SET arena_elo = ?, arena_wins = COALESCE(arena_wins, 0) + 1, coins = ? WHERE id = ?",
-                    [newWinnerElo, newWinnerCoins, params.winnerId]
-                );
+            if (isWinnerHuman) {
+                const winnerData = db.prepare(`SELECT ${eloColumn}, ${isDuel ? 'arena_duel_win_streak' : 'arena_team_win_streak'} as streak FROM users WHERE id = ?`).get(params.winnerId) as any;
+                winnerCurrentElo = winnerData?.[eloColumn] || 300;
+                winnerStreak = (winnerData?.streak || 0) + 1;
             }
-            console.log(`[Match] Winner ${params.winnerId} earned ${winnerCoinsEarned} coins, streak: ${currentWinStreak}`);
-        }
-
-        // Update loser ELO, losses, reset streak, and coins (skip if AI opponent)
-        if (!params.loserId.startsWith('ai-') && !params.loserId.startsWith('ai_bot_')) {
-            const newLoserCoins = (loser?.coins || 0) + loserCoinsEarned;
-
-            try {
-                execute(
-                    `UPDATE users SET 
-                        arena_elo = ?, 
-                        arena_elo_1v1 = CASE WHEN ? = '1v1' THEN ? ELSE COALESCE(arena_elo_1v1, 300) END,
-                        arena_elo_2v2 = CASE WHEN ? = '2v2' THEN ? ELSE COALESCE(arena_elo_2v2, 300) END,
-                        arena_elo_3v3 = CASE WHEN ? = '3v3' THEN ? ELSE COALESCE(arena_elo_3v3, 300) END,
-                        arena_losses = COALESCE(arena_losses, 0) + 1,
-                        arena_win_streak = 0,
-                        coins = ? 
-                    WHERE id = ?`,
-                    [newLoserElo, params.mode, newLoserElo, params.mode, newLoserElo, params.mode, newLoserElo, newLoserCoins, params.loserId]
-                );
-            } catch (e) {
-                // Fallback if new columns don't exist
-                execute(
-                    "UPDATE users SET arena_elo = ?, arena_losses = COALESCE(arena_losses, 0) + 1, coins = ? WHERE id = ?",
-                    [newLoserElo, newLoserCoins, params.loserId]
-                );
+            if (isLoserHuman) {
+                const loserData = db.prepare(`SELECT ${eloColumn} FROM users WHERE id = ?`).get(params.loserId) as any;
+                loserCurrentElo = loserData?.[eloColumn] || 300;
             }
-            console.log(`[Match] Loser ${params.loserId} earned ${loserCoinsEarned} coins, streak reset`);
-        }
 
-        // Save match to history (only for human vs human matches due to FK constraint)
-        const isAiMatch = params.winnerId.startsWith('ai_bot_') || params.winnerId.startsWith('ai-') ||
-            params.loserId.startsWith('ai_bot_') || params.loserId.startsWith('ai-');
+            // Calculate performance bonus
+            const totalScore = params.winnerScore + params.loserScore;
+            const winnerPerformance = totalScore > 0 ? params.winnerScore / totalScore : 0.5;
+            const loserPerformance = totalScore > 0 ? params.loserScore / totalScore : 0.5;
 
-        if (!isAiMatch) {
-            // Use INSERT OR IGNORE to handle both players trying to save the same match
-            // First player's insert succeeds, second player's is silently ignored
-            try {
-                db.prepare(
-                    `INSERT OR IGNORE INTO arena_matches (id, winner_id, loser_id, winner_score, loser_score, operation, mode, winner_elo_change, loser_elo_change, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
-                ).run(params.matchId, params.winnerId, params.loserId, params.winnerScore, params.loserScore, params.operation, params.mode, winnerEloChange, loserEloChange);
-                console.log(`[Match] Saved match history to database`);
-            } catch (insertError: any) {
-                // If it's a UNIQUE constraint error, match was already saved - that's OK
-                if (insertError?.code === 'SQLITE_CONSTRAINT_PRIMARYKEY' || insertError?.message?.includes('UNIQUE constraint')) {
-                    console.log(`[Match] Match already exists in database (concurrent save), continuing...`);
-                } else {
-                    throw insertError;
+            // Calculate ELO changes
+            winnerEloChange = calculateEloChange(winnerCurrentElo, loserCurrentElo, true, winnerPerformance, winnerStreak);
+            loserEloChange = calculateEloChange(loserCurrentElo, winnerCurrentElo, false, loserPerformance, 0);
+
+            const newWinnerElo = Math.max(100, winnerCurrentElo + winnerEloChange);
+            const newLoserElo = Math.max(100, loserCurrentElo + loserEloChange);
+
+            // Update winner
+            if (isWinnerHuman) {
+                const winner = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.winnerId) as any;
+                const newCoins = (winner?.coins || 0) + winnerCoinsEarned;
+
+                // Get all operation ELOs for this mode to calculate average
+                const winnerAllElos = db.prepare(`
+                    SELECT ${isDuel ? 'arena_elo_duel_addition, arena_elo_duel_subtraction, arena_elo_duel_multiplication, arena_elo_duel_division, arena_duel_win_streak, arena_duel_best_win_streak'
+                        : `arena_elo_${params.mode}_addition, arena_elo_${params.mode}_subtraction, arena_elo_${params.mode}_multiplication, arena_elo_${params.mode}_division, arena_team_win_streak, arena_team_best_win_streak`}
+                    FROM users WHERE id = ?
+                `).get(params.winnerId) as any;
+
+                // Calculate new averages
+                const opElos: Record<string, number> = {};
+                for (const op of RANKED_OPERATIONS) {
+                    const col = isDuel ? `arena_elo_duel_${op}` : `arena_elo_${params.mode}_${op}`;
+                    opElos[op] = op === params.operation ? newWinnerElo : (winnerAllElos?.[col] || 300);
                 }
+                const newModeAvg = calculateAverageElo(opElos);
+
+                const streakCol = isDuel ? 'arena_duel_win_streak' : 'arena_team_win_streak';
+                const bestStreakCol = isDuel ? 'arena_duel_best_win_streak' : 'arena_team_best_win_streak';
+                const winsCol = isDuel ? 'arena_duel_wins' : 'arena_team_wins';
+                const avgCol = isDuel ? 'arena_elo_duel' : `arena_elo_${params.mode}`;
+
+                const currentBestStreak = winnerAllElos?.[bestStreakCol] || 0;
+                const newBestStreak = Math.max(currentBestStreak, winnerStreak);
+
+                // For team modes, also update overall team ELO average
+                let teamEloUpdate = '';
+                if (!isDuel) {
+                    // Get all team mode averages and recalculate team overall
+                    const teamModeElos = db.prepare(`
+                        SELECT arena_elo_2v2, arena_elo_3v3, arena_elo_4v4, arena_elo_5v5 FROM users WHERE id = ?
+                    `).get(params.winnerId) as any;
+                    
+                    const modeAvgs = {
+                        '2v2': params.mode === '2v2' ? newModeAvg : (teamModeElos?.arena_elo_2v2 || 300),
+                        '3v3': params.mode === '3v3' ? newModeAvg : (teamModeElos?.arena_elo_3v3 || 300),
+                        '4v4': params.mode === '4v4' ? newModeAvg : (teamModeElos?.arena_elo_4v4 || 300),
+                        '5v5': params.mode === '5v5' ? newModeAvg : (teamModeElos?.arena_elo_5v5 || 300),
+                    };
+                    const newTeamAvg = Math.round((modeAvgs['2v2'] + modeAvgs['3v3'] + modeAvgs['4v4'] + modeAvgs['5v5']) / 4);
+                    teamEloUpdate = `, arena_elo_team = ${newTeamAvg}`;
+                }
+
+                db.prepare(`
+                    UPDATE users SET
+                        ${eloColumn} = ?,
+                        ${avgCol} = ?,
+                        ${winsCol} = COALESCE(${winsCol}, 0) + 1,
+                        ${streakCol} = ?,
+                        ${bestStreakCol} = ?,
+                        coins = ?
+                        ${teamEloUpdate}
+                    WHERE id = ?
+                `).run(newWinnerElo, newModeAvg, winnerStreak, newBestStreak, newCoins, params.winnerId);
+
+                console.log(`[Match] Winner updated: ${eloColumn}=${newWinnerElo}, avg=${newModeAvg}, streak=${winnerStreak}`);
+            }
+
+            // Update loser
+            if (isLoserHuman) {
+                const loser = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.loserId) as any;
+                const newCoins = (loser?.coins || 0) + loserCoinsEarned;
+
+                // Get all operation ELOs for this mode to calculate average
+                const loserAllElos = db.prepare(`
+                    SELECT ${isDuel ? 'arena_elo_duel_addition, arena_elo_duel_subtraction, arena_elo_duel_multiplication, arena_elo_duel_division'
+                        : `arena_elo_${params.mode}_addition, arena_elo_${params.mode}_subtraction, arena_elo_${params.mode}_multiplication, arena_elo_${params.mode}_division`}
+                    FROM users WHERE id = ?
+                `).get(params.loserId) as any;
+
+                const opElos: Record<string, number> = {};
+                for (const op of RANKED_OPERATIONS) {
+                    const col = isDuel ? `arena_elo_duel_${op}` : `arena_elo_${params.mode}_${op}`;
+                    opElos[op] = op === params.operation ? newLoserElo : (loserAllElos?.[col] || 300);
+                }
+                const newModeAvg = calculateAverageElo(opElos);
+
+                const lossesCol = isDuel ? 'arena_duel_losses' : 'arena_team_losses';
+                const streakCol = isDuel ? 'arena_duel_win_streak' : 'arena_team_win_streak';
+                const avgCol = isDuel ? 'arena_elo_duel' : `arena_elo_${params.mode}`;
+
+                // For team modes, also update overall team ELO average
+                let teamEloUpdate = '';
+                if (!isDuel) {
+                    const teamModeElos = db.prepare(`
+                        SELECT arena_elo_2v2, arena_elo_3v3, arena_elo_4v4, arena_elo_5v5 FROM users WHERE id = ?
+                    `).get(params.loserId) as any;
+                    
+                    const modeAvgs = {
+                        '2v2': params.mode === '2v2' ? newModeAvg : (teamModeElos?.arena_elo_2v2 || 300),
+                        '3v3': params.mode === '3v3' ? newModeAvg : (teamModeElos?.arena_elo_3v3 || 300),
+                        '4v4': params.mode === '4v4' ? newModeAvg : (teamModeElos?.arena_elo_4v4 || 300),
+                        '5v5': params.mode === '5v5' ? newModeAvg : (teamModeElos?.arena_elo_5v5 || 300),
+                    };
+                    const newTeamAvg = Math.round((modeAvgs['2v2'] + modeAvgs['3v3'] + modeAvgs['4v4'] + modeAvgs['5v5']) / 4);
+                    teamEloUpdate = `, arena_elo_team = ${newTeamAvg}`;
+                }
+
+                db.prepare(`
+                    UPDATE users SET
+                        ${eloColumn} = ?,
+                        ${avgCol} = ?,
+                        ${lossesCol} = COALESCE(${lossesCol}, 0) + 1,
+                        ${streakCol} = 0,
+                        coins = ?
+                        ${teamEloUpdate}
+                    WHERE id = ?
+                `).run(newLoserElo, newModeAvg, newCoins, params.loserId);
+
+                console.log(`[Match] Loser updated: ${eloColumn}=${newLoserElo}, avg=${newModeAvg}`);
             }
         } else {
-            console.log(`[Match] Skipped match history insert (AI match)`);
+            // Unranked (mixed) - just update coins
+            if (isWinnerHuman) {
+                const winner = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.winnerId) as any;
+                db.prepare("UPDATE users SET coins = ? WHERE id = ?").run((winner?.coins || 0) + winnerCoinsEarned, params.winnerId);
+            }
+            if (isLoserHuman) {
+                const loser = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.loserId) as any;
+                db.prepare("UPDATE users SET coins = ? WHERE id = ?").run((loser?.coins || 0) + loserCoinsEarned, params.loserId);
+            }
+            console.log(`[Match] Unranked match (mixed) - coins only`);
         }
 
-        console.log(`[Match] Saved result: ${params.winnerId} beat ${params.loserId} (${params.winnerScore}-${params.loserScore}), ELO: +${winnerEloChange}/${loserEloChange}`);
-        // Revalidate arena pages so stats update immediately
+        // Save match to history
+        const isAiMatch = !isWinnerHuman || !isLoserHuman;
+        if (!isAiMatch) {
+            try {
+                db.prepare(`
+                    INSERT OR IGNORE INTO arena_matches (id, winner_id, loser_id, winner_score, loser_score, operation, mode, winner_elo_change, loser_elo_change, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                `).run(params.matchId, params.winnerId, params.loserId, params.winnerScore, params.loserScore, params.operation, params.mode, winnerEloChange, loserEloChange);
+            } catch (e: any) {
+                if (!e.message?.includes('UNIQUE constraint')) throw e;
+            }
+        }
+
+        // Revalidate
         const { revalidatePath } = await import("next/cache");
         revalidatePath("/arena/modes");
         revalidatePath("/arena");
         revalidatePath("/stats");
         revalidatePath("/dashboard");
-
-        // Get final updated stats for both players to ensure UI is perfectly in sync
-        const winnerStats = await getArenaStats(params.winnerId);
-        const loserStats = await getArenaStats(params.loserId);
 
         return {
             success: true,
@@ -739,10 +800,7 @@ export async function saveMatchResult(params: {
             loserEloChange,
             winnerCoinsEarned,
             loserCoinsEarned,
-            newWinnerElo,
-            newLoserElo,
-            winnerStats,
-            loserStats
+            isRanked
         };
     } catch (error: any) {
         console.error('[Match] Save result error:', error);
@@ -751,26 +809,82 @@ export async function saveMatchResult(params: {
 }
 
 /**
- * Get user's arena stats with new rank system
+ * Operation-specific ELO structure
  */
-export async function getArenaStats(userId?: string): Promise<{
-    elo: number;
-    elo1v1: number;
-    elo2v2: number;
-    elo3v3: number;
-    wins: number;
-    losses: number;
-    winStreak: number;
-    bestWinStreak: number;
-    rank: string;
-    division: string;
-    winsToNextDivision: number;
-}> {
+export interface OperationElos {
+    elo: number;  // Average of all operation ELOs
+    addition: number;
+    subtraction: number;
+    multiplication: number;
+    divisionOp: number;  // Renamed to avoid conflict with rank division
+}
+
+/**
+ * Arena stats interface for the new Duel/Team ELO system
+ */
+export interface ArenaStatsResult {
+    // Duel (1v1) stats
+    duel: {
+        elo: number;
+        addition: number;
+        subtraction: number;
+        multiplication: number;
+        divisionOp: number;  // Operation ELO
+        wins: number;
+        losses: number;
+        winStreak: number;
+        bestWinStreak: number;
+        rank: string;
+        rankDivision: string;  // Rank division (I, II, III)
+        winsToNextDivision: number;
+    };
+    // Team stats
+    team: {
+        elo: number;
+        wins: number;
+        losses: number;
+        winStreak: number;
+        bestWinStreak: number;
+        rank: string;
+        rankDivision: string;  // Rank division (I, II, III)
+        winsToNextDivision: number;
+        // Per-mode stats
+        modes: {
+            '2v2': OperationElos;
+            '3v3': OperationElos;
+            '4v4': OperationElos;
+            '5v5': OperationElos;
+        };
+    };
+}
+
+const DEFAULT_STATS: ArenaStatsResult = {
+    duel: {
+        elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300,
+        wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0,
+        rank: 'Bronze', rankDivision: 'I', winsToNextDivision: 10
+    },
+    team: {
+        elo: 300, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0,
+        rank: 'Bronze', rankDivision: 'I', winsToNextDivision: 10,
+        modes: {
+            '2v2': { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300 },
+            '3v3': { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300 },
+            '4v4': { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300 },
+            '5v5': { elo: 300, addition: 300, subtraction: 300, multiplication: 300, divisionOp: 300 },
+        }
+    }
+};
+
+/**
+ * Get user's arena stats with new Duel/Team ELO system
+ */
+export async function getArenaStats(userId?: string): Promise<ArenaStatsResult> {
     const session = await auth();
     const targetId = userId || (session?.user as any)?.id;
 
     if (!targetId) {
-        return { elo: 300, elo1v1: 300, elo2v2: 300, elo3v3: 300, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0, rank: 'Bronze', division: 'I', winsToNextDivision: 10 };
+        return DEFAULT_STATS;
     }
 
     try {
@@ -778,58 +892,117 @@ export async function getArenaStats(userId?: string): Promise<{
         const { calculateArenaRank, getHighestTier } = await import("@/lib/arena/ranks");
         const db = getDatabase();
 
-        // Get user data including math tiers
+        // Get all arena-related columns
         let user;
         try {
             user = db.prepare(`
-                SELECT arena_elo, arena_elo_1v1, arena_elo_2v2, arena_elo_3v3,
-                       arena_wins, arena_losses, arena_win_streak, arena_best_win_streak,
-                       math_tiers
+                SELECT 
+                    -- Duel stats
+                    arena_elo_duel, arena_elo_duel_addition, arena_elo_duel_subtraction,
+                    arena_elo_duel_multiplication, arena_elo_duel_division,
+                    arena_duel_wins, arena_duel_losses, arena_duel_win_streak, arena_duel_best_win_streak,
+                    -- Team stats
+                    arena_elo_team, arena_team_wins, arena_team_losses, 
+                    arena_team_win_streak, arena_team_best_win_streak,
+                    -- 2v2
+                    arena_elo_2v2, arena_elo_2v2_addition, arena_elo_2v2_subtraction,
+                    arena_elo_2v2_multiplication, arena_elo_2v2_division,
+                    -- 3v3
+                    arena_elo_3v3, arena_elo_3v3_addition, arena_elo_3v3_subtraction,
+                    arena_elo_3v3_multiplication, arena_elo_3v3_division,
+                    -- 4v4
+                    arena_elo_4v4, arena_elo_4v4_addition, arena_elo_4v4_subtraction,
+                    arena_elo_4v4_multiplication, arena_elo_4v4_division,
+                    -- 5v5
+                    arena_elo_5v5, arena_elo_5v5_addition, arena_elo_5v5_subtraction,
+                    arena_elo_5v5_multiplication, arena_elo_5v5_division,
+                    -- For rank calculation
+                    math_tiers
                 FROM users WHERE id = ?
             `).get(targetId) as any;
         } catch (e) {
-            // Columns might not exist, try simpler query
-            user = db.prepare("SELECT arena_elo, arena_wins, arena_losses, math_tiers FROM users WHERE id = ?").get(targetId) as any;
+            console.error('[Arena] Error fetching stats, using defaults:', e);
+            return DEFAULT_STATS;
         }
 
-        const elo = user?.arena_elo || 300;
-        const elo1v1 = user?.arena_elo_1v1 || 300;
-        const elo2v2 = user?.arena_elo_2v2 || 300;
-        const elo3v3 = user?.arena_elo_3v3 || 300;
-        const wins = user?.arena_wins || 0;
-        const losses = user?.arena_losses || 0;
-        const winStreak = user?.arena_win_streak || 0;
-        const bestWinStreak = user?.arena_best_win_streak || 0;
+        if (!user) return DEFAULT_STATS;
 
         // Get highest practice tier for rank bracket
         let mathTiers: Record<string, number> = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
         try {
-            if (user?.math_tiers) {
+            if (user.math_tiers) {
                 mathTiers = typeof user.math_tiers === 'string' ? JSON.parse(user.math_tiers) : user.math_tiers;
             }
         } catch (e) { }
-
         const highestTier = getHighestTier(mathTiers);
 
-        // Calculate rank from wins and tier
-        const rankInfo = calculateArenaRank(wins, highestTier);
+        // Calculate duel rank
+        const duelWins = user.arena_duel_wins || 0;
+        const duelRankInfo = calculateArenaRank(duelWins, highestTier);
+
+        // Calculate team rank
+        const teamWins = user.arena_team_wins || 0;
+        const teamRankInfo = calculateArenaRank(teamWins, highestTier);
 
         return {
-            elo,
-            elo1v1,
-            elo2v2,
-            elo3v3,
-            wins,
-            losses,
-            winStreak,
-            bestWinStreak,
-            rank: rankInfo.rank,
-            division: rankInfo.division,
-            winsToNextDivision: rankInfo.winsToNextDivision
+            duel: {
+                elo: user.arena_elo_duel || 300,
+                addition: user.arena_elo_duel_addition || 300,
+                subtraction: user.arena_elo_duel_subtraction || 300,
+                multiplication: user.arena_elo_duel_multiplication || 300,
+                divisionOp: user.arena_elo_duel_division || 300,
+                wins: duelWins,
+                losses: user.arena_duel_losses || 0,
+                winStreak: user.arena_duel_win_streak || 0,
+                bestWinStreak: user.arena_duel_best_win_streak || 0,
+                rank: duelRankInfo.rank,
+                rankDivision: duelRankInfo.division,
+                winsToNextDivision: duelRankInfo.winsToNextDivision
+            },
+            team: {
+                elo: user.arena_elo_team || 300,
+                wins: teamWins,
+                losses: user.arena_team_losses || 0,
+                winStreak: user.arena_team_win_streak || 0,
+                bestWinStreak: user.arena_team_best_win_streak || 0,
+                rank: teamRankInfo.rank,
+                rankDivision: teamRankInfo.division,
+                winsToNextDivision: teamRankInfo.winsToNextDivision,
+                modes: {
+                    '2v2': {
+                        elo: user.arena_elo_2v2 || 300,
+                        addition: user.arena_elo_2v2_addition || 300,
+                        subtraction: user.arena_elo_2v2_subtraction || 300,
+                        multiplication: user.arena_elo_2v2_multiplication || 300,
+                        divisionOp: user.arena_elo_2v2_division || 300,
+                    },
+                    '3v3': {
+                        elo: user.arena_elo_3v3 || 300,
+                        addition: user.arena_elo_3v3_addition || 300,
+                        subtraction: user.arena_elo_3v3_subtraction || 300,
+                        multiplication: user.arena_elo_3v3_multiplication || 300,
+                        divisionOp: user.arena_elo_3v3_division || 300,
+                    },
+                    '4v4': {
+                        elo: user.arena_elo_4v4 || 300,
+                        addition: user.arena_elo_4v4_addition || 300,
+                        subtraction: user.arena_elo_4v4_subtraction || 300,
+                        multiplication: user.arena_elo_4v4_multiplication || 300,
+                        divisionOp: user.arena_elo_4v4_division || 300,
+                    },
+                    '5v5': {
+                        elo: user.arena_elo_5v5 || 300,
+                        addition: user.arena_elo_5v5_addition || 300,
+                        subtraction: user.arena_elo_5v5_subtraction || 300,
+                        multiplication: user.arena_elo_5v5_multiplication || 300,
+                        divisionOp: user.arena_elo_5v5_division || 300,
+                    },
+                }
+            }
         };
     } catch (error) {
         console.error('[Arena] Error getting stats:', error);
-        return { elo: 300, elo1v1: 300, elo2v2: 300, elo3v3: 300, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0, rank: 'Bronze', division: 'I', winsToNextDivision: 10 };
+        return DEFAULT_STATS;
     }
 }
 
@@ -870,7 +1043,7 @@ export async function getMatchEmojis(matchId: string) {
     const chatKey = `arena:chat:${matchId}`;
     try {
         const messages = await redis.lrange(chatKey, 0, -1);
-        return messages.map(m => JSON.parse(m));
+        return messages.map((m: string) => JSON.parse(m));
     } catch (error) {
         return [];
     }

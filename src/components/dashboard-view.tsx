@@ -230,61 +230,7 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                     </GlassCard>
                 </motion.div>
 
-                {/* Career Stats Section */}
-                {
-                    stats?.careerStats && (
-                        <motion.div variants={itemVariants}>
-                            <Link href="/stats" className="block">
-                                <motion.div whileHover={cardHover}>
-                                    <GlassCard className="space-y-4 hover:bg-white/5 transition-all cursor-pointer group">
-                                        <div className="flex items-center gap-3 text-muted-foreground group-hover:text-white transition-colors">
-                                            <Activity size={16} />
-                                            <h3 className="text-xs font-bold uppercase tracking-widest">Career Stats</h3>
-                                            <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center overflow-hidden">
-                                                <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">Lifetime Accuracy</div>
-                                                <div className="text-2xl font-black text-primary truncate max-w-full">
-                                                    <AnimatedNumber value={stats.careerStats.lifetimeAccuracy} suffix="%" />
-                                                </div>
-                                            </div>
-                                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center overflow-hidden">
-                                                <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">Needs Work</div>
-                                                <div className="text-2xl font-black text-red-400 truncate max-w-full" title={stats.careerStats.weakestLink}>{stats.careerStats.weakestLink}</div>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Recent Trend</div>
-                                            <div className="h-16 flex items-end gap-1">
-                                                {stats.careerStats.history.map((s: any, i: number) => (
-                                                    <motion.div
-                                                        key={i}
-                                                        className="flex-1 bg-primary/20 rounded-t-sm relative group/bar hover:bg-primary transition-colors"
-                                                        initial={{ height: 0 }}
-                                                        animate={{ height: `${s.accuracy}%` }}
-                                                        transition={{
-                                                            duration: 0.8,
-                                                            delay: 0.5 + i * 0.1,
-                                                            ease: [0.34, 1.56, 0.64, 1]
-                                                        }}
-                                                    >
-                                                        <div className="opacity-0 group-hover/bar:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap pointer-events-none z-10">
-                                                            {s.accuracy.toFixed(0)}%
-                                                        </div>
-                                                    </motion.div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </GlassCard>
-                                </motion.div>
-                            </Link>
-                        </motion.div>
-                    )
-                }
-
+                {/* Quick Links - Leagues, Shop, Locker */}
                 <motion.div
                     className="grid grid-cols-3 gap-4"
                     variants={containerVariants}
@@ -320,6 +266,67 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                         </Link>
                     </motion.div>
                 </motion.div>
+
+                {/* Career Stats Section */}
+                {
+                    stats?.careerStats && (
+                        <motion.div variants={itemVariants}>
+                            <Link href="/stats" className="block">
+                                <motion.div whileHover={cardHover}>
+                                    <GlassCard className="space-y-4 hover:bg-white/5 transition-all cursor-pointer group">
+                                        <div className="flex items-center gap-3 text-muted-foreground group-hover:text-white transition-colors">
+                                            <Activity size={16} />
+                                            <h3 className="text-xs font-bold uppercase tracking-widest">Career Stats</h3>
+                                            <ArrowRight size={14} className="opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center overflow-hidden">
+                                                <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">Lifetime Accuracy</div>
+                                                <div className="text-2xl font-black text-primary truncate max-w-full">
+                                                    <AnimatedNumber value={stats.careerStats.lifetimeAccuracy} suffix="%" />
+                                                </div>
+                                            </div>
+                                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center overflow-hidden">
+                                                <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">Needs Work</div>
+                                                <div className="text-4xl font-black text-red-400 truncate max-w-full" title={stats.careerStats.weakestLink}>
+                                                    {stats.careerStats.weakestLink === 'Addition' ? '+' :
+                                                     stats.careerStats.weakestLink === 'Subtraction' ? '−' :
+                                                     stats.careerStats.weakestLink === 'Multiplication' ? '×' :
+                                                     stats.careerStats.weakestLink === 'Division' ? '÷' :
+                                                     stats.careerStats.weakestLink}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground">Recent Trend</div>
+                                            <div className="h-16 flex items-end gap-1">
+                                                {stats.careerStats.history.map((s: any, i: number) => (
+                                                    <motion.div
+                                                        key={i}
+                                                        className="flex-1 bg-primary/20 rounded-t-sm relative group/bar hover:bg-primary transition-colors"
+                                                        initial={{ height: 0 }}
+                                                        animate={{ height: `${s.accuracy}%` }}
+                                                        transition={{
+                                                            duration: 0.8,
+                                                            delay: 0.5 + i * 0.1,
+                                                            ease: [0.34, 1.56, 0.64, 1]
+                                                        }}
+                                                    >
+                                                        <div className="opacity-0 group-hover/bar:opacity-100 absolute -top-8 left-1/2 -translate-x-1/2 bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap pointer-events-none z-10">
+                                                            {s.accuracy.toFixed(0)}%
+                                                        </div>
+                                                    </motion.div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </GlassCard>
+                                </motion.div>
+                            </Link>
+                        </motion.div>
+                    )
+                }
 
 
                 <motion.div variants={itemVariants}>

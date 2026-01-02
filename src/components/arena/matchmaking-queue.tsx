@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { soundEngine } from '@/lib/sound-engine';
 import { PlayerBanner } from './player-banner';
@@ -16,6 +16,8 @@ interface MatchmakingQueueProps {
     division: string; // Rank division (I, II, III) for display
     elo: number;
     operation?: string;
+    mode?: string;
+    isRanked?: boolean; // Whether this match affects ELO (false for mixed operation)
     equippedBanner?: string;
     equippedTitle?: string;
 }
@@ -61,10 +63,8 @@ function RankBadge({ rank, division }: { rank: string; division: string }) {
     );
 }
 
-export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, division, elo, operation = 'mixed', equippedBanner = 'default', equippedTitle = 'Challenger' }: MatchmakingQueueProps) {
+export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, division, elo, operation = 'mixed', mode = '1v1', isRanked = true, equippedBanner = 'default', equippedTitle = 'Challenger' }: MatchmakingQueueProps) {
     const router = useRouter();
-    const searchParams = useSearchParams();
-    const mode = searchParams.get('mode') || '1v1';
     const opLabel = OPERATION_LABELS[operation] || OPERATION_LABELS.mixed;
 
     const [queueTime, setQueueTime] = useState(0);

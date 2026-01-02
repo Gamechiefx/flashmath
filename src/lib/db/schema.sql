@@ -52,15 +52,53 @@ CREATE TABLE IF NOT EXISTS users (
     failed_login_attempts INTEGER DEFAULT 0,
     locked_until TEXT,
     
-    -- Arena stats
-    arena_elo INTEGER DEFAULT 300,
-    arena_elo_1v1 INTEGER DEFAULT 300,
+    -- Arena Duel Stats (1v1) - Per operation ELO
+    arena_elo_duel INTEGER DEFAULT 300,
+    arena_elo_duel_addition INTEGER DEFAULT 300,
+    arena_elo_duel_subtraction INTEGER DEFAULT 300,
+    arena_elo_duel_multiplication INTEGER DEFAULT 300,
+    arena_elo_duel_division INTEGER DEFAULT 300,
+    arena_duel_wins INTEGER DEFAULT 0,
+    arena_duel_losses INTEGER DEFAULT 0,
+    arena_duel_win_streak INTEGER DEFAULT 0,
+    arena_duel_best_win_streak INTEGER DEFAULT 0,
+    
+    -- Arena Team Stats (2v2, 3v3, 4v4, 5v5) - Per mode + per operation ELO
+    arena_elo_team INTEGER DEFAULT 300,
+    
+    -- 2v2 ELO
     arena_elo_2v2 INTEGER DEFAULT 300,
+    arena_elo_2v2_addition INTEGER DEFAULT 300,
+    arena_elo_2v2_subtraction INTEGER DEFAULT 300,
+    arena_elo_2v2_multiplication INTEGER DEFAULT 300,
+    arena_elo_2v2_division INTEGER DEFAULT 300,
+    
+    -- 3v3 ELO
     arena_elo_3v3 INTEGER DEFAULT 300,
-    arena_wins INTEGER DEFAULT 0,
-    arena_losses INTEGER DEFAULT 0,
-    arena_win_streak INTEGER DEFAULT 0,
-    arena_best_win_streak INTEGER DEFAULT 0,
+    arena_elo_3v3_addition INTEGER DEFAULT 300,
+    arena_elo_3v3_subtraction INTEGER DEFAULT 300,
+    arena_elo_3v3_multiplication INTEGER DEFAULT 300,
+    arena_elo_3v3_division INTEGER DEFAULT 300,
+    
+    -- 4v4 ELO
+    arena_elo_4v4 INTEGER DEFAULT 300,
+    arena_elo_4v4_addition INTEGER DEFAULT 300,
+    arena_elo_4v4_subtraction INTEGER DEFAULT 300,
+    arena_elo_4v4_multiplication INTEGER DEFAULT 300,
+    arena_elo_4v4_division INTEGER DEFAULT 300,
+    
+    -- 5v5 ELO
+    arena_elo_5v5 INTEGER DEFAULT 300,
+    arena_elo_5v5_addition INTEGER DEFAULT 300,
+    arena_elo_5v5_subtraction INTEGER DEFAULT 300,
+    arena_elo_5v5_multiplication INTEGER DEFAULT 300,
+    arena_elo_5v5_division INTEGER DEFAULT 300,
+    
+    -- Team aggregate stats
+    arena_team_wins INTEGER DEFAULT 0,
+    arena_team_losses INTEGER DEFAULT 0,
+    arena_team_win_streak INTEGER DEFAULT 0,
+    arena_team_best_win_streak INTEGER DEFAULT 0,
     
     -- 2FA
     two_factor_enabled INTEGER DEFAULT 0,
@@ -331,6 +369,7 @@ CREATE TABLE IF NOT EXISTS parties (
     id TEXT PRIMARY KEY,
     leader_id TEXT NOT NULL,
     max_size INTEGER DEFAULT 5,
+    invite_mode TEXT DEFAULT 'open' CHECK(invite_mode IN ('open', 'invite_only')),
     created_at TEXT NOT NULL,
     FOREIGN KEY (leader_id) REFERENCES users(id) ON DELETE CASCADE
 );

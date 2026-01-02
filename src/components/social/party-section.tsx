@@ -7,20 +7,31 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Crown, Plus, LogOut, UserPlus, Bell } from 'lucide-react';
+import { Users, Crown, Plus, LogOut, UserPlus, Bell, Settings, Lock, Globe } from 'lucide-react';
 import { UserAvatar } from '@/components/user-avatar';
 import { cn } from '@/lib/utils';
 import type { Party, PartyInvite, Friend } from '@/lib/actions/social';
+
+type PresenceStatus = 'online' | 'away' | 'invisible' | 'in-match' | 'offline';
 
 interface PartySectionProps {
     party: Party | null;
     invites: PartyInvite[];
     friends: Friend[];
+    currentUserId?: string;
+    /** Current user's own presence status */
+    currentUserStatus?: PresenceStatus;
+    /** IDs of users with pending outgoing friend requests */
+    pendingFriendRequestIds?: string[];
+    /** Real-time presence statuses for party members */
+    memberStatuses?: Map<string, PresenceStatus>;
     onCreateParty: () => void;
     onLeaveParty: () => void;
     onInviteFriend: (friendId: string) => void;
     onAcceptInvite: (inviteId: string) => void;
     onDeclineInvite: (inviteId: string) => void;
+    onUpdateSettings?: (settings: { inviteMode: 'open' | 'invite_only' }) => void;
+    onAddFriend?: (userId: string) => void;
     isLoading?: boolean;
 }
 
@@ -28,15 +39,51 @@ export function PartySection({
     party,
     invites,
     friends,
+    currentUserId,
+    currentUserStatus,
+    pendingFriendRequestIds = [],
+    memberStatuses,
     onCreateParty,
     onLeaveParty,
     onInviteFriend,
     onAcceptInvite,
     onDeclineInvite,
+    onUpdateSettings,
+    onAddFriend,
     isLoading,
 }: PartySectionProps) {
     const [showInviteList, setShowInviteList] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
     const onlineFriends = friends.filter(f => f.odOnline);
+    
+    // Get set of friend IDs for quick lookup
+    const friendIds = new Set(friends.map(f => f.odUserId));
+    
+    // Helper to get status color for a party member
+    const getStatusColor = (memberId: string, fallbackOnline: boolean) => {
+        // For current user, use their own status directly
+        if (memberId === currentUserId && currentUserStatus) {
+            if (currentUserStatus === 'online') return 'bg-green-500';
+            if (currentUserStatus === 'away') return 'bg-amber-500';
+            if (currentUserStatus === 'in-match') return 'bg-purple-500';
+            if (currentUserStatus === 'invisible' || currentUserStatus === 'offline') return 'bg-zinc-600';
+        }
+        
+        // For other members, use the memberStatuses map
+        const status = memberStatuses?.get(memberId);
+        if (status === 'online') return 'bg-green-500';
+        if (status === 'away') return 'bg-amber-500';
+        if (status === 'in-match') return 'bg-purple-500';
+        if (status === 'invisible' || status === 'offline') return 'bg-zinc-600';
+        // Fallback to database status
+        return fallbackOnline ? 'bg-green-500' : 'bg-zinc-600';
+    };
+
+    // Determine if current user is the party leader
+    const isLeader = party && currentUserId && party.leaderId === currentUserId;
+    
+    // Determine if current user can invite (leader or open mode)
+    const canInvite = party && (isLeader || party.inviteMode === 'open');
 
     return (
         <div className="space-y-3">
@@ -101,61 +148,176 @@ export function PartySection({
                             <span className="text-[10px] text-muted-foreground">
                                 {party.members.length}/{party.maxSize}
                             </span>
+                            {/* Invite Mode Indicator */}
+                            <div className={cn(
+                                "flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-wider",
+                                party.inviteMode === 'open' 
+                                    ? "bg-green-500/20 text-green-400 border border-green-500/30"
+                                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                            )}>
+                                {party.inviteMode === 'open' ? (
+                                    <><Globe size={8} /> Open</>
+                                ) : (
+                                    <><Lock size={8} /> Invite Only</>
+                                )}
+                            </div>
                         </div>
-                        <button
-                            onClick={onLeaveParty}
-                            disabled={isLoading}
-                            className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
-                            title="Leave party"
-                        >
-                            <LogOut size={14} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                            {/* Settings button (leader only) */}
+                            {isLeader && (
+                                <button
+                                    onClick={() => setShowSettings(!showSettings)}
+                                    className={cn(
+                                        "p-2 rounded-lg transition-colors",
+                                        showSettings 
+                                            ? "bg-primary/20 text-primary" 
+                                            : "hover:bg-white/10 text-muted-foreground hover:text-white"
+                                    )}
+                                    title="Party settings"
+                                >
+                                    <Settings size={14} />
+                                </button>
+                            )}
+                            <button
+                                onClick={onLeaveParty}
+                                disabled={isLoading}
+                                className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
+                                title="Leave party"
+                            >
+                                <LogOut size={14} />
+                            </button>
+                        </div>
                     </div>
+
+                    {/* Leader Settings Panel */}
+                    <AnimatePresence mode="wait">
+                        {showSettings && isLeader && onUpdateSettings && (
+                            <motion.div
+                                initial={{ opacity: 0, scaleY: 0.8, originY: 0 }}
+                                animate={{ opacity: 1, scaleY: 1 }}
+                                exit={{ opacity: 0, scaleY: 0.8 }}
+                                transition={{ 
+                                    duration: 0.15, 
+                                    ease: [0.4, 0, 0.2, 1]
+                                }}
+                                className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/20 overflow-hidden"
+                            >
+                                <div className="text-[10px] font-bold uppercase tracking-widest text-primary mb-3 flex items-center gap-2">
+                                    <Settings size={12} />
+                                    Party Settings
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="text-[10px] text-muted-foreground mb-2">
+                                        Who can invite friends?
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => onUpdateSettings({ inviteMode: 'open' })}
+                                            disabled={isLoading}
+                                            className={cn(
+                                                "flex-1 p-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors",
+                                                party.inviteMode === 'open'
+                                                    ? "bg-green-500/30 text-green-400 border border-green-500/50"
+                                                    : "bg-white/5 text-muted-foreground hover:bg-white/10"
+                                            )}
+                                        >
+                                            <Globe size={12} />
+                                            Anyone
+                                        </button>
+                                        <button
+                                            onClick={() => onUpdateSettings({ inviteMode: 'invite_only' })}
+                                            disabled={isLoading}
+                                            className={cn(
+                                                "flex-1 p-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors",
+                                                party.inviteMode === 'invite_only'
+                                                    ? "bg-amber-500/30 text-amber-400 border border-amber-500/50"
+                                                    : "bg-white/5 text-muted-foreground hover:bg-white/10"
+                                            )}
+                                        >
+                                            <Lock size={12} />
+                                            Leader Only
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
 
                     {/* Party Members */}
                     <div className="space-y-2">
-                        {party.members.map(member => (
-                            <div
-                                key={member.odUserId}
-                                className="flex items-center gap-3 p-2 rounded-lg bg-white/5"
-                            >
-                                <div className="relative">
-                                    <UserAvatar
-                                        user={{
-                                            name: member.odName,
-                                            equipped_items: { frame: member.odEquippedFrame },
-                                        }}
-                                        size="sm"
-                                    />
-                                    {member.isLeader && (
-                                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent flex items-center justify-center">
-                                            <Crown size={10} className="text-black" />
-                                        </div>
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="font-bold text-sm truncate flex items-center gap-2">
-                                        {member.odName}
+                        {party.members.map(member => {
+                            const isCurrentUser = member.odUserId === currentUserId;
+                            const isFriend = friendIds.has(member.odUserId);
+                            const hasPendingRequest = pendingFriendRequestIds.includes(member.odUserId);
+                            const canAddFriend = !isCurrentUser && !isFriend && onAddFriend;
+                            
+                            return (
+                                <div
+                                    key={member.odUserId}
+                                    className="flex items-center gap-3 p-2 rounded-lg bg-white/5"
+                                >
+                                    <div className="relative">
+                                        <UserAvatar
+                                            user={{
+                                                name: member.odName,
+                                                equipped_items: { frame: member.odEquippedFrame },
+                                            }}
+                                            size="sm"
+                                        />
                                         {member.isLeader && (
-                                            <span className="text-[8px] text-accent uppercase tracking-widest">
-                                                Leader
-                                            </span>
+                                            <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent flex items-center justify-center">
+                                                <Crown size={10} className="text-black" />
+                                            </div>
                                         )}
                                     </div>
-                                    <div className="text-[10px] text-muted-foreground">
-                                        LVL {member.odLevel}
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-bold text-sm truncate flex items-center gap-2">
+                                            {member.odName}
+                                            {member.isLeader && (
+                                                <span className="text-[8px] text-accent uppercase tracking-widest">
+                                                    Leader
+                                                </span>
+                                            )}
+                                            {isCurrentUser && (
+                                                <span className="text-[8px] text-muted-foreground uppercase tracking-widest">
+                                                    You
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-[10px] text-muted-foreground">
+                                            LVL {member.odLevel}
+                                        </div>
                                     </div>
+                                    
+                                    {/* Add Friend button for non-friends */}
+                                    {canAddFriend && (
+                                        hasPendingRequest ? (
+                                            <span className="text-[9px] text-muted-foreground px-2 py-1 rounded bg-white/5">
+                                                Pending
+                                            </span>
+                                        ) : (
+                                            <button
+                                                onClick={() => onAddFriend(member.odUserId)}
+                                                disabled={isLoading}
+                                                className="p-1.5 rounded-lg hover:bg-primary/20 text-primary transition-colors"
+                                                title={`Add ${member.odName} as friend`}
+                                            >
+                                                <UserPlus size={14} />
+                                            </button>
+                                        )
+                                    )}
+                                    
+                                    <div className={cn(
+                                        "w-2 h-2 rounded-full",
+                                        getStatusColor(member.odUserId, member.odOnline)
+                                    )} />
                                 </div>
-                                <div className={cn(
-                                    "w-2 h-2 rounded-full",
-                                    member.odOnline ? "bg-green-500" : "bg-zinc-600"
-                                )} />
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
-                    {/* Invite Friend Button */}
-                    {party.members.length < party.maxSize && (
+                    {/* Invite Friend Button - only show if user can invite */}
+                    {party.members.length < party.maxSize && canInvite && (
                         <div className="mt-3">
                             <button
                                 onClick={() => setShowInviteList(!showInviteList)}
@@ -207,6 +369,16 @@ export function PartySection({
                                     </motion.div>
                                 )}
                             </AnimatePresence>
+                        </div>
+                    )}
+
+                    {/* Message when party is not full but user can't invite */}
+                    {party.members.length < party.maxSize && !canInvite && (
+                        <div className="mt-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
+                            <div className="text-[10px] text-amber-400 flex items-center justify-center gap-2">
+                                <Lock size={12} />
+                                Only the party leader can invite
+                            </div>
                         </div>
                     )}
                 </div>

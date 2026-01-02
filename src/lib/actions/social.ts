@@ -44,6 +44,7 @@ export interface Party {
     leaderId: string;
     leaderName: string;
     maxSize: number;
+    inviteMode: 'open' | 'invite_only';
     members: PartyMember[];
     createdAt: string;
 }
@@ -562,7 +563,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
 
         if (membership) {
             const partyData = db.prepare(`
-                SELECT p.id, p.leader_id, p.max_size, p.created_at, u.name as leader_name
+                SELECT p.id, p.leader_id, p.max_size, p.invite_mode, p.created_at, u.name as leader_name
                 FROM parties p
                 JOIN users u ON p.leader_id = u.id
                 WHERE p.id = ?
@@ -583,6 +584,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                     leaderId: partyData.leader_id,
                     leaderName: partyData.leader_name,
                     maxSize: partyData.max_size,
+                    inviteMode: partyData.invite_mode || 'open',
                     createdAt: partyData.created_at,
                     members: members.map(m => {
                         let equipped: any = {};
@@ -633,7 +635,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
     }
 }
 
-export async function createParty(): Promise<{ success: boolean; partyId?: string; error?: string }> {
+export async function createParty(inviteMode: 'open' | 'invite_only' = 'open'): Promise<{ success: boolean; partyId?: string; error?: string }> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
@@ -655,11 +657,11 @@ export async function createParty(): Promise<{ success: boolean; partyId?: strin
         const partyId = generateId();
         const timestamp = now();
 
-        // Create party (max 5 members)
+        // Create party (max 5 members, with invite_mode)
         db.prepare(`
-            INSERT INTO parties (id, leader_id, max_size, created_at)
-            VALUES (?, ?, 5, ?)
-        `).run(partyId, userId, timestamp);
+            INSERT INTO parties (id, leader_id, max_size, invite_mode, created_at)
+            VALUES (?, ?, 5, ?, ?)
+        `).run(partyId, userId, inviteMode, timestamp);
 
         // Add leader as first member
         db.prepare(`
@@ -667,10 +669,67 @@ export async function createParty(): Promise<{ success: boolean; partyId?: strin
             VALUES (?, ?, ?, ?)
         `).run(generateId(), partyId, userId, timestamp);
 
-        console.log(`[Social] Party ${partyId} created by ${userId}`);
+        console.log(`[Social] Party ${partyId} created by ${userId} with invite_mode=${inviteMode}`);
         return { success: true, partyId };
     } catch (error: any) {
         console.error('[Social] createParty error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Update party settings (leader only)
+ */
+export async function updatePartySettings(settings: { inviteMode?: 'open' | 'invite_only' }): Promise<{ 
+    success: boolean; 
+    error?: string;
+    partyMemberIds?: string[];
+    newInviteMode?: 'open' | 'invite_only';
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Get user's party and verify they're the leader
+        const membership = db.prepare(`
+            SELECT pm.party_id, p.leader_id
+            FROM party_members pm
+            JOIN parties p ON pm.party_id = p.id
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { success: false, error: 'Not in a party' };
+        }
+
+        if (membership.leader_id !== userId) {
+            return { success: false, error: 'Only the party leader can change settings' };
+        }
+
+        // Update settings
+        if (settings.inviteMode) {
+            db.prepare(`UPDATE parties SET invite_mode = ? WHERE id = ?`).run(settings.inviteMode, membership.party_id);
+            console.log(`[Social] Party ${membership.party_id} invite_mode updated to ${settings.inviteMode}`);
+        }
+
+        // Get all party member IDs for broadcasting
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(membership.party_id) as { user_id: string }[];
+        const partyMemberIds = members.map(m => m.user_id);
+
+        return { 
+            success: true, 
+            partyMemberIds,
+            newInviteMode: settings.inviteMode
+        };
+    } catch (error: any) {
+        console.error('[Social] updatePartySettings error:', error);
         return { success: false, error: error.message };
     }
 }
@@ -692,9 +751,9 @@ export async function inviteToParty(friendId: string): Promise<{
     const db = getDatabase();
 
     try {
-        // Get user's party
+        // Get user's party including invite_mode
         const membership = db.prepare(`
-            SELECT pm.party_id, p.leader_id, p.max_size
+            SELECT pm.party_id, p.leader_id, p.max_size, p.invite_mode
             FROM party_members pm
             JOIN parties p ON pm.party_id = p.id
             WHERE pm.user_id = ?
@@ -702,6 +761,14 @@ export async function inviteToParty(friendId: string): Promise<{
 
         if (!membership) {
             return { success: false, error: 'Not in a party' };
+        }
+
+        // Check if user can invite based on invite_mode
+        const isLeader = membership.leader_id === userId;
+        const inviteMode = membership.invite_mode || 'open';
+
+        if (inviteMode === 'invite_only' && !isLeader) {
+            return { success: false, error: 'Only the party leader can invite in this party' };
         }
 
         // Check party size

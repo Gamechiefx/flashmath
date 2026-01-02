@@ -25,6 +25,30 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
     const userStats = await getArenaStats(userId);
     const matchResult = await getMatch(matchId);
 
+    // Helper to get operation-specific ELO
+    const getOperationElo = (mode: string, op: string): number => {
+        const isDuel = mode === '1v1';
+        if (op === 'mixed') {
+            // Mixed is unranked, show average
+            return isDuel ? userStats.duel.elo : userStats.team.elo;
+        }
+        if (isDuel) {
+            if (op === 'addition') return userStats.duel.addition;
+            if (op === 'subtraction') return userStats.duel.subtraction;
+            if (op === 'multiplication') return userStats.duel.multiplication;
+            if (op === 'division') return userStats.duel.divisionOp;
+            return userStats.duel.elo;
+        }
+        const modeKey = mode as '2v2' | '3v3' | '4v4' | '5v5';
+        const modeStats = userStats.team.modes[modeKey];
+        if (!modeStats) return 300;
+        if (op === 'addition') return modeStats.addition;
+        if (op === 'subtraction') return modeStats.subtraction;
+        if (op === 'multiplication') return modeStats.multiplication;
+        if (op === 'division') return modeStats.divisionOp;
+        return modeStats.elo;
+    };
+
     let players;
 
     if (matchResult.match) {
@@ -33,13 +57,17 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
         const currentPlayer = isPlayer1 ? match.odPlayer1 : match.odPlayer2;
         const opponent = isPlayer1 ? match.odPlayer2 : match.odPlayer1;
 
+        const mode = currentPlayer?.odMode || '1v1';
+        const isDuel = mode === '1v1';
+        const operationElo = getOperationElo(mode, operation);
+
         players = [
             {
                 id: userId,
                 name: currentPlayer?.odUserName || session.user.name || 'You',
-                rank: userStats.rank || 'Bronze',
-                division: userStats.division || 'I',
-                elo: userStats.elo || 300,
+                rank: isDuel ? userStats.duel.rank : userStats.team.rank,
+                division: isDuel ? userStats.duel.rankDivision : userStats.team.rankDivision,
+                elo: operationElo || 300,
                 ready: true,
                 banner: currentPlayer?.odEquippedBanner || 'default',
                 title: currentPlayer?.odEquippedTitle || 'Challenger',
@@ -48,8 +76,8 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
             {
                 id: opponent?.odUserId || 'ai-opponent',
                 name: opponent?.odUserName || 'AI Challenger',
-                rank: 'Bronze', // Opponents default to Bronze for display
-                division: 'I', // AI defaults to division I for now
+                rank: 'Bronze',
+                division: 'I',
                 elo: opponent?.odElo || 300,
                 ready: true,
                 banner: opponent?.odEquippedBanner || 'default',
@@ -58,14 +86,14 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
             }
         ];
     } else {
-        // Fallback
+        // Fallback - use duel stats by default
         players = [
             {
                 id: userId,
                 name: session.user.name || 'You',
-                rank: userStats.rank || 'Bronze',
-                division: userStats.division || 'I',
-                elo: userStats.elo || 300,
+                rank: userStats.duel.rank || 'Bronze',
+                division: userStats.duel.rankDivision || 'I',
+                elo: userStats.duel.elo || 300,
                 ready: true,
                 banner: 'default',
                 title: 'Challenger',

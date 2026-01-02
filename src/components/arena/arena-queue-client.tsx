@@ -19,11 +19,13 @@ interface ArenaQueueClientProps {
     arenaStats: {
         elo: number;
         rank: string;
-        division: string;
+        rankDivision: string;
+        isRanked?: boolean;
     };
+    mode?: string;
 }
 
-export function ArenaQueueClient({ data, operation, arenaStats }: ArenaQueueClientProps) {
+export function ArenaQueueClient({ data, operation, arenaStats, mode = '1v1' }: ArenaQueueClientProps) {
     // Client-side effect for music
     useEffect(() => {
         // soundEngine.playBGM('bgm_synth_motivation');
@@ -45,9 +47,11 @@ export function ArenaQueueClient({ data, operation, arenaStats }: ArenaQueueClie
                         level={data.level || 1}
                         practiceTier={data.mathTiers?.[operation] || data.mathTiers?.addition || 1}
                         rank={arenaStats.rank}
-                        division={arenaStats.division}
+                        division={arenaStats.rankDivision}
                         elo={arenaStats.elo}
                         operation={operation}
+                        mode={mode}
+                        isRanked={arenaStats.isRanked ?? true}
                         equippedBanner={data.equippedBanner || 'default'}
                         equippedTitle={data.equippedTitle || 'Challenger'}
                     />

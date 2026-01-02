@@ -52,6 +52,22 @@ export function RealTimeMatch({
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
     const [resultData, setResultData] = useState<any>(null);
     const savingRef = useRef(false); // Prevent double-save during HMR
+
+    // Preserve final stats when match ends (before WebSocket state clears)
+    const [finalStats, setFinalStats] = useState<{
+        yourScore: number;
+        yourQuestionsAnswered: number;
+        yourStreak: number;
+        yourName: string;
+        yourBanner: string;
+        yourTitle: string;
+        yourLevel: number;
+        opponentScore: number;
+        opponentName: string;
+        opponentBanner: string;
+        opponentTitle: string;
+        opponentLevel: number;
+    } | null>(null);
     
     // Friend request state
     const [friendshipStatus, setFriendshipStatus] = useState<{
@@ -123,6 +139,26 @@ export function RealTimeMatch({
             window.removeEventListener('popstate', handlePopState);
         };
     }, [matchStarted, matchEnded]);
+
+    // Capture final stats when match ends (before WebSocket state might clear)
+    useEffect(() => {
+        if (matchEnded && you && opponent && !finalStats) {
+            setFinalStats({
+                yourScore: you.odScore || 0,
+                yourQuestionsAnswered: you.odQuestionsAnswered || 0,
+                yourStreak: you.odStreak || 0,
+                yourName: you.odName || initialPlayers?.[currentUserId]?.name || userName,
+                yourBanner: you.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default',
+                yourTitle: you.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'Challenger',
+                yourLevel: you.odLevel || initialPlayers?.[currentUserId]?.level || 1,
+                opponentScore: opponent.odScore || 0,
+                opponentName: opponent.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent') || 'Opponent',
+                opponentBanner: opponent.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default') || 'default',
+                opponentTitle: opponent.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Contender') || 'Contender',
+                opponentLevel: opponent.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1) || 1,
+            });
+        }
+    }, [matchEnded, you, opponent, finalStats, userName, currentUserId, opponentId, initialPlayers]);
 
     // Save match result when game ends
     useEffect(() => {
@@ -359,8 +395,11 @@ export function RealTimeMatch({
     // Game Over screen (including forfeit wins)
     if (matchEnded) {
         const wonByForfeit = !!opponentForfeited;
-        const isWinner = wonByForfeit || (you && opponent ? you.odScore > opponent.odScore : false);
-        const isTie = !wonByForfeit && you && opponent && you.odScore === opponent.odScore;
+        // Use finalStats if available, fall back to WebSocket state
+        const yourScore = finalStats?.yourScore ?? you?.odScore ?? 0;
+        const oppScore = finalStats?.opponentScore ?? opponent?.odScore ?? 0;
+        const isWinner = wonByForfeit || yourScore > oppScore;
+        const isTie = !wonByForfeit && yourScore === oppScore;
         const resultText = wonByForfeit ? 'VICTORY' : isTie ? 'DRAW' : isWinner ? 'VICTORY' : 'DEFEAT';
 
         // Determine winner and loser data for display
@@ -371,37 +410,38 @@ export function RealTimeMatch({
         const winnerStats = resultData?.winnerStats;
         const loserStats = resultData?.loserStats;
 
+        // Use finalStats with fallbacks to WebSocket state and initialPlayers
         const winnerName = isWinner
-            ? (you?.odName || initialPlayers?.[currentUserId]?.name || userName)
-            : (opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent'));
+            ? (finalStats?.yourName || you?.odName || initialPlayers?.[currentUserId]?.name || userName)
+            : (finalStats?.opponentName || opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent'));
 
         const loserName = isWinner
-            ? (opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent'))
-            : (you?.odName || initialPlayers?.[currentUserId]?.name || userName);
+            ? (finalStats?.opponentName || opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent'))
+            : (finalStats?.yourName || you?.odName || initialPlayers?.[currentUserId]?.name || userName);
 
         const winnerBanner = isWinner
-            ? (you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default')
-            : (opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default'));
+            ? (finalStats?.yourBanner || you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default')
+            : (finalStats?.opponentBanner || opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default'));
 
         const loserBanner = isWinner
-            ? (opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default'))
-            : (you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default');
+            ? (finalStats?.opponentBanner || opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default'))
+            : (finalStats?.yourBanner || you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default');
 
         const winnerTitle = isWinner
-            ? (you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'Champion')
-            : (opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Champion'));
+            ? (finalStats?.yourTitle || you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'Champion')
+            : (finalStats?.opponentTitle || opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Champion'));
 
         const loserTitle = isWinner
-            ? (opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Contender'))
-            : (you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'Contender');
+            ? (finalStats?.opponentTitle || opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Contender'))
+            : (finalStats?.yourTitle || you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'Contender');
 
         const winnerLevel = isWinner
-            ? (you?.odLevel || initialPlayers?.[currentUserId]?.level || 1)
-            : (opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1));
+            ? (finalStats?.yourLevel || you?.odLevel || initialPlayers?.[currentUserId]?.level || 1)
+            : (finalStats?.opponentLevel || opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1));
 
         const loserLevel = isWinner
-            ? (opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1))
-            : (you?.odLevel || initialPlayers?.[currentUserId]?.level || 1);
+            ? (finalStats?.opponentLevel || opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1))
+            : (finalStats?.yourLevel || you?.odLevel || initialPlayers?.[currentUserId]?.level || 1);
 
         // Rank info - use fresh stats if available, default to Bronze
         const winnerRank = winnerStats?.rank || 'Bronze';
@@ -475,7 +515,7 @@ export function RealTimeMatch({
                         {/* Winner Score */}
                         <div className="glass rounded-xl px-6 py-3 border border-yellow-500/30">
                             <span className="text-3xl font-black text-yellow-400">
-                                {wonByForfeit ? (you?.odScore || 0) : (winnerBase?.odScore || 0)}
+                                {wonByForfeit ? yourScore : (isWinner ? yourScore : oppScore)}
                             </span>
                             <span className="text-sm text-white/40 ml-2">points</span>
                         </div>
@@ -515,12 +555,12 @@ export function RealTimeMatch({
                             <div className="flex items-center justify-center gap-6 mb-8 p-4 rounded-xl bg-black/30 border border-white/10">
                                 <div className="text-center">
                                     <p className="text-xs text-white/50 uppercase tracking-wider mb-1">You</p>
-                                    <p className="text-3xl font-black text-cyan-400">{you?.odScore || 0}</p>
+                                    <p className="text-3xl font-black text-cyan-400">{finalStats?.yourScore ?? you?.odScore ?? 0}</p>
                                 </div>
                                 <div className="text-3xl text-white/30">⚔️</div>
                                 <div className="text-center">
-                                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">{opponentForfeited || opponent?.odName || 'Opponent'}</p>
-                                    <p className="text-3xl font-black text-amber-400">{wonByForfeit ? 'FF' : opponent?.odScore || 0}</p>
+                                    <p className="text-xs text-white/50 uppercase tracking-wider mb-1">{opponentForfeited || finalStats?.opponentName || opponent?.odName || 'Opponent'}</p>
+                                    <p className="text-3xl font-black text-amber-400">{wonByForfeit ? 'FF' : (finalStats?.opponentScore ?? opponent?.odScore ?? 0)}</p>
                                 </div>
                             </div>
 
@@ -528,11 +568,11 @@ export function RealTimeMatch({
                             <div className="grid grid-cols-2 gap-4 mb-8">
                                 <div className="p-4 rounded-xl bg-black/20 border border-white/5 text-center">
                                     <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Questions</p>
-                                    <p className="text-2xl font-black text-white">{you?.odQuestionsAnswered || 0}</p>
+                                    <p className="text-2xl font-black text-white">{finalStats?.yourQuestionsAnswered ?? you?.odQuestionsAnswered ?? 0}</p>
                                 </div>
                                 <div className="p-4 rounded-xl bg-black/20 border border-white/5 text-center">
                                     <p className="text-xs text-white/40 uppercase tracking-wider mb-1">Best Streak</p>
-                                    <p className="text-2xl font-black text-white">{you?.odStreak || 0} 🔥</p>
+                                    <p className="text-2xl font-black text-white">{finalStats?.yourStreak ?? you?.odStreak ?? 0} 🔥</p>
                                 </div>
                             </div>
 
@@ -687,7 +727,7 @@ export function RealTimeMatch({
                         {/* Loser Score */}
                         <div className="glass rounded-xl px-6 py-3 border border-orange-500/30 opacity-80">
                             <span className="text-3xl font-black text-orange-400">
-                                {wonByForfeit ? 'FF' : (loserBase?.odScore || 0)}
+                                {wonByForfeit ? 'FF' : (isWinner ? oppScore : yourScore)}
                             </span>
                             {!wonByForfeit && <span className="text-sm text-white/40 ml-2">points</span>}
                         </div>

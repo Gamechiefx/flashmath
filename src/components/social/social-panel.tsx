@@ -5,7 +5,7 @@
  * Slides in from the right side of the screen
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     X,
@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import {
     getFriendsList,
     getPendingRequests,
+    updatePartySettings,
     getPartyData,
     sendFriendRequest,
     acceptFriendRequest,
@@ -39,6 +40,7 @@ import {
     inviteToParty,
     acceptPartyInvite,
     declinePartyInvite,
+    sendFriendRequestToUser,
     type Friend,
     type FriendRequest,
     type Party,
@@ -54,6 +56,7 @@ import {
     notifyPartyInvite,
     notifyPartyJoined,
     notifyPartyLeft,
+    notifyPartySettingsUpdated,
 } from '@/lib/socket/use-presence';
 
 type OnlineStatus = 'online' | 'away' | 'invisible';
@@ -72,6 +75,8 @@ export function SocialPanel() {
         pendingPartyInvites: realtimePartyInvites,
         friendsChanged,
         partyChanged,
+        latestPartySettingsUpdate,
+        clearPartySettingsUpdate,
     } = usePresence();
 
     // Data state
@@ -83,7 +88,6 @@ export function SocialPanel() {
 
     // UI state
     const [isLoading, setIsLoading] = useState(false);
-    const [myStatus, setMyStatus] = useState<OnlineStatus>(presenceStatus as OnlineStatus || 'online');
     const [showParty, setShowParty] = useState(true);
     const [showRequests, setShowRequests] = useState(true);
     const [showOffline, setShowOffline] = useState(false);
@@ -91,6 +95,9 @@ export function SocialPanel() {
     const [addFriendError, setAddFriendError] = useState('');
     const [addFriendSuccess, setAddFriendSuccess] = useState('');
     const [processingId, setProcessingId] = useState<string | null>(null);
+    
+    // Track processed notification timestamps to prevent duplicate toasts
+    const processedNotificationsRef = useRef<Set<number>>(new Set());
 
     // Load all data
     const loadData = useCallback(async () => {
@@ -118,6 +125,13 @@ export function SocialPanel() {
             if (!partyRes.error) {
                 setParty(partyRes.party);
                 setPartyInvites(partyRes.invites);
+                // Request real-time statuses for party members
+                if (partyRes.party?.members) {
+                    const memberIds = partyRes.party.members.map(m => m.odUserId);
+                    if (memberIds.length > 0) {
+                        requestFriendStatuses(memberIds);
+                    }
+                }
             }
         } catch (error) {
             console.error('[Social] Failed to load data:', error);
@@ -154,6 +168,12 @@ export function SocialPanel() {
     useEffect(() => {
         if (realtimeFriendRequests.length > 0) {
             const latestRequest = realtimeFriendRequests[realtimeFriendRequests.length - 1];
+            // Check if we've already processed this notification
+            if (processedNotificationsRef.current.has(latestRequest.timestamp)) {
+                return;
+            }
+            processedNotificationsRef.current.add(latestRequest.timestamp);
+            
             // Show toast for new friend requests (check if it's a real request, not an accepted notification)
             if (!latestRequest.senderName.includes('(accepted)')) {
                 toast.info(`${latestRequest.senderName} sent you a friend request!`, {
@@ -176,6 +196,12 @@ export function SocialPanel() {
     useEffect(() => {
         if (realtimePartyInvites.length > 0) {
             const latestInvite = realtimePartyInvites[realtimePartyInvites.length - 1];
+            // Check if we've already processed this notification
+            if (processedNotificationsRef.current.has(latestInvite.timestamp)) {
+                return;
+            }
+            processedNotificationsRef.current.add(latestInvite.timestamp);
+            
             toast.info(`${latestInvite.inviterName} invited you to their party!`, {
                 action: {
                     label: 'View',
@@ -202,6 +228,18 @@ export function SocialPanel() {
             refreshStats();
         }
     }, [partyChanged, loadData, refreshStats]);
+    
+    // Immediately update party invite mode when settings change (real-time)
+    useEffect(() => {
+        if (latestPartySettingsUpdate) {
+            // Directly update the party state with new invite mode
+            setParty(prev => {
+                if (!prev) return null;
+                return { ...prev, inviteMode: latestPartySettingsUpdate.inviteMode };
+            });
+            clearPartySettingsUpdate();
+        }
+    }, [latestPartySettingsUpdate, clearPartySettingsUpdate]);
 
     // Load data when panel opens
     useEffect(() => {
@@ -215,9 +253,8 @@ export function SocialPanel() {
     const onlineFriends = friendsWithRealTimeStatus.filter(f => f.odStatus === 'online' || f.odStatus === 'away');
     const offlineFriends = friendsWithRealTimeStatus.filter(f => f.odStatus === 'offline');
     
-    // Sync status with presence hook
+    // Update status via presence hook
     const handleStatusChange = (status: OnlineStatus) => {
-        setMyStatus(status);
         setPresenceStatus(status as PresenceStatus);
     };
 
@@ -291,8 +328,30 @@ export function SocialPanel() {
         setProcessingId('create-party');
         const result = await createParty();
         if (result.success) {
+            toast.success('Party created!');
             loadData();
             refreshStats();
+        } else if (result.error) {
+            toast.error(result.error);
+        }
+        setProcessingId(null);
+    };
+
+    const handleUpdatePartySettings = async (settings: { inviteMode: 'open' | 'invite_only' }) => {
+        setProcessingId('update-settings');
+        const result = await updatePartySettings(settings);
+        if (result.success) {
+            toast.success(`Party is now ${settings.inviteMode === 'open' ? 'open to invites' : 'invite only'}`);
+            // Broadcast settings change to all party members
+            if (result.partyMemberIds && result.newInviteMode) {
+                const currentUserId = (session?.user as any)?.id;
+                if (currentUserId) {
+                    notifyPartySettingsUpdated(result.partyMemberIds, result.newInviteMode, currentUserId);
+                }
+            }
+            loadData();
+        } else if (result.error) {
+            toast.error(result.error);
         }
         setProcessingId(null);
     };
@@ -345,6 +404,43 @@ export function SocialPanel() {
         setProcessingId(inviteId);
         await declinePartyInvite(inviteId);
         loadData();
+        setProcessingId(null);
+    };
+
+    const handleAddFriendFromParty = async (userId: string) => {
+        setProcessingId(`add-friend-${userId}`);
+        
+        // Optimistically add to pending list for instant UI feedback
+        const optimisticRequest: FriendRequest = {
+            id: `temp-${userId}`,
+            senderId: (session?.user as any)?.id || '',
+            senderName: (session?.user as any)?.name || '',
+            senderLevel: 1,
+            senderFrame: 'default',
+            receiverId: userId,
+            receiverName: '',
+            receiverLevel: 1,
+            receiverFrame: 'default',
+            status: 'pending',
+            createdAt: new Date().toISOString(),
+        };
+        setOutgoingRequests(prev => [...prev, optimisticRequest]);
+        
+        const result = await sendFriendRequestToUser(userId);
+        if (result.success) {
+            toast.success('Friend request sent!');
+            if (result.receiverId && result.senderName) {
+                notifyFriendRequest(result.receiverId, result.senderName);
+            }
+            // Reload to get the actual request data
+            loadData();
+        } else {
+            // Revert optimistic update on failure
+            setOutgoingRequests(prev => prev.filter(r => r.id !== `temp-${userId}`));
+            if (result.error) {
+                toast.error(result.error);
+            }
+        }
         setProcessingId(null);
     };
 
@@ -412,7 +508,7 @@ export function SocialPanel() {
                                         onClick={() => handleStatusChange(status)}
                                         className={cn(
                                             "px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-1.5",
-                                            myStatus === status
+                                            presenceStatus === status
                                                 ? status === 'online'
                                                     ? "bg-green-500/20 text-green-400 border border-green-500/30"
                                                     : status === 'away'
@@ -489,11 +585,17 @@ export function SocialPanel() {
                                                         party={party}
                                                         invites={partyInvites}
                                                         friends={friendsWithRealTimeStatus}
+                                                        currentUserId={(session?.user as any)?.id}
+                                                        currentUserStatus={presenceStatus}
+                                                        pendingFriendRequestIds={outgoingRequests.map(r => r.receiverId)}
+                                                        memberStatuses={friendStatuses}
                                                         onCreateParty={handleCreateParty}
                                                         onLeaveParty={handleLeaveParty}
                                                         onInviteFriend={handleInviteToParty}
                                                         onAcceptInvite={handleAcceptPartyInvite}
                                                         onDeclineInvite={handleDeclinePartyInvite}
+                                                        onUpdateSettings={handleUpdatePartySettings}
+                                                        onAddFriend={handleAddFriendFromParty}
                                                         isLoading={processingId !== null}
                                                     />
                                                 </motion.div>
