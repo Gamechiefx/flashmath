@@ -826,14 +826,16 @@ export function RealTimeMatch({
             </div>
 
 
-            {/* Bottom Controls */}
-            <div className="fixed bottom-8 right-8 z-50 flex items-center gap-4">
-                <button
-                    onClick={() => setShowLeaveWarning(true)}
-                    className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 rounded-lg text-red-400 text-xs font-bold uppercase tracking-widest transition-all"
-                >
-                    Leave Match
-                </button>
+            {/* Leave Match Button - Top Left */}
+            <button
+                onClick={() => setShowLeaveWarning(true)}
+                className="fixed top-4 left-4 z-50 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-red-400/70 hover:text-red-400 text-xs font-bold uppercase tracking-widest transition-all"
+            >
+                Leave
+            </button>
+
+            {/* Sound Toggle */}
+            <div className="fixed bottom-8 right-8 z-50">
                 <SoundToggle />
             </div>
         </div>
