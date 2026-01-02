@@ -10,6 +10,7 @@ import { PlayerBanner } from '@/components/arena/player-banner';
 import { soundEngine } from '@/lib/sound-engine';
 import { SoundToggle } from '@/components/sound-toggle';
 import { AuthHeader } from '@/components/auth-header';
+import { LogOut } from 'lucide-react';
 
 interface RealTimeMatchProps {
     matchId: string;
@@ -829,9 +830,10 @@ export function RealTimeMatch({
             {/* Leave Match Button - Top Left */}
             <button
                 onClick={() => setShowLeaveWarning(true)}
-                className="fixed top-4 left-4 z-50 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg text-red-400/70 hover:text-red-400 text-xs font-bold uppercase tracking-widest transition-all"
+                className="fixed top-4 left-4 z-50 w-10 h-10 flex items-center justify-center bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-red-400/60 hover:text-red-400 transition-all"
+                title="Leave Match"
             >
-                Leave
+                <LogOut size={18} />
             </button>
 
             {/* Sound Toggle */}
