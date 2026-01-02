@@ -10,6 +10,7 @@
 
 import { auth } from "@/auth";
 import { queryOne } from "@/lib/db";
+import { revalidatePath } from "next/cache";
 import {
     initializeOrchestrator,
     getNextQuestion,
@@ -371,6 +372,10 @@ export async function endAISession(
             if (milestone) {
                 console.log(`[AI] Milestone reward: ${milestone.type} - ${coinsToAdd} coins, ${xpToAdd} XP`);
             }
+
+            // Revalidate pages to show updated tier
+            revalidatePath("/dashboard", "page");
+            revalidatePath("/practice", "page");
         }
     }
 
