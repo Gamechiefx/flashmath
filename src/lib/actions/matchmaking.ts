@@ -500,13 +500,22 @@ export async function saveMatchResult(params: {
     }
 
     try {
-        const { execute, queryOne } = await import("@/lib/db");
+        const { execute, getDatabase } = await import("@/lib/db");
+        const db = getDatabase();
 
         console.log(`[Match] saveMatchResult called: winnerId=${params.winnerId}, loserId=${params.loserId}`);
 
-        // Get current ELO and streak for both players
-        const winner = queryOne("SELECT arena_elo, coins, arena_win_streak, arena_best_win_streak FROM users WHERE id = ?", [params.winnerId]) as any;
-        const loser = queryOne("SELECT arena_elo, coins FROM users WHERE id = ?", [params.loserId]) as any;
+        // Get current ELO and streak for both players using direct DB access
+        // (queryOne doesn't support arbitrary SELECT column patterns)
+        let winner: any = null;
+        let loser: any = null;
+
+        if (!params.winnerId.startsWith('ai-') && !params.winnerId.startsWith('ai_bot_')) {
+            winner = db.prepare("SELECT arena_elo, coins, arena_win_streak, arena_best_win_streak FROM users WHERE id = ?").get(params.winnerId);
+        }
+        if (!params.loserId.startsWith('ai-') && !params.loserId.startsWith('ai_bot_')) {
+            loser = db.prepare("SELECT arena_elo, coins FROM users WHERE id = ?").get(params.loserId);
+        }
 
         console.log(`[Match] Winner data:`, winner);
         console.log(`[Match] Loser data:`, loser);

@@ -126,45 +126,50 @@ export function RealTimeMatch({
         savingRef.current = true; // Lock to prevent double-save
 
         async function saveResult() {
-            const yourScore = you!.odScore || 0;
-            const oppScore = opponent!.odScore || 0;
+            try {
+                const yourScore = you!.odScore || 0;
+                const oppScore = opponent!.odScore || 0;
 
-            // Determine winner (ties go to opponent for simplicity)
-            const youWon = yourScore > oppScore;
-            const winnerId = youWon ? currentUserId : opponentId!;
-            const loserId = youWon ? opponentId! : currentUserId;
-            const winnerScore = Math.max(yourScore, oppScore);
-            const loserScore = Math.min(yourScore, oppScore);
+                // Determine winner (ties go to opponent for simplicity)
+                const youWon = yourScore > oppScore;
+                const winnerId = youWon ? currentUserId : opponentId!;
+                const loserId = youWon ? opponentId! : currentUserId;
+                const winnerScore = Math.max(yourScore, oppScore);
+                const loserScore = Math.min(yourScore, oppScore);
 
-            console.log('[Match] Saving result:', { winnerId, loserId, winnerScore, loserScore, youWon });
+                console.log('[Match] Saving result:', { winnerId, loserId, winnerScore, loserScore, youWon });
 
-            const { saveMatchResult } = await import('@/lib/actions/matchmaking');
-            const result = await saveMatchResult({
-                matchId,
-                winnerId,
-                loserId,
-                winnerScore,
-                loserScore,
-                operation,
-                mode: '1v1',
-            });
+                const { saveMatchResult } = await import('@/lib/actions/matchmaking');
+                const result = await saveMatchResult({
+                    matchId,
+                    winnerId,
+                    loserId,
+                    winnerScore,
+                    loserScore,
+                    operation,
+                    mode: '1v1',
+                });
 
-            console.log('[Match] Save result response:', JSON.stringify(result, null, 2));
+                console.log('[Match] Save result response:', JSON.stringify(result, null, 2));
 
-            if (result.success) {
-                setEloChange(youWon ? result.winnerEloChange || 0 : result.loserEloChange || 0);
-                setCoinsEarned(youWon ? result.winnerCoinsEarned || 0 : result.loserCoinsEarned || 0);
-                setResultData(result);
+                if (result.success) {
+                    setEloChange(youWon ? result.winnerEloChange || 0 : result.loserEloChange || 0);
+                    setCoinsEarned(youWon ? result.winnerCoinsEarned || 0 : result.loserCoinsEarned || 0);
+                    setResultData(result);
 
-                // Refresh Next.js server components
-                router.refresh();
+                    // Refresh Next.js server components
+                    router.refresh();
 
-                // FORCE update of client-side session to show new coins in header
-                await update();
-            } else {
-                console.error('[Match] Failed to save result:', result.error);
+                    // FORCE update of client-side session to show new coins in header
+                    await update();
+                } else {
+                    console.error('[Match] Failed to save result:', result.error);
+                }
+            } catch (error) {
+                console.error('[Match] Exception while saving result:', error);
+            } finally {
+                setHasSavedResult(true);
             }
-            setHasSavedResult(true);
         }
 
         saveResult();
