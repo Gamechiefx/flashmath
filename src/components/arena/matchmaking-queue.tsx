@@ -224,6 +224,7 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
                     mode,
                     operation,
                     elo,
+                    tier: parseInt(tier) || 0,
                     queueTime: queueTimeRef.current,
                 });
 

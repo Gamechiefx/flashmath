@@ -51,6 +51,7 @@ interface MatchResult {
 const QUEUE_PREFIX = 'arena:queue:';
 const MATCH_PREFIX = 'arena:match:';
 const ELO_RANGE = 200; // Match with players ±200 ELO
+const TIER_RANGE = 5; // Match with players ±5 tiers
 const AI_TIMEOUT_MS = 15000; // Start AI match after 15 seconds
 
 /**
@@ -170,6 +171,7 @@ export async function checkForMatch(params: {
     mode: string;
     operation: string;
     elo: number;
+    tier: number; // player's practice tier (1-100)
     queueTime: number; // seconds in queue
 }): Promise<{
     matched: boolean;
@@ -224,11 +226,17 @@ export async function checkForMatch(params: {
 
         console.log(`[Matchmaking] Checking for match: user=${userId}, elo=${params.elo}, range=${minElo}-${maxElo}, candidates=${candidates.length}`);
 
-        // Find a different player (not self)
+        // Find a different player (not self) within tier range
         for (const candidateStr of candidates) {
             const candidate = JSON.parse(candidateStr) as QueueEntry;
-            console.log(`[Matchmaking] Candidate: ${candidate.odUserName} (${candidate.odUserId}), elo=${candidate.odElo}`);
+            console.log(`[Matchmaking] Candidate: ${candidate.odUserName} (${candidate.odUserId}), elo=${candidate.odElo}, tier=${candidate.odTier}`);
             if (candidate.odUserId !== userId) {
+                // Check tier is within range
+                const candidateTier = parseInt(candidate.odTier) || 0;
+                if (Math.abs(params.tier - candidateTier) > TIER_RANGE) {
+                    console.log(`[Matchmaking] Skipping ${candidate.odUserName}: tier ${candidateTier} outside range ±${TIER_RANGE} from ${params.tier}`);
+                    continue; // Skip - tier too different
+                }
                 // Found a match! Create match and remove both from queue
                 const matchId = `match-${uuidv4()}`;
 
@@ -302,11 +310,13 @@ export async function checkForMatch(params: {
 /**
  * Create an AI match when no players are available
  */
-async function createAiMatch(userId: string, userName: string, params: { mode: string; operation: string; elo: number }) {
+async function createAiMatch(userId: string, userName: string, params: { mode: string; operation: string; elo: number; tier: number }) {
     const matchId = `match-${uuidv4()}`;
 
     // Generate AI opponent stats (slightly varied from player)
     const aiEloVariance = Math.floor(Math.random() * 100) - 50;
+    const aiTierVariance = Math.floor(Math.random() * (TIER_RANGE * 2 + 1)) - TIER_RANGE;
+    const aiTier = Math.max(1, Math.min(100, params.tier + aiTierVariance));
     const aiNames = ['MathBot', 'CalcMaster', 'NumberNinja', 'AlgebraAce', 'QuickMath', 'BrainStorm'];
     const aiName = aiNames[Math.floor(Math.random() * aiNames.length)] + Math.floor(Math.random() * 100);
     const aiBanners = ['matrices', 'synthwave', 'plasma', 'legendary'];
@@ -320,7 +330,7 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             odUserId: userId,
             odUserName: 'You', // This will be updated by getMatch/Queue but basic placeholder ok
             odElo: params.elo,
-            odTier: 'Silver', // Placeholder
+            odTier: params.tier.toString(),
             odOperation: params.operation,
             odMode: params.mode,
             odEquippedBanner: 'default',
@@ -332,7 +342,7 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             odUserId: 'ai-' + matchId, // Unique ID for AI
             odUserName: aiName,
             odElo: params.elo + aiEloVariance,
-            odTier: 'Silver',
+            odTier: aiTier.toString(),
             odOperation: params.operation,
             odMode: params.mode,
             odEquippedBanner: aiBanners[Math.floor(Math.random() * aiBanners.length)],
@@ -355,7 +365,7 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
         opponent: {
             name: aiName,
             elo: params.elo + aiEloVariance,
-            tier: 'Silver',
+            tier: aiTier.toString(),
             banner: match.odPlayer2?.odEquippedBanner || 'default',
             title: match.odPlayer2?.odEquippedTitle || 'default',
             level: match.odPlayer2?.odLevel || 1,
