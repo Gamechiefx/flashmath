@@ -15,6 +15,8 @@ import { SystemControls } from "@/components/admin/system-controls";
 import { OnlinePlayers } from "@/components/admin/online-players";
 import { getAllSystemSettings } from "@/lib/actions/system";
 import { Role, parseRole, hasPermission, Permission, ROLE_LABELS } from "@/lib/rbac";
+import { checkAdminMfaSession } from "@/lib/actions/admin-mfa";
+import { AdminMfaGate } from "@/components/admin/admin-mfa-gate";
 
 export default async function AdminPage() {
     const session = await auth();
@@ -34,6 +36,9 @@ export default async function AdminPage() {
     if (!hasPermission(currentUserRole, Permission.VIEW_ADMIN_CONSOLE)) {
         return <div className="p-10 text-center">Unauthorized: Insufficient permissions</div>;
     }
+
+    // Check MFA session
+    const hasMfaSession = await checkAdminMfaSession();
 
     const data = loadData();
 
@@ -57,7 +62,8 @@ export default async function AdminPage() {
     `).get(fiveMinutesAgo) as { count: number };
     const playersOnline = onlineCount?.count || 0;
 
-    return (
+    // Wrap content in MFA gate if not verified
+    const adminContent = (
         <div className="min-h-screen bg-background text-foreground p-8">
             <div className="max-w-6xl mx-auto space-y-8">
                 <div className="flex items-center gap-4">
@@ -127,6 +133,18 @@ export default async function AdminPage() {
                 )}
             </div>
         </div>
+    );
+
+    // If MFA verified, show admin content directly
+    if (hasMfaSession) {
+        return adminContent;
+    }
+
+    // Otherwise, require MFA verification
+    return (
+        <AdminMfaGate userEmail={session.user.email || ""}>
+            {adminContent}
+        </AdminMfaGate>
     );
 }
 
