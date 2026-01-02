@@ -1,20 +1,24 @@
 /**
  * Arena Rank System
- * 
+ *
  * Per-mode ELO: Each game mode has its own ELO rating
- * Competitive Rank: Based on wins + tier progression
- * 
- * Rank Brackets (based on highest practice tier):
- * - Tier 0-1: Bronze/Silver
- * - Tier 2-3: Gold/Platinum
- * - Tier 4+: Diamond/Master
- * 
+ * Competitive Rank: Based on wins + practice band progression
+ *
+ * Rank Brackets (based on highest practice band):
+ * - Foundation (1-20): Bronze/Silver
+ * - Intermediate (21-40): Silver/Gold
+ * - Advanced (41-60): Gold/Platinum
+ * - Expert (61-80): Platinum/Diamond
+ * - Master (81-100): Diamond/Master
+ *
  * Division Progression (every 10 wins moves you up):
  * - Division I (0-9 wins in current rank)
  * - Division II (10-19 wins in current rank)
  * - Division III (20-29 wins in current rank)
  * - Then promote to next rank and reset
  */
+
+import { getBandForTier, BANDS } from '@/lib/tier-system';
 
 export interface ArenaRank {
     rank: string;
@@ -55,23 +59,29 @@ export const MODE_BASE_ELO: Record<string, number> = {
 const RANKS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master'];
 const DIVISIONS = ['I', 'II', 'III'];
 
-// Tier to rank bracket mapping
-const TIER_TO_RANK_BRACKET: Record<number, string[]> = {
-    0: ['Bronze', 'Silver'],
-    1: ['Bronze', 'Silver'],
-    2: ['Gold', 'Platinum'],
-    3: ['Gold', 'Platinum'],
-    4: ['Diamond', 'Master'],
-    5: ['Diamond', 'Master'],
-    6: ['Diamond', 'Master'],
+// Band to rank bracket mapping (based on 100-tier system)
+const BAND_TO_RANK_BRACKET: Record<number, string[]> = {
+    1: ['Bronze', 'Silver'],       // Foundation (tiers 1-20)
+    2: ['Silver', 'Gold'],         // Intermediate (tiers 21-40)
+    3: ['Gold', 'Platinum'],       // Advanced (tiers 41-60)
+    4: ['Platinum', 'Diamond'],    // Expert (tiers 61-80)
+    5: ['Diamond', 'Master'],      // Master (tiers 81-100)
 };
+
+/**
+ * Get rank bracket based on tier (1-100)
+ */
+function getRankBracketForTier(tier: number): string[] {
+    const band = getBandForTier(tier);
+    return BAND_TO_RANK_BRACKET[band.id] || ['Bronze', 'Silver'];
+}
 
 /**
  * Calculate competitive rank from wins and practice tier
  */
 export function calculateArenaRank(totalWins: number, highestTier: number): ArenaRank {
-    // Get rank bracket based on tier
-    const bracket = TIER_TO_RANK_BRACKET[Math.min(highestTier, 6)] || ['Bronze', 'Silver'];
+    // Get rank bracket based on tier (now supports 1-100 tier range)
+    const bracket = getRankBracketForTier(highestTier);
 
     // Calculate wins needed per rank: 30 wins per rank (3 divisions × 10 wins each)
     const WINS_PER_RANK = 30;

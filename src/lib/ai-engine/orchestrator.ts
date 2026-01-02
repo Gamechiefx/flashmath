@@ -41,6 +41,12 @@ import {
 } from './state';
 
 import {
+    getTierOperandRange,
+    getBandForTier,
+    MIN_TIER,
+} from '@/lib/tier-system';
+
+import {
     eventBus,
     createAnswerEvent,
     createStreamTickEvent,
@@ -375,9 +381,10 @@ function selectNextItem(
     if (coachDirective.recoveryMode.enabled) {
         reasonCodes.push('TILT_RECOVERY');
 
-        // Generate an easier problem - drop one tier from user's actual tier
+        // Generate an easier problem - drop 5 tiers but stay within same band if possible
         const userTier = state.learnerModel.mathTiers[operation] || 1;
-        const recoveryTier = Math.max(1, userTier - 1);
+        const userBand = getBandForTier(userTier);
+        const recoveryTier = Math.max(MIN_TIER, Math.max(userBand.tierRange[0], userTier - 5));
 
         const item = generatePracticeItem(operation, recoveryTier, state.recentItems);
         return { item, reasonCodes };
@@ -453,15 +460,8 @@ function generatePracticeItem(
     return generateVariantFromProblem(operation, op1, op2, 'direct', tier);
 }
 
-function getTierOperandRange(tier: number, operation: MathOperation): [number, number] {
-    switch (tier) {
-        case 1: return [2, 5];
-        case 2: return [2, 9];
-        case 3: return [2, 12];
-        case 4: return [5, 15];
-        default: return [2, 5];
-    }
-}
+// getTierOperandRange is now imported from @/lib/tier-system
+// It uses parametric scaling for 100 tiers across 5 bands
 
 // =============================================================================
 // ENVELOPE BUILDER
