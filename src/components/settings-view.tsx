@@ -5,7 +5,7 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2, Shield, Monitor, ChevronRight, Link2, Clock, Mail, CheckCircle, Eye, EyeOff, Calendar } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { resetUserData, deleteUserAccount, updateUsername, updateDOB } from "@/lib/actions/settings";
+import { resetUserData, deleteUserAccount, updateUsername } from "@/lib/actions/settings";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 
@@ -146,17 +146,7 @@ export function SettingsView({ user }: SettingsViewProps) {
         setIsUpdatingUsername(false);
     };
 
-    const [dob, setDob] = useState(user?.dob || "");
     const [showDOB, setShowDOB] = useState(false);
-    const [isUpdatingDOB, setIsUpdatingDOB] = useState(false);
-
-    const handleUpdateDOB = async () => {
-        if (dob === user?.dob) return;
-        setIsUpdatingDOB(true);
-        await updateDOB(dob);
-        setIsUpdatingDOB(false);
-        router.refresh();
-    };
 
     // Format DOB for masked display - parse as local time to avoid timezone shift
     const formatDOB = (dobString: string) => {
@@ -255,47 +245,35 @@ export function SettingsView({ user }: SettingsViewProps) {
 
                             <div>
                                 <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">Date of Birth</label>
-                                {user?.dob ? (
-                                    // DOB is set - show masked display with eye toggle
-                                    <div className="p-4 rounded-xl bg-white/5 border border-white/10">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <Calendar size={16} className="text-muted-foreground" />
-                                                <span className="text-lg font-bold font-mono">
-                                                    {showDOB ? formatDOB(user.dob) : maskedDOB}
-                                                </span>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                                    {user?.dob ? (
+                                        // DOB is set - show masked display with eye toggle
+                                        <>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <Calendar size={16} className="text-muted-foreground" />
+                                                    <span className="text-lg font-bold font-mono">
+                                                        {showDOB ? formatDOB(user.dob) : maskedDOB}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    onClick={() => setShowDOB(!showDOB)}
+                                                    className="p-2 rounded-lg hover:bg-white/10 transition-colors text-muted-foreground hover:text-white"
+                                                    title={showDOB ? "Hide date of birth" : "Show date of birth"}
+                                                >
+                                                    {showDOB ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </button>
                                             </div>
-                                            <button
-                                                onClick={() => setShowDOB(!showDOB)}
-                                                className="p-2 rounded-lg hover:bg-white/10 transition-colors text-muted-foreground hover:text-white"
-                                                title={showDOB ? "Hide date of birth" : "Show date of birth"}
-                                            >
-                                                {showDOB ? <EyeOff size={18} /> : <Eye size={18} />}
-                                            </button>
+                                            <p className="text-xs text-muted-foreground mt-2">Date of birth cannot be changed</p>
+                                        </>
+                                    ) : (
+                                        // DOB not set - show message
+                                        <div className="flex items-center gap-3 text-muted-foreground">
+                                            <Calendar size={16} />
+                                            <span className="text-sm">Not set - DOB is set during registration</span>
                                         </div>
-                                        <p className="text-xs text-muted-foreground mt-2">Date of birth cannot be changed once set</p>
-                                    </div>
-                                ) : (
-                                    // DOB not set - show date picker
-                                    <div className="flex gap-2">
-                                        <div className="relative flex-1">
-                                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-                                            <input
-                                                type="date"
-                                                value={dob}
-                                                onChange={(e) => setDob(e.target.value)}
-                                                className="w-full p-4 pl-10 rounded-xl bg-white/5 border border-white/10 text-lg font-bold focus:outline-none focus:border-primary transition-colors [color-scheme:dark]"
-                                            />
-                                        </div>
-                                        <button
-                                            onClick={handleUpdateDOB}
-                                            disabled={isUpdatingDOB || !dob}
-                                            className="px-6 py-4 rounded-xl bg-primary/20 border border-primary/30 text-primary font-bold uppercase text-sm hover:bg-primary/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                        >
-                                            {isUpdatingDOB ? "Saving..." : "Save"}
-                                        </button>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
 
                             <div>

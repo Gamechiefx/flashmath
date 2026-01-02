@@ -10,7 +10,11 @@ import { PlayerBanner } from '@/components/arena/player-banner';
 import { soundEngine } from '@/lib/sound-engine';
 import { SoundToggle } from '@/components/sound-toggle';
 import { AuthHeader } from '@/components/auth-header';
-import { LogOut } from 'lucide-react';
+import { LogOut, UserPlus, Check, Loader2 } from 'lucide-react';
+import { 
+    checkFriendshipStatus, 
+    sendFriendRequestToUser 
+} from '@/lib/actions/social';
 
 interface RealTimeMatchProps {
     matchId: string;
@@ -48,6 +52,15 @@ export function RealTimeMatch({
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
     const [resultData, setResultData] = useState<any>(null);
     const savingRef = useRef(false); // Prevent double-save during HMR
+    
+    // Friend request state
+    const [friendshipStatus, setFriendshipStatus] = useState<{
+        isFriend: boolean;
+        requestPending: boolean;
+        requestDirection?: 'sent' | 'received';
+    } | null>(null);
+    const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
+    const [friendRequestSent, setFriendRequestSent] = useState(false);
 
     const {
         connected,
@@ -272,6 +285,41 @@ export function RealTimeMatch({
         }
         prevOpponentScore.current = opponent?.odScore || 0;
     }, [opponent?.odScore]);
+    
+    // Check friendship status when match ends (for non-AI opponents)
+    useEffect(() => {
+        if (!matchEnded || !opponentId) return;
+        // Don't check for AI opponents
+        if (opponentId.startsWith('ai_bot_')) return;
+        
+        async function checkStatus() {
+            const status = await checkFriendshipStatus(opponentId!);
+            setFriendshipStatus(status);
+        }
+        checkStatus();
+    }, [matchEnded, opponentId]);
+    
+    // Handle sending friend request
+    const handleSendFriendRequest = async () => {
+        if (!opponentId || opponentId.startsWith('ai_bot_')) return;
+        
+        setSendingFriendRequest(true);
+        const result = await sendFriendRequestToUser(opponentId);
+        setSendingFriendRequest(false);
+        
+        if (result.success) {
+            setFriendRequestSent(true);
+            setFriendshipStatus({ isFriend: false, requestPending: true, requestDirection: 'sent' });
+        }
+    };
+    
+    // Check if we can show the add friend button
+    const isRealOpponent = opponentId && !opponentId.startsWith('ai_bot_');
+    const canAddFriend = isRealOpponent && 
+        friendshipStatus && 
+        !friendshipStatus.isFriend && 
+        !friendshipStatus.requestPending &&
+        !friendRequestSent;
 
     // Progress bar width
     const timeProgress = (timeLeft / 60) * 100;
@@ -532,20 +580,63 @@ export function RealTimeMatch({
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.7 }}
-                            className="flex gap-4 mt-8"
+                            className="flex flex-col items-center gap-4 mt-8"
                         >
-                            <button
-                                onClick={() => router.push('/arena/modes')}
-                                className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-black uppercase tracking-wider text-white shadow-lg shadow-green-500/30 transition-all hover:scale-105"
-                            >
-                                Play Again
-                            </button>
-                            <button
-                                onClick={() => router.push('/dashboard')}
-                                className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold uppercase tracking-wider text-white/80 border border-white/20 transition-all hover:scale-105"
-                            >
-                                Dashboard
-                            </button>
+                            {/* Add Friend Button - Only for real opponents */}
+                            {isRealOpponent && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ delay: 0.8 }}
+                                >
+                                    {friendshipStatus?.isFriend ? (
+                                        <div className="flex items-center gap-2 px-6 py-2 bg-green-500/10 border border-green-500/30 rounded-xl text-green-400 text-sm font-bold">
+                                            <Check size={16} />
+                                            Already Friends
+                                        </div>
+                                    ) : friendshipStatus?.requestPending || friendRequestSent ? (
+                                        <div className="flex items-center gap-2 px-6 py-2 bg-primary/10 border border-primary/30 rounded-xl text-primary text-sm font-bold">
+                                            <Check size={16} />
+                                            {friendshipStatus?.requestDirection === 'received' 
+                                                ? 'They sent you a request!' 
+                                                : 'Friend Request Sent'}
+                                        </div>
+                                    ) : canAddFriend ? (
+                                        <button
+                                            onClick={handleSendFriendRequest}
+                                            disabled={sendingFriendRequest}
+                                            className="flex items-center gap-2 px-6 py-2 bg-primary/20 hover:bg-primary/30 border border-primary/40 rounded-xl text-primary text-sm font-bold uppercase tracking-wider transition-all hover:scale-105 disabled:opacity-50"
+                                        >
+                                            {sendingFriendRequest ? (
+                                                <Loader2 size={16} className="animate-spin" />
+                                            ) : (
+                                                <UserPlus size={16} />
+                                            )}
+                                            Add {opponent?.odName || 'Opponent'} as Friend
+                                        </button>
+                                    ) : friendshipStatus === null && (
+                                        <div className="flex items-center gap-2 px-4 py-2 text-muted-foreground text-xs">
+                                            <Loader2 size={14} className="animate-spin" />
+                                            Checking friendship status...
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                            
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => router.push('/arena/modes')}
+                                    className="px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 rounded-xl font-black uppercase tracking-wider text-white shadow-lg shadow-green-500/30 transition-all hover:scale-105"
+                                >
+                                    Play Again
+                                </button>
+                                <button
+                                    onClick={() => router.push('/dashboard')}
+                                    className="px-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold uppercase tracking-wider text-white/80 border border-white/20 transition-all hover:scale-105"
+                                >
+                                    Dashboard
+                                </button>
+                            </div>
                         </motion.div>
                     </motion.div>
 

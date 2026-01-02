@@ -197,45 +197,5 @@ export async function updateUsername(newUsername: string) {
     }
 }
 
-export async function updateDOB(dob: string) {
-    const session = await auth();
-    if (!session?.user) {
-        return { error: "Unauthorized" };
-    }
-
-    const userId = (session.user as any).id;
-
-    try {
-        const db = getDatabase();
-
-        // Check if user already has DOB set
-        try {
-            const existing = db.prepare('SELECT dob FROM users WHERE id = ?').get(userId) as any;
-            if (existing?.dob) {
-                return { error: "Date of Birth has already been set and cannot be changed" };
-            }
-        } catch (e) {
-            // Column might not exist yet, continue
-        }
-
-        // Ensure dob column exists
-        try {
-            db.prepare("ALTER TABLE users ADD COLUMN dob TEXT").run();
-        } catch (e) {
-            // Column likely already exists
-        }
-
-        db.prepare('UPDATE users SET dob = ?, updated_at = ? WHERE id = ?').run(dob, now(), userId);
-
-        console.log(`[SETTINGS] Updated DOB for user ${userId}`);
-
-        revalidatePath("/dashboard");
-        revalidatePath("/settings");
-        revalidatePath("/arena");
-
-        return { success: true };
-    } catch (error) {
-        console.error("Error updating DOB:", error);
-        return { error: "Failed to update date of birth" };
-    }
-}
+// Note: DOB is set only during registration and cannot be changed
+// No updateDOB function - this is intentional for security/compliance

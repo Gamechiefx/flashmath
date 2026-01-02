@@ -136,6 +136,14 @@ function initializeSchema() {
         CREATE INDEX IF NOT EXISTS idx_security_activity_user ON security_activity(user_id);
     `);
 
+    // Migrate party max_size from 3 to 5 (for existing parties)
+    try {
+        database.exec("UPDATE parties SET max_size = 5 WHERE max_size = 3");
+        console.log('[SQLite] Updated party max_size to 5');
+    } catch (e: any) {
+        // Table might not exist yet, that's fine
+    }
+
     // Seed default leagues if empty
     const leagueCount = database.prepare('SELECT COUNT(*) as count FROM leagues').get() as { count: number };
     if (leagueCount.count === 0) {

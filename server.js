@@ -513,25 +513,30 @@ app.prepare().then(() => {
         
         // User comes online
         socket.on('presence:online', async (data) => {
-            const { userId, userName } = data;
+            const { userId, userName, status } = data;
             if (!userId) return;
             
             currentUserId = userId;
             presenceSocketToUser.set(socket.id, userId);
             
-            await setUserPresence(userId, 'online', socket.id);
+            // Use provided status or default to 'online'
+            const userStatus = status || 'online';
+            await setUserPresence(userId, userStatus, socket.id);
             
             // Join a room for this user to receive direct messages
             socket.join(`user:${userId}`);
             
-            console.log(`[Presence] ${userName || userId} is now online`);
+            console.log(`[Presence] ${userName || userId} is now ${userStatus}`);
             
             // Notify friends (broadcast to all - clients will filter)
-            socket.broadcast.emit('presence:update', {
-                userId,
-                status: 'online',
-                timestamp: Date.now(),
-            });
+            // Don't broadcast if invisible
+            if (userStatus !== 'invisible') {
+                socket.broadcast.emit('presence:update', {
+                    userId,
+                    status: userStatus,
+                    timestamp: Date.now(),
+                });
+            }
         });
         
         // User changes status
@@ -543,9 +548,12 @@ app.prepare().then(() => {
             
             console.log(`[Presence] ${currentUserId} status: ${status}`);
             
+            // Broadcast status update to friends
+            // If going invisible, broadcast 'offline' to hide from friends
+            // If coming back from invisible, broadcast actual status
             socket.broadcast.emit('presence:update', {
                 userId: currentUserId,
-                status,
+                status: status === 'invisible' ? 'offline' : status,
                 timestamp: Date.now(),
             });
         });
@@ -558,7 +566,12 @@ app.prepare().then(() => {
             const statuses = {};
             for (const friendId of friendIds) {
                 const presence = await getUserPresence(friendId);
-                statuses[friendId] = presence ? presence.status : 'offline';
+                // Return 'offline' for invisible users (they don't want to be seen)
+                if (presence) {
+                    statuses[friendId] = presence.status === 'invisible' ? 'offline' : presence.status;
+                } else {
+                    statuses[friendId] = 'offline';
+                }
             }
             
             socket.emit('presence:friends_status', { statuses });
@@ -570,6 +583,16 @@ app.prepare().then(() => {
             // Send to specific user's room
             presenceNs.to(`user:${receiverId}`).emit('friend:request', {
                 senderName,
+                timestamp: Date.now(),
+            });
+        });
+        
+        // Friend request accepted notification
+        socket.on('presence:notify_friend_accepted', async (data) => {
+            const { senderId, accepterName } = data;
+            // Notify the original sender that their request was accepted
+            presenceNs.to(`user:${senderId}`).emit('friend:accepted', {
+                accepterName,
                 timestamp: Date.now(),
             });
         });

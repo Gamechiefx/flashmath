@@ -7,6 +7,7 @@ import {
 } from 'framer-motion';
 import Link from 'next/link';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+// Note: Link still used for practice and enter arena buttons
 
 interface ArenaEligibilityProps {
     practiceStats: {
@@ -55,10 +56,9 @@ export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: Ar
     const requirements = [
         {
             id: 'age',
-            label: 'Age Verification',
-            description: meetsAge ? 'Age verified ✓' : 'Must be 13+ years old',
-            met: meetsAge,
-            type: 'dob_check'
+            label: 'Age Requirement',
+            description: meetsAge ? 'Age verified ✓' : 'Must be 13+ years old (set during registration)',
+            met: meetsAge
         },
         {
             id: 'sessions',
@@ -187,14 +187,6 @@ export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: Ar
                                                 )}
                                             </div>
 
-                                            {/* DOB Check Action */}
-                                            {req.type === 'dob_check' && !req.met && (
-                                                <Link href="/settings">
-                                                    <button className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs font-bold uppercase text-primary hover:bg-primary/20 transition-colors">
-                                                        Verify Age
-                                                    </button>
-                                                </Link>
-                                            )}
                                         </div>
                                     </motion.div>
                                 ))}

@@ -101,7 +101,8 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
     const db = getDatabase();
 
     try {
-        // Get all friends (bidirectional - both directions of the friendship)
+        // Get all friends - only query where user_id = current user to avoid duplicates
+        // (friendships are stored bidirectionally, so each friendship has 2 rows)
         const friends = db.prepare(`
             SELECT 
                 f.id as friendship_id,
@@ -112,13 +113,10 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
                 u.equipped_items,
                 u.last_active
             FROM friendships f
-            JOIN users u ON (
-                (f.user_id = ? AND f.friend_id = u.id) OR
-                (f.friend_id = ? AND f.user_id = u.id)
-            )
-            WHERE f.user_id = ? OR f.friend_id = ?
+            JOIN users u ON f.friend_id = u.id
+            WHERE f.user_id = ?
             ORDER BY u.last_active DESC NULLS LAST
-        `).all(userId, userId, userId, userId) as any[];
+        `).all(userId) as any[];
 
         const result: Friend[] = friends.map(f => {
             let equipped: any = {};
@@ -153,13 +151,19 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
 // FRIEND REQUESTS
 // =============================================================================
 
-export async function sendFriendRequest(email: string): Promise<{ success: boolean; error?: string }> {
+export async function sendFriendRequest(email: string): Promise<{ 
+    success: boolean; 
+    error?: string;
+    receiverId?: string;
+    senderName?: string;
+}> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
     }
 
     const senderId = (session.user as any).id;
+    const senderName = (session.user as any).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -186,16 +190,19 @@ export async function sendFriendRequest(email: string): Promise<{ success: boole
         // Check if request already exists (in either direction)
         const existingRequest = db.prepare(`
             SELECT id, status, sender_id FROM friend_requests 
-            WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
-            AND status = 'pending'
+            WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
         `).get(senderId, receiver.id, receiver.id, senderId) as any;
 
         if (existingRequest) {
-            if (existingRequest.sender_id === receiver.id) {
-                // They already sent us a request - auto-accept it
-                return await acceptFriendRequest(existingRequest.id);
+            if (existingRequest.status === 'pending') {
+                if (existingRequest.sender_id === receiver.id) {
+                    // They already sent us a request - auto-accept it
+                    return await acceptFriendRequest(existingRequest.id);
+                }
+                return { success: false, error: 'Friend request already pending' };
             }
-            return { success: false, error: 'Friend request already pending' };
+            // Delete old declined/accepted requests to allow re-adding
+            db.prepare(`DELETE FROM friend_requests WHERE id = ?`).run(existingRequest.id);
         }
 
         // Create the friend request
@@ -205,20 +212,26 @@ export async function sendFriendRequest(email: string): Promise<{ success: boole
         `).run(generateId(), senderId, receiver.id, now());
 
         console.log(`[Social] Friend request sent from ${senderId} to ${receiver.id}`);
-        return { success: true };
+        return { success: true, receiverId: receiver.id, senderName };
     } catch (error: any) {
         console.error('[Social] sendFriendRequest error:', error);
         return { success: false, error: error.message };
     }
 }
 
-export async function sendFriendRequestToUser(targetUserId: string): Promise<{ success: boolean; error?: string }> {
+export async function sendFriendRequestToUser(targetUserId: string): Promise<{ 
+    success: boolean; 
+    error?: string;
+    receiverId?: string;
+    senderName?: string;
+}> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
     }
 
     const senderId = (session.user as any).id;
+    const senderName = (session.user as any).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -245,15 +258,18 @@ export async function sendFriendRequestToUser(targetUserId: string): Promise<{ s
         // Check if request already exists
         const existingRequest = db.prepare(`
             SELECT id, status, sender_id FROM friend_requests 
-            WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
-            AND status = 'pending'
+            WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
         `).get(senderId, targetUserId, targetUserId, senderId) as any;
 
         if (existingRequest) {
-            if (existingRequest.sender_id === targetUserId) {
-                return await acceptFriendRequest(existingRequest.id);
+            if (existingRequest.status === 'pending') {
+                if (existingRequest.sender_id === targetUserId) {
+                    return await acceptFriendRequest(existingRequest.id);
+                }
+                return { success: false, error: 'Request already pending' };
             }
-            return { success: false, error: 'Request already pending' };
+            // Delete old declined/accepted requests to allow re-adding
+            db.prepare(`DELETE FROM friend_requests WHERE id = ?`).run(existingRequest.id);
         }
 
         // Create the friend request
@@ -263,7 +279,7 @@ export async function sendFriendRequestToUser(targetUserId: string): Promise<{ s
         `).run(generateId(), senderId, targetUserId, now());
 
         console.log(`[Social] Friend request sent from ${senderId} to ${targetUserId}`);
-        return { success: true };
+        return { success: true, receiverId: targetUserId, senderName };
     } catch (error: any) {
         console.error('[Social] sendFriendRequestToUser error:', error);
         return { success: false, error: error.message };
@@ -351,13 +367,19 @@ export async function getPendingRequests(): Promise<{
     }
 }
 
-export async function acceptFriendRequest(requestId: string): Promise<{ success: boolean; error?: string }> {
+export async function acceptFriendRequest(requestId: string): Promise<{ 
+    success: boolean; 
+    error?: string;
+    senderId?: string;
+    accepterName?: string;
+}> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
     }
 
     const userId = (session.user as any).id;
+    const accepterName = (session.user as any).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -403,7 +425,7 @@ export async function acceptFriendRequest(requestId: string): Promise<{ success:
         `).run(friendshipId2, request.receiver_id, request.sender_id, timestamp);
 
         console.log(`[Social] Friend request ${requestId} accepted`);
-        return { success: true };
+        return { success: true, senderId: request.sender_id, accepterName };
     } catch (error: any) {
         console.error('[Social] acceptFriendRequest error:', error);
         return { success: false, error: error.message };
@@ -493,6 +515,12 @@ export async function removeFriend(friendId: string): Promise<{ success: boolean
         db.prepare(`
             DELETE FROM friendships 
             WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)
+        `).run(userId, friendId, friendId, userId);
+        
+        // Also delete any friend_request entries to allow re-adding later
+        db.prepare(`
+            DELETE FROM friend_requests 
+            WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
         `).run(userId, friendId, friendId, userId);
 
         console.log(`[Social] Friendship removed between ${userId} and ${friendId}`);
@@ -621,10 +649,10 @@ export async function createParty(): Promise<{ success: boolean; partyId?: strin
         const partyId = generateId();
         const timestamp = now();
 
-        // Create party
+        // Create party (max 5 members)
         db.prepare(`
             INSERT INTO parties (id, leader_id, max_size, created_at)
-            VALUES (?, ?, 3, ?)
+            VALUES (?, ?, 5, ?)
         `).run(partyId, userId, timestamp);
 
         // Add leader as first member
@@ -870,16 +898,13 @@ export async function getSocialStats(): Promise<SocialStats> {
     const db = getDatabase();
 
     try {
-        // Count friends and online friends
+        // Count friends and online friends - only query one direction to avoid duplicates
         const friends = db.prepare(`
             SELECT u.last_active
             FROM friendships f
-            JOIN users u ON (
-                (f.user_id = ? AND f.friend_id = u.id) OR
-                (f.friend_id = ? AND f.user_id = u.id)
-            )
-            WHERE f.user_id = ? OR f.friend_id = ?
-        `).all(userId, userId, userId, userId) as any[];
+            JOIN users u ON f.friend_id = u.id
+            WHERE f.user_id = ?
+        `).all(userId) as any[];
 
         const friendsOnline = friends.filter(f => isUserOnline(f.last_active)).length;
 
@@ -909,7 +934,7 @@ export async function getSocialStats(): Promise<SocialStats> {
 
         return {
             friendsOnline,
-            friendsTotal: friends.length / 2, // Divide by 2 because of bidirectional entries
+            friendsTotal: friends.length,
             pendingRequests: pendingCount.count,
             partySize,
             partyMaxSize,

@@ -44,7 +44,7 @@ import {
     type PartyInvite,
 } from '@/lib/actions/social';
 import { useSession } from 'next-auth/react';
-import { usePresence, type PresenceStatus } from '@/lib/socket/use-presence';
+import { usePresence, type PresenceStatus, notifyFriendRequest, notifyFriendRequestAccepted } from '@/lib/socket/use-presence';
 
 type OnlineStatus = 'online' | 'away' | 'invisible';
 
@@ -72,6 +72,7 @@ export function SocialPanel() {
     // UI state
     const [isLoading, setIsLoading] = useState(false);
     const [myStatus, setMyStatus] = useState<OnlineStatus>(presenceStatus as OnlineStatus || 'online');
+    const [showParty, setShowParty] = useState(true);
     const [showRequests, setShowRequests] = useState(true);
     const [showOffline, setShowOffline] = useState(false);
     const [addFriendEmail, setAddFriendEmail] = useState('');
@@ -114,12 +115,18 @@ export function SocialPanel() {
     }, [session, requestFriendStatuses]);
     
     // Update friend online status from real-time presence
-    const friendsWithRealTimeStatus = friends.map(f => ({
-        ...f,
-        odOnline: friendStatuses.get(f.odUserId) === 'online' || 
-                  friendStatuses.get(f.odUserId) === 'away' ||
-                  f.odOnline, // fallback to DB status
-    }));
+    const friendsWithRealTimeStatus = friends.map(f => {
+        const realtimeStatus = friendStatuses.get(f.odUserId);
+        // If we have real-time status info, use it exclusively
+        // Otherwise fall back to database last_active timestamp
+        const isOnline = realtimeStatus !== undefined
+            ? realtimeStatus === 'online' || realtimeStatus === 'away'
+            : f.odOnline;
+        return {
+            ...f,
+            odOnline: isOnline,
+        };
+    });
     
     // Reload data when real-time notifications arrive
     useEffect(() => {
@@ -159,6 +166,11 @@ export function SocialPanel() {
             setAddFriendEmail('');
             loadData();
             refreshStats();
+            
+            // Emit real-time notification to receiver
+            if (result.receiverId && result.senderName) {
+                notifyFriendRequest(result.receiverId, result.senderName);
+            }
         } else {
             setAddFriendError(result.error || 'Failed to send request');
         }
@@ -171,6 +183,11 @@ export function SocialPanel() {
         if (result.success) {
             loadData();
             refreshStats();
+            
+            // Emit real-time notification to the sender
+            if (result.senderId && result.accepterName) {
+                notifyFriendRequestAccepted(result.senderId, result.accepterName);
+            }
         }
         setProcessingId(null);
     };
@@ -350,23 +367,46 @@ export function SocialPanel() {
                                         </div>
                                     </div>
 
-                                    {/* Party Section */}
+                                    {/* Party Section (Collapsible) */}
                                     <div>
-                                        <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                                            <Users size={12} />
-                                            Party
-                                        </div>
-                                        <PartySection
-                                            party={party}
-                                            invites={partyInvites}
-                                            friends={friendsWithRealTimeStatus}
-                                            onCreateParty={handleCreateParty}
-                                            onLeaveParty={handleLeaveParty}
-                                            onInviteFriend={handleInviteToParty}
-                                            onAcceptInvite={handleAcceptPartyInvite}
-                                            onDeclineInvite={handleDeclinePartyInvite}
-                                            isLoading={processingId !== null}
-                                        />
+                                        <button
+                                            onClick={() => setShowParty(!showParty)}
+                                            className="w-full flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3 hover:text-foreground transition-colors"
+                                        >
+                                            <span className="flex items-center gap-2">
+                                                <Users size={12} />
+                                                Party
+                                                {party && (
+                                                    <span className="text-primary">
+                                                        ({party.members.length}/{party.maxSize})
+                                                    </span>
+                                                )}
+                                            </span>
+                                            {showParty ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                        </button>
+                                        
+                                        <AnimatePresence>
+                                            {showParty && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: 'auto' }}
+                                                    exit={{ opacity: 0, height: 0 }}
+                                                    transition={{ duration: 0.2 }}
+                                                >
+                                                    <PartySection
+                                                        party={party}
+                                                        invites={partyInvites}
+                                                        friends={friendsWithRealTimeStatus}
+                                                        onCreateParty={handleCreateParty}
+                                                        onLeaveParty={handleLeaveParty}
+                                                        onInviteFriend={handleInviteToParty}
+                                                        onAcceptInvite={handleAcceptPartyInvite}
+                                                        onDeclineInvite={handleDeclinePartyInvite}
+                                                        isLoading={processingId !== null}
+                                                    />
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
 
                                     {/* Friend Requests */}

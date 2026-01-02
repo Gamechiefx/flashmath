@@ -54,6 +54,12 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     >([]);
     
     const userIdRef = useRef<string | null>(null);
+    const statusRef = useRef<PresenceStatus>('online');
+    
+    // Keep statusRef in sync with state
+    useEffect(() => {
+        statusRef.current = myStatus;
+    }, [myStatus]);
     
     // Connect to presence socket
     useEffect(() => {
@@ -87,8 +93,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             console.log('[Presence] Connected');
             setIsConnected(true);
             
-            // Announce online status
-            socket.emit('presence:online', { userId, userName });
+            // Announce online status with current status (preserve user's choice)
+            // Use ref to get current status value (not stale closure)
+            socket.emit('presence:online', { userId, userName, status: statusRef.current });
         };
         
         const handleDisconnect = () => {
@@ -118,6 +125,11 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             setPendingFriendRequests(prev => [...prev, data]);
         };
         
+        const handleFriendAccepted = (data: { accepterName: string; timestamp: number }) => {
+            // Trigger a refresh by adding to the pending requests (will be detected and cause reload)
+            setPendingFriendRequests(prev => [...prev, { senderName: `${data.accepterName} (accepted)`, timestamp: data.timestamp }]);
+        };
+        
         const handlePartyInvite = (data: { inviterName: string; partyId: string; timestamp: number }) => {
             setPendingPartyInvites(prev => [...prev, data]);
         };
@@ -127,6 +139,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         socket.on('disconnect', handleDisconnect);
         socket.on('presence:update', handlePresenceUpdate);
         socket.on('presence:friends_status', handleFriendsStatus);
+        socket.on('friend:accepted', handleFriendAccepted);
         socket.on('friend:request', handleFriendRequest);
         socket.on('party:invite', handlePartyInvite);
         
@@ -146,6 +159,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             socket.off('presence:update', handlePresenceUpdate);
             socket.off('presence:friends_status', handleFriendsStatus);
             socket.off('friend:request', handleFriendRequest);
+            socket.off('friend:accepted', handleFriendAccepted);
             socket.off('party:invite', handlePartyInvite);
         };
     }, [autoConnect, session]);
@@ -202,6 +216,13 @@ export function getPresenceSocket(): Socket | null {
 export function notifyFriendRequest(receiverId: string, senderName: string) {
     if (presenceSocket?.connected) {
         presenceSocket.emit('presence:notify_friend_request', { receiverId, senderName });
+    }
+}
+
+// Utility to notify when a friend request is accepted
+export function notifyFriendRequestAccepted(senderId: string, accepterName: string) {
+    if (presenceSocket?.connected) {
+        presenceSocket.emit('presence:notify_friend_accepted', { senderId, accepterName });
     }
 }
 

@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS users (
     two_factor_secret TEXT,
     two_factor_recovery_codes TEXT,
     
+    -- Date of Birth (set once during registration, cannot be changed)
+    dob TEXT,
+
     -- Timestamps
     created_at TEXT NOT NULL,
     updated_at TEXT,
@@ -327,7 +330,7 @@ CREATE TABLE IF NOT EXISTS friend_requests (
 CREATE TABLE IF NOT EXISTS parties (
     id TEXT PRIMARY KEY,
     leader_id TEXT NOT NULL,
-    max_size INTEGER DEFAULT 3,
+    max_size INTEGER DEFAULT 5,
     created_at TEXT NOT NULL,
     FOREIGN KEY (leader_id) REFERENCES users(id) ON DELETE CASCADE
 );
