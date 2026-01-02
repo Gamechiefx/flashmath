@@ -336,10 +336,13 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                     <motion.h1
                         initial={{ y: -20, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
-                        className="text-8xl font-[1000] tracking-tighter italic"
+                        className="text-8xl font-[1000] tracking-tighter italic relative"
                     >
-                        <span className="bg-gradient-to-r from-primary via-white to-primary bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-x">
-                            FLASHARENA
+                        <span className="bg-gradient-to-r from-primary via-white to-primary bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-x drop-shadow-[0_0_30px_rgba(34,211,238,0.5)]">
+                            FLASH
+                        </span>
+                        <span className="bg-gradient-to-r from-amber-400 via-yellow-200 to-amber-400 bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-x drop-shadow-[0_0_30px_rgba(251,191,36,0.5)]">
+                            ARENA
                         </span>
                     </motion.h1>
                     <p className="text-base font-black text-amber-500 uppercase tracking-[0.4em] translate-y-[-8px]">Select Your Battle Mode</p>
@@ -387,12 +390,12 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                     {selectedModeData?.available ? (
                         <Link href={queueHref} onClick={() => soundEngine.playClick()}>
                             <motion.button
-                                whileHover={{ scale: 1.05, boxShadow: "0 0 40px rgba(245, 158, 11, 0.4)" }}
+                                whileHover={{ scale: 1.05, boxShadow: "0 0 50px rgba(245, 158, 11, 0.6)" }}
                                 whileTap={{ scale: 0.95 }}
                                 onMouseEnter={() => soundEngine.playHover()}
-                                className="group relative px-28 py-5 rounded-[1.5rem] font-[1000] text-xl uppercase tracking-[0.2em] bg-gradient-to-r from-amber-400 to-orange-500 text-black shadow-[0_20px_40px_rgba(0,0,0,0.3)] transition-all"
+                                className="group relative px-28 py-5 rounded-[1.5rem] font-[1000] text-xl uppercase tracking-[0.2em] bg-gradient-to-r from-amber-400 via-yellow-300 to-orange-500 text-black shadow-[0_20px_40px_rgba(0,0,0,0.3),0_0_60px_rgba(251,191,36,0.3)] transition-all animate-shimmer"
                             >
-                                <span className="relative z-10 transition-transform group-hover:scale-110 inline-block">
+                                <span className="relative z-10 transition-transform group-hover:scale-110 inline-block drop-shadow-sm">
                                     Find Match ({OPERATION_ICONS[selectedOperation].label})
                                 </span>
                                 <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 rounded-[1.5rem] transition-opacity" />
