@@ -47,6 +47,7 @@ export function RealTimeMatch({
     const [hasSavedResult, setHasSavedResult] = useState(false);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
     const [resultData, setResultData] = useState<any>(null);
+    const savingRef = useRef(false); // Prevent double-save during HMR
 
     const {
         connected,
@@ -112,15 +113,17 @@ export function RealTimeMatch({
 
     // Save match result when game ends
     useEffect(() => {
-        console.log('[Match] Save effect check:', { matchEnded, hasSavedResult, you: !!you, opponent: !!opponent, youScore: you?.odScore, oppScore: opponent?.odScore });
+        console.log('[Match] Save effect check:', { matchEnded, hasSavedResult, saving: savingRef.current, you: !!you, opponent: !!opponent, youScore: you?.odScore, oppScore: opponent?.odScore });
 
-        if (!matchEnded || hasSavedResult) return;
+        if (!matchEnded || hasSavedResult || savingRef.current) return;
 
         // Wait for player data to be available
         if (!you || !opponent) {
             console.log('[Match] Waiting for player data...');
             return;
         }
+
+        savingRef.current = true; // Lock to prevent double-save
 
         async function saveResult() {
             const yourScore = you!.odScore || 0;
@@ -146,7 +149,7 @@ export function RealTimeMatch({
                 mode: '1v1',
             });
 
-            console.log('[Match] Save result response:', result);
+            console.log('[Match] Save result response:', JSON.stringify(result, null, 2));
 
             if (result.success) {
                 setEloChange(youWon ? result.winnerEloChange || 0 : result.loserEloChange || 0);
