@@ -48,7 +48,7 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
             {
                 id: opponent?.odUserId || 'ai-opponent',
                 name: opponent?.odUserName || 'AI Challenger',
-                rank: opponent?.odTier || 'Bronze', // AI uses tier as rank
+                rank: 'Bronze', // Opponents default to Bronze for display
                 division: 'I', // AI defaults to division I for now
                 elo: opponent?.odElo || 500,
                 ready: true,

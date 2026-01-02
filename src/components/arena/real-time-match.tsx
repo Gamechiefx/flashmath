@@ -347,16 +347,10 @@ export function RealTimeMatch({
             ? (opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1))
             : (you?.odLevel || initialPlayers?.[currentUserId]?.level || 1);
 
-        // Rank info - use fresh stats if available
-        const winnerRank = winnerStats?.rank || (isWinner
-            ? (you?.odTier || initialPlayers?.[currentUserId]?.tier || 'Bronze')
-            : (opponent?.odTier || (opponentId ? initialPlayers?.[opponentId]?.tier : 'Bronze')));
-
+        // Rank info - use fresh stats if available, default to Bronze
+        const winnerRank = winnerStats?.rank || 'Bronze';
         const winnerDivision = winnerStats?.division || "I";
-
-        const loserRank = loserStats?.rank || (isWinner
-            ? (opponent?.odTier || (opponentId ? initialPlayers?.[opponentId]?.tier : 'Bronze'))
-            : (you?.odTier || initialPlayers?.[currentUserId]?.tier || 'Bronze'));
+        const loserRank = loserStats?.rank || 'Bronze';
 
         const loserDivision = loserStats?.division || "I";
 
@@ -414,7 +408,7 @@ export function RealTimeMatch({
                             <PlayerBanner
                                 name={wonByForfeit ? userName : (winnerName || 'Winner')}
                                 level={wonByForfeit ? (you?.odLevel || 1) : (winnerLevel || 1)}
-                                rank={wonByForfeit ? (you?.odTier || 'Bronze') : (winnerRank || 'Bronze')}
+                                rank={winnerRank}
                                 division={wonByForfeit ? "I" : (winnerDivision || "I")}
                                 styleId={wonByForfeit ? (you?.odEquippedBanner || 'default') : (winnerBanner || 'default')}
                                 title={wonByForfeit ? (you?.odEquippedTitle || 'Champion') : (winnerTitle || 'Champion')}
@@ -774,7 +768,7 @@ export function RealTimeMatch({
                         <PlayerBanner
                             name={you?.odName || initialPlayers?.[currentUserId]?.name || userName}
                             level={you?.odLevel || initialPlayers?.[currentUserId]?.level || 1}
-                            rank={you?.odTier || initialPlayers?.[currentUserId]?.tier || 'Bronze'}
+                            rank="Bronze"
                             division=""
                             styleId={you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default'}
                             title={you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'FlashMath Competitor'}
@@ -832,7 +826,7 @@ export function RealTimeMatch({
                         <PlayerBanner
                             name={opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent') || 'Opponent'}
                             level={opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 0) || 0}
-                            rank={opponent?.odTier || (opponentId ? initialPlayers?.[opponentId]?.tier : 'Bronze') || 'Bronze'}
+                            rank="Bronze"
                             division=""
                             styleId={opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default') || 'default'}
                             title={opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Contender') || 'Contender'}

@@ -438,7 +438,7 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                                             <PlayerBanner
                                                 name={opponent?.name || 'Player'}
                                                 level={opponent?.level || 1}
-                                                rank={opponent?.tier || rank}
+                                                rank="Bronze"
                                                 division="I"
                                                 styleId={opponent?.banner || 'default'}
                                                 title={opponent?.title || 'Competitor'}
