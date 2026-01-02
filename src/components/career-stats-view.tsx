@@ -261,15 +261,15 @@ export function CareerStatsView({ stats }: CareerStatsViewProps) {
                             <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Mode Ratings</div>
                             <div className="grid grid-cols-3 gap-4">
                                 <div className="text-center">
-                                    <div className="text-2xl font-black text-primary">{stats.arenaStats.elo1v1 || 1000}</div>
+                                    <div className="text-2xl font-black text-primary">{stats.arenaStats.elo1v1 || 300}</div>
                                     <div className="text-xs text-muted-foreground">1v1 ELO</div>
                                 </div>
                                 <div className="text-center">
-                                    <div className="text-2xl font-black text-blue-400">{stats.arenaStats.elo2v2 || 800}</div>
+                                    <div className="text-2xl font-black text-blue-400">{stats.arenaStats.elo2v2 || 300}</div>
                                     <div className="text-xs text-muted-foreground">2v2 ELO</div>
                                 </div>
                                 <div className="text-center">
-                                    <div className="text-2xl font-black text-purple-400">{stats.arenaStats.elo3v3 || 700}</div>
+                                    <div className="text-2xl font-black text-purple-400">{stats.arenaStats.elo3v3 || 300}</div>
                                     <div className="text-xs text-muted-foreground">3v3 ELO</div>
                                 </div>
                             </div>

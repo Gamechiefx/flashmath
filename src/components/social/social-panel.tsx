@@ -50,6 +50,7 @@ import {
     notifyFriendRequest, 
     notifyFriendRequestAccepted,
     notifyFriendRemoved,
+    notifyPartyInvite,
     notifyPartyJoined,
     notifyPartyLeft,
 } from '@/lib/socket/use-presence';
@@ -268,7 +269,13 @@ export function SocialPanel() {
 
     const handleLeaveParty = async () => {
         setProcessingId('leave-party');
-        await leaveParty();
+        const result = await leaveParty();
+        if (result.success) {
+            // Notify remaining party members that someone left
+            if (result.remainingMemberIds && result.remainingMemberIds.length > 0 && result.leaverName && result.leaverId) {
+                notifyPartyLeft(result.remainingMemberIds, result.leaverName, result.leaverId, result.disbanded);
+            }
+        }
         loadData();
         refreshStats();
         setProcessingId(null);
@@ -276,7 +283,11 @@ export function SocialPanel() {
 
     const handleInviteToParty = async (friendId: string) => {
         setProcessingId(friendId);
-        await inviteToParty(friendId);
+        const result = await inviteToParty(friendId);
+        if (result.success && result.inviteeId && result.inviterName && result.partyId) {
+            // Notify the invitee in real-time
+            notifyPartyInvite(result.inviteeId, result.inviterName, result.partyId);
+        }
         setProcessingId(null);
     };
 

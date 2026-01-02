@@ -675,13 +675,20 @@ export async function createParty(): Promise<{ success: boolean; partyId?: strin
     }
 }
 
-export async function inviteToParty(friendId: string): Promise<{ success: boolean; error?: string }> {
+export async function inviteToParty(friendId: string): Promise<{ 
+    success: boolean; 
+    error?: string;
+    inviteeId?: string;
+    inviterName?: string;
+    partyId?: string;
+}> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
     }
 
     const userId = (session.user as any).id;
+    const inviterName = (session.user as any).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -733,7 +740,7 @@ export async function inviteToParty(friendId: string): Promise<{ success: boolea
         `).run(generateId(), membership.party_id, userId, friendId, now(), expiresAt);
 
         console.log(`[Social] Party invite sent from ${userId} to ${friendId}`);
-        return { success: true };
+        return { success: true, inviteeId: friendId, inviterName, partyId: membership.party_id };
     } catch (error: any) {
         console.error('[Social] inviteToParty error:', error);
         return { success: false, error: error.message };
