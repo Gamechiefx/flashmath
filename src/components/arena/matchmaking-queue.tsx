@@ -11,7 +11,9 @@ interface MatchmakingQueueProps {
     userId: string;
     userName: string;
     level: number;
-    tier: string;
+    practiceTier: number; // Practice tier (1-100) for matchmaking
+    rank: string; // Competitive rank (Bronze, Silver, etc.) for display
+    division: string; // Rank division (I, II, III) for display
     elo: number;
     operation?: string;
     equippedBanner?: string;
@@ -59,7 +61,7 @@ function RankBadge({ rank, division }: { rank: string; division: string }) {
     );
 }
 
-export function MatchmakingQueue({ userId, userName, level, tier, elo, operation = 'mixed', equippedBanner = 'default', equippedTitle = 'Challenger' }: MatchmakingQueueProps) {
+export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, division, elo, operation = 'mixed', equippedBanner = 'default', equippedTitle = 'Challenger' }: MatchmakingQueueProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const mode = searchParams.get('mode') || '1v1';
@@ -203,7 +205,7 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
                     mode,
                     operation,
                     elo,
-                    tier,
+                    tier: practiceTier.toString(),
                     equippedBanner,
                     equippedTitle,
                     level,
@@ -224,7 +226,7 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
                     mode,
                     operation,
                     elo,
-                    tier: parseInt(tier) || 0,
+                    tier: practiceTier,
                     queueTime: queueTimeRef.current,
                 });
 
@@ -265,7 +267,7 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
             });
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, operation, tier, elo, level, equippedBanner, equippedTitle, matchFound, router]);
+    }, [mode, operation, practiceTier, elo, level, equippedBanner, equippedTitle, matchFound, router]);
 
     const handleCancel = useCallback(() => {
         setIsSearching(false);
@@ -388,8 +390,8 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
                                         <PlayerBanner
                                             name={userName}
                                             level={level}
-                                            rank={tier}
-                                            division="II"
+                                            rank={rank}
+                                            division={division}
                                             styleId={equippedBanner}
                                             title={equippedTitle}
                                             className="scale-90 opacity-90 shadow-2xl"
@@ -417,8 +419,8 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
                                             <PlayerBanner
                                                 name={userName}
                                                 level={level}
-                                                rank={tier}
-                                                division="II"
+                                                rank={rank}
+                                                division={division}
                                                 styleId={equippedBanner}
                                                 title={equippedTitle}
                                                 className="scale-75 opacity-60 grayscale-[0.5]"
@@ -436,8 +438,8 @@ export function MatchmakingQueue({ userId, userName, level, tier, elo, operation
                                             <PlayerBanner
                                                 name={opponent?.name || 'Player'}
                                                 level={opponent?.level || 1}
-                                                rank={opponent?.tier || tier}
-                                                division="II"
+                                                rank={opponent?.tier || rank}
+                                                division="I"
                                                 styleId={opponent?.banner || 'default'}
                                                 title={opponent?.title || 'Competitor'}
                                             />

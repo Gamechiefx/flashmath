@@ -826,8 +826,14 @@ export function RealTimeMatch({
             </div>
 
 
-            {/* Sound Toggle */}
-            <div className="fixed bottom-8 right-8 z-50">
+            {/* Bottom Controls */}
+            <div className="fixed bottom-8 right-8 z-50 flex items-center gap-4">
+                <button
+                    onClick={() => setShowLeaveWarning(true)}
+                    className="px-4 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/50 rounded-lg text-red-400 text-xs font-bold uppercase tracking-widest transition-all"
+                >
+                    Leave Match
+                </button>
                 <SoundToggle />
             </div>
         </div>

@@ -7,7 +7,14 @@ import { MatchmakingQueue } from "@/components/arena/matchmaking-queue";
 import { Suspense } from "react";
 
 interface ArenaQueueClientProps {
-    data: any;
+    data: {
+        userId: string;
+        name: string;
+        level: number;
+        mathTiers: Record<string, number>;
+        equippedBanner?: string;
+        equippedTitle?: string;
+    };
     operation: string;
     arenaStats: {
         elo: number;
@@ -36,7 +43,9 @@ export function ArenaQueueClient({ data, operation, arenaStats }: ArenaQueueClie
                         userId={data.userId}
                         userName={data.name || 'Player'}
                         level={data.level || 1}
-                        tier={arenaStats.rank}
+                        practiceTier={data.mathTiers?.[operation] || data.mathTiers?.addition || 1}
+                        rank={arenaStats.rank}
+                        division={arenaStats.division}
                         elo={arenaStats.elo}
                         operation={operation}
                         equippedBanner={data.equippedBanner || 'default'}
