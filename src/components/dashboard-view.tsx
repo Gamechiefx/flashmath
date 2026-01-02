@@ -473,21 +473,21 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
 
                                                     <div className="space-y-3 mb-6">
                                                         <div className="flex justify-between text-[10px] uppercase font-bold text-zinc-500">
-                                                            <span>Band Progress</span>
+                                                            <span>Tier Progress</span>
                                                             <motion.span
                                                                 className={cn(selectedOp === op.title ? tierInfo.band.textColor : "")}
-                                                                key={tierInfo.progress}
+                                                                key={op.progress}
                                                                 initial={{ scale: 1.5, opacity: 0 }}
                                                                 animate={{ scale: 1, opacity: 1 }}
                                                             >
-                                                                {tierInfo.progress.toFixed(0)}%
+                                                                {op.progress}%
                                                             </motion.span>
                                                         </div>
 
                                                         <div className="h-2 w-full bg-zinc-800/50 rounded-full overflow-hidden">
                                                             <motion.div
                                                                 initial={{ width: 0 }}
-                                                                animate={{ width: `${tierInfo.progress}%` }}
+                                                                animate={{ width: `${op.progress}%` }}
                                                                 transition={{
                                                                     duration: 1,
                                                                     delay: 0.3 + index * 0.15,
