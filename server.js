@@ -1,12 +1,13 @@
 /**
  * Custom Next.js Server with Socket.io
- * Enables WebSocket support for arena matches
+ * Enables WebSocket support for arena matches and real-time presence
  */
 
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const { Server: SocketIOServer } = require('socket.io');
+const Redis = require('ioredis');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -20,6 +21,123 @@ const activeMatches = new Map();
 
 // Map socket IDs to match IDs
 const socketToMatch = new Map();
+
+// =============================================================================
+// PRESENCE SYSTEM
+// =============================================================================
+
+// Redis client for presence (optional - graceful fallback if unavailable)
+let presenceRedis = null;
+const PRESENCE_TTL = 300; // 5 minutes presence TTL
+
+// In-memory fallback for presence when Redis unavailable
+const inMemoryPresence = new Map(); // userId -> { status, socketId, lastSeen }
+const presenceSocketToUser = new Map(); // socketId -> userId
+
+// Redis keys for presence
+const PRESENCE_KEYS = {
+    USER_STATUS: 'presence:user:',      // + userId -> status JSON
+    ONLINE_USERS: 'presence:online',    // Set of online user IDs
+};
+
+/**
+ * Initialize Redis for presence tracking (optional)
+ */
+function initPresenceRedis() {
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    try {
+        presenceRedis = new Redis(redisUrl, {
+            maxRetriesPerRequest: 3,
+            enableReadyCheck: true,
+            lazyConnect: false,
+        });
+        
+        presenceRedis.on('connect', () => {
+            console.log('[Presence] Redis connected');
+        });
+        
+        presenceRedis.on('error', (err) => {
+            console.error('[Presence] Redis error:', err.message);
+        });
+        
+        return presenceRedis;
+    } catch (err) {
+        console.warn('[Presence] Redis unavailable, using in-memory fallback');
+        return null;
+    }
+}
+
+/**
+ * Set user online status
+ */
+async function setUserPresence(userId, status, socketId) {
+    const data = { status, socketId, lastSeen: Date.now() };
+    
+    if (presenceRedis && presenceRedis.status === 'ready') {
+        try {
+            await presenceRedis.setex(
+                PRESENCE_KEYS.USER_STATUS + userId,
+                PRESENCE_TTL,
+                JSON.stringify(data)
+            );
+            await presenceRedis.sadd(PRESENCE_KEYS.ONLINE_USERS, userId);
+            await presenceRedis.expire(PRESENCE_KEYS.ONLINE_USERS, PRESENCE_TTL);
+        } catch (err) {
+            console.error('[Presence] Redis setex failed:', err.message);
+        }
+    } else {
+        // In-memory fallback
+        inMemoryPresence.set(userId, data);
+        presenceSocketToUser.set(socketId, userId);
+    }
+}
+
+/**
+ * Remove user presence
+ */
+async function removeUserPresence(userId) {
+    if (presenceRedis && presenceRedis.status === 'ready') {
+        try {
+            await presenceRedis.del(PRESENCE_KEYS.USER_STATUS + userId);
+            await presenceRedis.srem(PRESENCE_KEYS.ONLINE_USERS, userId);
+        } catch (err) {
+            console.error('[Presence] Redis del failed:', err.message);
+        }
+    } else {
+        inMemoryPresence.delete(userId);
+    }
+}
+
+/**
+ * Get user presence status
+ */
+async function getUserPresence(userId) {
+    if (presenceRedis && presenceRedis.status === 'ready') {
+        try {
+            const data = await presenceRedis.get(PRESENCE_KEYS.USER_STATUS + userId);
+            return data ? JSON.parse(data) : null;
+        } catch (err) {
+            return null;
+        }
+    } else {
+        return inMemoryPresence.get(userId) || null;
+    }
+}
+
+/**
+ * Get all online users
+ */
+async function getOnlineUsers() {
+    if (presenceRedis && presenceRedis.status === 'ready') {
+        try {
+            return await presenceRedis.smembers(PRESENCE_KEYS.ONLINE_USERS);
+        } catch (err) {
+            return [];
+        }
+    } else {
+        return Array.from(inMemoryPresence.keys());
+    }
+}
 
 // Math symbol operators
 const OPERATORS = {
@@ -380,8 +498,117 @@ app.prepare().then(() => {
 
     console.log('[Arena Socket] WebSocket server initialized');
 
+    // =============================================================================
+    // PRESENCE NAMESPACE
+    // =============================================================================
+    
+    // Initialize presence Redis (optional)
+    initPresenceRedis();
+    
+    const presenceNs = io.of('/presence');
+    
+    presenceNs.on('connection', (socket) => {
+        console.log(`[Presence] Client connected: ${socket.id}`);
+        let currentUserId = null;
+        
+        // User comes online
+        socket.on('presence:online', async (data) => {
+            const { userId, userName } = data;
+            if (!userId) return;
+            
+            currentUserId = userId;
+            presenceSocketToUser.set(socket.id, userId);
+            
+            await setUserPresence(userId, 'online', socket.id);
+            
+            // Join a room for this user to receive direct messages
+            socket.join(`user:${userId}`);
+            
+            console.log(`[Presence] ${userName || userId} is now online`);
+            
+            // Notify friends (broadcast to all - clients will filter)
+            socket.broadcast.emit('presence:update', {
+                userId,
+                status: 'online',
+                timestamp: Date.now(),
+            });
+        });
+        
+        // User changes status
+        socket.on('presence:status', async (data) => {
+            const { status } = data; // 'online', 'away', 'invisible', 'in-match'
+            if (!currentUserId) return;
+            
+            await setUserPresence(currentUserId, status, socket.id);
+            
+            console.log(`[Presence] ${currentUserId} status: ${status}`);
+            
+            socket.broadcast.emit('presence:update', {
+                userId: currentUserId,
+                status,
+                timestamp: Date.now(),
+            });
+        });
+        
+        // Request friend statuses
+        socket.on('presence:get_friends', async (data) => {
+            const { friendIds } = data;
+            if (!friendIds || !Array.isArray(friendIds)) return;
+            
+            const statuses = {};
+            for (const friendId of friendIds) {
+                const presence = await getUserPresence(friendId);
+                statuses[friendId] = presence ? presence.status : 'offline';
+            }
+            
+            socket.emit('presence:friends_status', { statuses });
+        });
+        
+        // Friend request notification (from server action)
+        socket.on('presence:notify_friend_request', async (data) => {
+            const { receiverId, senderName } = data;
+            // Send to specific user's room
+            presenceNs.to(`user:${receiverId}`).emit('friend:request', {
+                senderName,
+                timestamp: Date.now(),
+            });
+        });
+        
+        // Party invite notification
+        socket.on('presence:notify_party_invite', async (data) => {
+            const { inviteeId, inviterName, partyId } = data;
+            presenceNs.to(`user:${inviteeId}`).emit('party:invite', {
+                inviterName,
+                partyId,
+                timestamp: Date.now(),
+            });
+        });
+        
+        // Disconnect
+        socket.on('disconnect', async () => {
+            const userId = presenceSocketToUser.get(socket.id);
+            if (userId) {
+                await removeUserPresence(userId);
+                presenceSocketToUser.delete(socket.id);
+                
+                // Notify others
+                socket.broadcast.emit('presence:update', {
+                    userId,
+                    status: 'offline',
+                    timestamp: Date.now(),
+                });
+                
+                console.log(`[Presence] ${userId} went offline`);
+            }
+            console.log(`[Presence] Client disconnected: ${socket.id}`);
+        });
+    });
+    
+    console.log('[Presence Socket] Presence namespace initialized at /presence');
+
     httpServer.listen(port, hostname, () => {
         console.log(`> Ready on http://${hostname}:${port}`);
         console.log(`> WebSocket server running on /api/socket/arena`);
+        console.log(`> Presence server running on /presence`);
     });
 });

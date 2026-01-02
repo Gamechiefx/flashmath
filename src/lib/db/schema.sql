@@ -294,3 +294,75 @@ CREATE TABLE IF NOT EXISTS arena_matches (
 CREATE INDEX IF NOT EXISTS idx_arena_matches_winner ON arena_matches(winner_id);
 CREATE INDEX IF NOT EXISTS idx_arena_matches_loser ON arena_matches(loser_id);
 CREATE INDEX IF NOT EXISTS idx_arena_matches_created ON arena_matches(created_at);
+
+-- ==============================================
+-- SOCIAL SYSTEM TABLES (Friends, Parties)
+-- ==============================================
+
+-- Friendships (bidirectional after acceptance)
+CREATE TABLE IF NOT EXISTS friendships (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    friend_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, friend_id)
+);
+
+-- Friend Requests (pending invites)
+CREATE TABLE IF NOT EXISTS friend_requests (
+    id TEXT PRIMARY KEY,
+    sender_id TEXT NOT NULL,
+    receiver_id TEXT NOT NULL,
+    status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'declined'
+    created_at TEXT NOT NULL,
+    responded_at TEXT,
+    FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(sender_id, receiver_id)
+);
+
+-- Parties (temporary groups for matchmaking)
+CREATE TABLE IF NOT EXISTS parties (
+    id TEXT PRIMARY KEY,
+    leader_id TEXT NOT NULL,
+    max_size INTEGER DEFAULT 3,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (leader_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Party Members
+CREATE TABLE IF NOT EXISTS party_members (
+    id TEXT PRIMARY KEY,
+    party_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    joined_at TEXT NOT NULL,
+    FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(party_id, user_id)
+);
+
+-- Party Invites
+CREATE TABLE IF NOT EXISTS party_invites (
+    id TEXT PRIMARY KEY,
+    party_id TEXT NOT NULL,
+    inviter_id TEXT NOT NULL,
+    invitee_id TEXT NOT NULL,
+    status TEXT DEFAULT 'pending', -- 'pending', 'accepted', 'declined', 'expired'
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE CASCADE,
+    FOREIGN KEY (inviter_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (invitee_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Social system indexes
+CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_id);
+CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_id);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_sender ON friend_requests(sender_id);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_receiver ON friend_requests(receiver_id, status);
+CREATE INDEX IF NOT EXISTS idx_parties_leader ON parties(leader_id);
+CREATE INDEX IF NOT EXISTS idx_party_members_party ON party_members(party_id);
+CREATE INDEX IF NOT EXISTS idx_party_members_user ON party_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_party_invites_invitee ON party_invites(invitee_id, status);

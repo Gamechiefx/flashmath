@@ -33,6 +33,7 @@ import { ItemPreviewProvider } from "@/components/item-preview-provider";
 import { AudioSettingsProvider } from "@/components/audio-settings-provider";
 import { SessionGuard } from "@/components/session-guard";
 import { DevFooter } from "@/components/dev-footer";
+import { SocialProvider, SocialFAB, SocialPanel } from "@/components/social";
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -63,8 +64,12 @@ export default async function RootLayout({
                 enableSystem
                 disableTransitionOnChange
               >
-                <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
-                {children}
+                <SocialProvider>
+                  <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
+                  {children}
+                  <SocialFAB />
+                  <SocialPanel />
+                </SocialProvider>
               </ThemeProvider>
             </ItemPreviewProvider>
           </AudioSettingsProvider>

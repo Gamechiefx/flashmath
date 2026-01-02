@@ -40,6 +40,8 @@ export function ShopItemCard({ item, isOwned, userCoins, index = 0 }: ShopItemCa
 
     const Icon = item.icon || Lock;
     const isBanner = item.type === ItemType.BANNER;
+    const isFont = item.type === ItemType.FONT;
+    const isFrame = item.type === ItemType.FRAME;
 
     const handleMouseEnter = () => {
         const rect = cardRef.current?.getBoundingClientRect();
@@ -126,13 +128,25 @@ export function ShopItemCard({ item, isOwned, userCoins, index = 0 }: ShopItemCa
                                 RARITY_COLORS[item.rarity].split(' ')[0]
                             )}
                         >
-                            <Icon size={32} />
+                            {isFrame ? (
+                                // For frames, show the frame style around a Lock icon
+                                <div className={cn("w-10 h-10 flex items-center justify-center", item.assetValue)}>
+                                    <Lock size={20} />
+                                </div>
+                            ) : (
+                                <Icon size={32} />
+                            )}
                         </motion.div>
                         <div className={isBanner ? "mt-6" : ""}>
                             <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">
                                 {item.type}
                             </div>
-                            <h3 className="text-xl font-bold leading-tight mb-2">{item.name}</h3>
+                            <h3
+                                className="text-xl font-bold leading-tight mb-2"
+                                style={isFont ? { fontFamily: item.assetValue } : undefined}
+                            >
+                                {item.name}
+                            </h3>
                             <p className="text-sm text-balance text-muted-foreground">{item.description}</p>
                         </div>
                     </div>
