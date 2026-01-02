@@ -218,9 +218,11 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                 }
             }
 
-            // Poll for matches every 2 seconds
+            // Poll for matches every second for faster matching
             pollInterval = setInterval(async () => {
                 if (!isMounted || matchFound) return;
+
+                console.log(`[Queue] Polling for match: mode=${mode}, op=${operation}, elo=${elo}, tier=${practiceTier}, time=${queueTimeRef.current}s`);
 
                 const result = await checkForMatch({
                     mode,
@@ -231,6 +233,7 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                 });
 
                 if (result.matched && result.matchId) {
+                    console.log(`[Queue] Match found! matchId=${result.matchId}, opponent=${result.opponent?.name}`);
                     setMatchFound(true);
                     soundEngine.playMatchFound();
                     setIsSearching(false);
@@ -253,7 +256,7 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
 
                     if (pollInterval) clearInterval(pollInterval);
                 }
-            }, 2000);
+            }, 1000);
         }
 
         startMatchmaking();

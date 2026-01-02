@@ -224,19 +224,34 @@ export async function checkForMatch(params: {
 
         const candidates = await redis.zrangebyscore(queueKey, minElo, maxElo);
 
-        console.log(`[Matchmaking] Checking for match: user=${userId}, elo=${params.elo}, range=${minElo}-${maxElo}, candidates=${candidates.length}`);
+        console.log(`[Matchmaking] Checking for match: user=${userId}, elo=${params.elo}, tier=${params.tier}, range=${minElo}-${maxElo}, candidates=${candidates.length}`);
 
         // Find a different player (not self) within tier range
         for (const candidateStr of candidates) {
             const candidate = JSON.parse(candidateStr) as QueueEntry;
             console.log(`[Matchmaking] Candidate: ${candidate.odUserName} (${candidate.odUserId}), elo=${candidate.odElo}, tier=${candidate.odTier}`);
             if (candidate.odUserId !== userId) {
+                // Check if candidate already has a pending match (prevents race condition)
+                const candidateMatch = await redis.get(`${MATCH_PREFIX}player:${candidate.odUserId}`);
+                if (candidateMatch) {
+                    console.log(`[Matchmaking] Skipping ${candidate.odUserName}: already in a match`);
+                    continue;
+                }
+
                 // Check tier is within range
                 const candidateTier = parseInt(candidate.odTier) || 0;
                 if (Math.abs(params.tier - candidateTier) > TIER_RANGE) {
                     console.log(`[Matchmaking] Skipping ${candidate.odUserName}: tier ${candidateTier} outside range ±${TIER_RANGE} from ${params.tier}`);
                     continue; // Skip - tier too different
                 }
+
+                // Use deterministic match creation: lower userId creates the match
+                // This prevents both players from creating separate matches simultaneously
+                if (userId > candidate.odUserId) {
+                    console.log(`[Matchmaking] Deferring to ${candidate.odUserName} (lower userId) to create match`);
+                    continue;
+                }
+
                 // Found a match! Create match and remove both from queue
                 const matchId = `match-${uuidv4()}`;
 
