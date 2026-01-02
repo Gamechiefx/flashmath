@@ -528,6 +528,7 @@ export async function saveMatchResult(params: {
         if (redis) {
             // Try to set the lock - only succeeds if key doesn't exist (atomic operation)
             const lockAcquired = await redis.setnx(saveLockKey, userId);
+            console.log(`[Match] Lock attempt for ${params.matchId}: acquired=${lockAcquired}, userId=${userId}`);
             if (!lockAcquired) {
                 // Another player is saving or already saved this match
                 console.log(`[Match] Match ${params.matchId} is being saved by another player, waiting...`);
@@ -536,6 +537,13 @@ export async function saveMatchResult(params: {
 
                 const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as any;
                 if (existingMatch) {
+                    // Still revalidate paths so this player sees updated stats
+                    const { revalidatePath } = await import("next/cache");
+                    revalidatePath("/arena/modes");
+                    revalidatePath("/arena");
+                    revalidatePath("/stats");
+                    revalidatePath("/dashboard");
+
                     const winnerStats = await getArenaStats(params.winnerId);
                     const loserStats = await getArenaStats(params.loserId);
                     return {
@@ -558,6 +566,13 @@ export async function saveMatchResult(params: {
         const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as any;
         if (existingMatch) {
             console.log(`[Match] Match ${params.matchId} already saved, returning cached result`);
+            // Still revalidate paths so this player sees updated stats
+            const { revalidatePath } = await import("next/cache");
+            revalidatePath("/arena/modes");
+            revalidatePath("/arena");
+            revalidatePath("/stats");
+            revalidatePath("/dashboard");
+
             const winnerStats = await getArenaStats(params.winnerId);
             const loserStats = await getArenaStats(params.loserId);
             return {
@@ -688,12 +703,20 @@ export async function saveMatchResult(params: {
         if (!isAiMatch) {
             // Use INSERT OR IGNORE to handle both players trying to save the same match
             // First player's insert succeeds, second player's is silently ignored
-            execute(
-                `INSERT OR IGNORE INTO arena_matches (id, winner_id, loser_id, winner_score, loser_score, operation, mode, winner_elo_change, loser_elo_change, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
-                [params.matchId, params.winnerId, params.loserId, params.winnerScore, params.loserScore, params.operation, params.mode, winnerEloChange, loserEloChange]
-            );
-            console.log(`[Match] Saved match history to database`);
+            try {
+                db.prepare(
+                    `INSERT OR IGNORE INTO arena_matches (id, winner_id, loser_id, winner_score, loser_score, operation, mode, winner_elo_change, loser_elo_change, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+                ).run(params.matchId, params.winnerId, params.loserId, params.winnerScore, params.loserScore, params.operation, params.mode, winnerEloChange, loserEloChange);
+                console.log(`[Match] Saved match history to database`);
+            } catch (insertError: any) {
+                // If it's a UNIQUE constraint error, match was already saved - that's OK
+                if (insertError?.code === 'SQLITE_CONSTRAINT_PRIMARYKEY' || insertError?.message?.includes('UNIQUE constraint')) {
+                    console.log(`[Match] Match already exists in database (concurrent save), continuing...`);
+                } else {
+                    throw insertError;
+                }
+            }
         } else {
             console.log(`[Match] Skipped match history insert (AI match)`);
         }
