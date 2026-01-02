@@ -601,8 +601,8 @@ export async function saveMatchResult(params: {
         console.log(`[Match] Winner data:`, winner);
         console.log(`[Match] Loser data:`, loser);
 
-        const winnerElo = winner?.arena_elo || 500;
-        const loserElo = loser?.arena_elo || 500;
+        const winnerElo = winner?.arena_elo || 300;
+        const loserElo = loser?.arena_elo || 300;
         const currentWinStreak = (winner?.arena_win_streak || 0) + 1;
 
         // Calculate performance bonus based on score margin
@@ -647,9 +647,9 @@ export async function saveMatchResult(params: {
                 execute(
                     `UPDATE users SET 
                         arena_elo = ?, 
-                        arena_elo_1v1 = CASE WHEN ? = '1v1' THEN ? ELSE COALESCE(arena_elo_1v1, 500) END,
-                        arena_elo_2v2 = CASE WHEN ? = '2v2' THEN ? ELSE COALESCE(arena_elo_2v2, 400) END,
-                        arena_elo_3v3 = CASE WHEN ? = '3v3' THEN ? ELSE COALESCE(arena_elo_3v3, 350) END,
+                        arena_elo_1v1 = CASE WHEN ? = '1v1' THEN ? ELSE COALESCE(arena_elo_1v1, 300) END,
+                        arena_elo_2v2 = CASE WHEN ? = '2v2' THEN ? ELSE COALESCE(arena_elo_2v2, 300) END,
+                        arena_elo_3v3 = CASE WHEN ? = '3v3' THEN ? ELSE COALESCE(arena_elo_3v3, 300) END,
                         arena_wins = COALESCE(arena_wins, 0) + 1, 
                         arena_win_streak = ?,
                         arena_best_win_streak = ?,
@@ -677,9 +677,9 @@ export async function saveMatchResult(params: {
                 execute(
                     `UPDATE users SET 
                         arena_elo = ?, 
-                        arena_elo_1v1 = CASE WHEN ? = '1v1' THEN ? ELSE COALESCE(arena_elo_1v1, 500) END,
-                        arena_elo_2v2 = CASE WHEN ? = '2v2' THEN ? ELSE COALESCE(arena_elo_2v2, 400) END,
-                        arena_elo_3v3 = CASE WHEN ? = '3v3' THEN ? ELSE COALESCE(arena_elo_3v3, 350) END,
+                        arena_elo_1v1 = CASE WHEN ? = '1v1' THEN ? ELSE COALESCE(arena_elo_1v1, 300) END,
+                        arena_elo_2v2 = CASE WHEN ? = '2v2' THEN ? ELSE COALESCE(arena_elo_2v2, 300) END,
+                        arena_elo_3v3 = CASE WHEN ? = '3v3' THEN ? ELSE COALESCE(arena_elo_3v3, 300) END,
                         arena_losses = COALESCE(arena_losses, 0) + 1,
                         arena_win_streak = 0,
                         coins = ? 
@@ -770,7 +770,7 @@ export async function getArenaStats(userId?: string): Promise<{
     const targetId = userId || (session?.user as any)?.id;
 
     if (!targetId) {
-        return { elo: 500, elo1v1: 500, elo2v2: 400, elo3v3: 350, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0, rank: 'Bronze', division: 'I', winsToNextDivision: 10 };
+        return { elo: 300, elo1v1: 300, elo2v2: 300, elo3v3: 300, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0, rank: 'Bronze', division: 'I', winsToNextDivision: 10 };
     }
 
     try {
@@ -792,10 +792,10 @@ export async function getArenaStats(userId?: string): Promise<{
             user = db.prepare("SELECT arena_elo, arena_wins, arena_losses, math_tiers FROM users WHERE id = ?").get(targetId) as any;
         }
 
-        const elo = user?.arena_elo || 500;
-        const elo1v1 = user?.arena_elo_1v1 || 500;
-        const elo2v2 = user?.arena_elo_2v2 || 400;
-        const elo3v3 = user?.arena_elo_3v3 || 350;
+        const elo = user?.arena_elo || 300;
+        const elo1v1 = user?.arena_elo_1v1 || 300;
+        const elo2v2 = user?.arena_elo_2v2 || 300;
+        const elo3v3 = user?.arena_elo_3v3 || 300;
         const wins = user?.arena_wins || 0;
         const losses = user?.arena_losses || 0;
         const winStreak = user?.arena_win_streak || 0;
@@ -829,7 +829,7 @@ export async function getArenaStats(userId?: string): Promise<{
         };
     } catch (error) {
         console.error('[Arena] Error getting stats:', error);
-        return { elo: 500, elo1v1: 500, elo2v2: 400, elo3v3: 350, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0, rank: 'Bronze', division: 'I', winsToNextDivision: 10 };
+        return { elo: 300, elo1v1: 300, elo2v2: 300, elo3v3: 300, wins: 0, losses: 0, winStreak: 0, bestWinStreak: 0, rank: 'Bronze', division: 'I', winsToNextDivision: 10 };
     }
 }
 

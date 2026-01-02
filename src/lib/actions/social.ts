@@ -501,13 +501,19 @@ export async function cancelFriendRequest(requestId: string): Promise<{ success:
     }
 }
 
-export async function removeFriend(friendId: string): Promise<{ success: boolean; error?: string }> {
+export async function removeFriend(friendId: string): Promise<{ 
+    success: boolean; 
+    error?: string;
+    removedUserId?: string;
+    removerName?: string;
+}> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
     }
 
     const userId = (session.user as any).id;
+    const removerName = (session.user as any).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -524,7 +530,7 @@ export async function removeFriend(friendId: string): Promise<{ success: boolean
         `).run(userId, friendId, friendId, userId);
 
         console.log(`[Social] Friendship removed between ${userId} and ${friendId}`);
-        return { success: true };
+        return { success: true, removedUserId: friendId, removerName };
     } catch (error: any) {
         console.error('[Social] removeFriend error:', error);
         return { success: false, error: error.message };
@@ -734,13 +740,20 @@ export async function inviteToParty(friendId: string): Promise<{ success: boolea
     }
 }
 
-export async function acceptPartyInvite(inviteId: string): Promise<{ success: boolean; error?: string }> {
+export async function acceptPartyInvite(inviteId: string): Promise<{ 
+    success: boolean; 
+    error?: string;
+    partyMemberIds?: string[];
+    joinerName?: string;
+    joinerId?: string;
+}> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
     }
 
     const userId = (session.user as any).id;
+    const joinerName = (session.user as any).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -770,7 +783,7 @@ export async function acceptPartyInvite(inviteId: string): Promise<{ success: bo
         `).get(userId);
 
         if (existingMembership) {
-            return { success: false, error: 'Already in a party' };
+            return { success: false, error: 'You are already in a party. Leave your current party first.' };
         }
 
         // Check party size
@@ -782,6 +795,12 @@ export async function acceptPartyInvite(inviteId: string): Promise<{ success: bo
             return { success: false, error: 'Party is full' };
         }
 
+        // Get current party members BEFORE adding new member (for notification)
+        const existingMembers = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(invite.party_id) as any[];
+        const partyMemberIds = existingMembers.map(m => m.user_id);
+
         // Accept invite
         db.prepare(`UPDATE party_invites SET status = 'accepted' WHERE id = ?`).run(inviteId);
 
@@ -792,7 +811,7 @@ export async function acceptPartyInvite(inviteId: string): Promise<{ success: bo
         `).run(generateId(), invite.party_id, userId, now());
 
         console.log(`[Social] ${userId} joined party ${invite.party_id}`);
-        return { success: true };
+        return { success: true, partyMemberIds, joinerName, joinerId: userId };
     } catch (error: any) {
         console.error('[Social] acceptPartyInvite error:', error);
         return { success: false, error: error.message };
@@ -825,13 +844,21 @@ export async function declinePartyInvite(inviteId: string): Promise<{ success: b
     }
 }
 
-export async function leaveParty(): Promise<{ success: boolean; error?: string }> {
+export async function leaveParty(): Promise<{ 
+    success: boolean; 
+    error?: string;
+    remainingMemberIds?: string[];
+    leaverName?: string;
+    leaverId?: string;
+    disbanded?: boolean;
+}> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
     }
 
     const userId = (session.user as any).id;
+    const leaverName = (session.user as any).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -856,11 +883,15 @@ export async function leaveParty(): Promise<{ success: boolean; error?: string }
         const remaining = db.prepare(`
             SELECT user_id FROM party_members WHERE party_id = ? ORDER BY joined_at ASC
         `).all(partyId) as any[];
+        
+        const remainingMemberIds = remaining.map(m => m.user_id);
+        let disbanded = false;
 
         if (remaining.length === 0) {
             // Delete empty party and its invites
             db.prepare(`DELETE FROM party_invites WHERE party_id = ?`).run(partyId);
             db.prepare(`DELETE FROM parties WHERE id = ?`).run(partyId);
+            disbanded = true;
             console.log(`[Social] Party ${partyId} disbanded`);
         } else if (isLeader) {
             // Transfer leadership to next member
@@ -870,7 +901,7 @@ export async function leaveParty(): Promise<{ success: boolean; error?: string }
         }
 
         console.log(`[Social] ${userId} left party ${partyId}`);
-        return { success: true };
+        return { success: true, remainingMemberIds, leaverName, leaverId: userId, disbanded };
     } catch (error: any) {
         console.error('[Social] leaveParty error:', error);
         return { success: false, error: error.message };

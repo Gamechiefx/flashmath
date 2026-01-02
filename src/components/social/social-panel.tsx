@@ -44,7 +44,15 @@ import {
     type PartyInvite,
 } from '@/lib/actions/social';
 import { useSession } from 'next-auth/react';
-import { usePresence, type PresenceStatus, notifyFriendRequest, notifyFriendRequestAccepted } from '@/lib/socket/use-presence';
+import { 
+    usePresence, 
+    type PresenceStatus, 
+    notifyFriendRequest, 
+    notifyFriendRequestAccepted,
+    notifyFriendRemoved,
+    notifyPartyJoined,
+    notifyPartyLeft,
+} from '@/lib/socket/use-presence';
 
 type OnlineStatus = 'online' | 'away' | 'invisible';
 
@@ -60,6 +68,8 @@ export function SocialPanel() {
         requestFriendStatuses,
         pendingFriendRequests: realtimeFriendRequests,
         pendingPartyInvites: realtimePartyInvites,
+        friendsChanged,
+        partyChanged,
     } = usePresence();
 
     // Data state
@@ -145,6 +155,22 @@ export function SocialPanel() {
             refreshStats();
         }
     }, [realtimeFriendRequests, realtimePartyInvites, loadData, refreshStats]);
+    
+    // Reload friends when friendsChanged updates (friend removed by someone else)
+    useEffect(() => {
+        if (friendsChanged > 0) {
+            loadData();
+            refreshStats();
+        }
+    }, [friendsChanged, loadData, refreshStats]);
+    
+    // Reload party when partyChanged updates (member joined/left)
+    useEffect(() => {
+        if (partyChanged > 0) {
+            loadData();
+            refreshStats();
+        }
+    }, [partyChanged, loadData, refreshStats]);
 
     // Load data when panel opens
     useEffect(() => {
@@ -220,7 +246,11 @@ export function SocialPanel() {
 
     const handleRemoveFriend = async (friendId: string) => {
         setProcessingId(friendId);
-        await removeFriend(friendId);
+        const result = await removeFriend(friendId);
+        if (result.success && result.removedUserId && result.removerName) {
+            // Notify the removed friend in real-time
+            notifyFriendRemoved(result.removedUserId, result.removerName);
+        }
         loadData();
         refreshStats();
         setProcessingId(null);
@@ -254,6 +284,10 @@ export function SocialPanel() {
         setProcessingId(inviteId);
         const result = await acceptPartyInvite(inviteId);
         if (result.success) {
+            // Notify existing party members that someone joined
+            if (result.partyMemberIds && result.joinerName && result.joinerId) {
+                notifyPartyJoined(result.partyMemberIds, result.joinerName, result.joinerId);
+            }
             loadData();
             refreshStats();
         }

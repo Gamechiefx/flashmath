@@ -183,7 +183,10 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             socket.off('presence:friends_status', handleFriendsStatus);
             socket.off('friend:request', handleFriendRequest);
             socket.off('friend:accepted', handleFriendAccepted);
+            socket.off('friend:removed', handleFriendRemoved);
             socket.off('party:invite', handlePartyInvite);
+            socket.off('party:member_joined', handlePartyMemberJoined);
+            socket.off('party:member_left', handlePartyMemberLeft);
         };
     }, [autoConnect, session]);
     
@@ -227,6 +230,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         pendingPartyInvites,
         clearFriendRequestNotification,
         clearPartyInviteNotification,
+        // Change flags for triggering data refresh
+        friendsChanged,
+        partyChanged,
     };
 }
 
@@ -253,6 +259,27 @@ export function notifyFriendRequestAccepted(senderId: string, accepterName: stri
 export function notifyPartyInvite(inviteeId: string, inviterName: string, partyId: string) {
     if (presenceSocket?.connected) {
         presenceSocket.emit('presence:notify_party_invite', { inviteeId, inviterName, partyId });
+    }
+}
+
+// Utility to notify when a friend is removed
+export function notifyFriendRemoved(removedUserId: string, removerName: string) {
+    if (presenceSocket?.connected) {
+        presenceSocket.emit('presence:notify_friend_removed', { removedUserId, removerName });
+    }
+}
+
+// Utility to notify when someone joins a party
+export function notifyPartyJoined(partyMemberIds: string[], joinerName: string, joinerId: string) {
+    if (presenceSocket?.connected) {
+        presenceSocket.emit('presence:notify_party_joined', { partyMemberIds, joinerName, joinerId });
+    }
+}
+
+// Utility to notify when someone leaves a party
+export function notifyPartyLeft(partyMemberIds: string[], leaverName: string, leaverId: string, disbanded: boolean = false) {
+    if (presenceSocket?.connected) {
+        presenceSocket.emit('presence:notify_party_left', { partyMemberIds, leaverName, leaverId, disbanded });
     }
 }
 
