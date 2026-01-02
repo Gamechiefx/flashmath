@@ -518,7 +518,25 @@ export async function saveMatchResult(params: {
         const { execute, getDatabase } = await import("@/lib/db");
         const db = getDatabase();
 
-        console.log(`[Match] saveMatchResult called: winnerId=${params.winnerId}, loserId=${params.loserId}`);
+        console.log(`[Match] saveMatchResult called: matchId=${params.matchId}, winnerId=${params.winnerId}, loserId=${params.loserId}`);
+
+        // Check if this match was already saved (prevents double-save when both players call this)
+        const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as any;
+        if (existingMatch) {
+            console.log(`[Match] Match ${params.matchId} already saved, returning cached result`);
+            // Return the already-saved result without updating stats again
+            const winnerStats = await getArenaStats(params.winnerId);
+            const loserStats = await getArenaStats(params.loserId);
+            return {
+                success: true,
+                winnerEloChange: existingMatch.winner_elo_change,
+                loserEloChange: existingMatch.loser_elo_change,
+                winnerCoinsEarned: 0, // Already awarded
+                loserCoinsEarned: 0,
+                winnerStats,
+                loserStats
+            };
+        }
 
         // Get current ELO and streak for both players using direct DB access
         // (queryOne doesn't support arbitrary SELECT column patterns)
@@ -635,8 +653,10 @@ export async function saveMatchResult(params: {
             params.loserId.startsWith('ai_bot_') || params.loserId.startsWith('ai-');
 
         if (!isAiMatch) {
+            // Use INSERT OR IGNORE to handle both players trying to save the same match
+            // First player's insert succeeds, second player's is silently ignored
             execute(
-                `INSERT INTO arena_matches (id, winner_id, loser_id, winner_score, loser_score, operation, mode, winner_elo_change, loser_elo_change, created_at)
+                `INSERT OR IGNORE INTO arena_matches (id, winner_id, loser_id, winner_score, loser_score, operation, mode, winner_elo_change, loser_elo_change, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
                 [params.matchId, params.winnerId, params.loserId, params.winnerScore, params.loserScore, params.operation, params.mode, winnerEloChange, loserEloChange]
             );
