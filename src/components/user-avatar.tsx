@@ -52,21 +52,26 @@ export function UserAvatar({ user, className, size = "md" }: UserAvatarProps) {
 
     const frameClass = getFrameClass(frameId);
 
+    const isHexFrame = frameClass === 'frame-gold-hex';
+
     return (
         <div className={cn("relative flex items-center justify-center shrink-0", sizeClasses[size], className)}>
+            {/* The Frame */}
+            {frameClass && (
+                <div className={cn(
+                    "absolute pointer-events-none",
+                    isHexFrame ? "inset-[-6px]" : "inset-[-4px]",
+                    frameClass
+                )} />
+            )}
+
             {/* The Avatar Circle */}
             <div className={cn(
-                "rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold border border-primary/30 z-10 w-full h-full overflow-hidden",
-                // Specific shape overrides for frames like Hexagon
-                frameClass === 'frame-gold-hex' && "rounded-none [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)]"
+                "relative rounded-full bg-zinc-900 flex items-center justify-center text-primary font-bold border border-primary/30 w-full h-full overflow-hidden",
+                isHexFrame && "rounded-none [clip-path:polygon(50%_0%,100%_25%,100%_75%,50%_100%,0%_75%,0%_25%)] border-none"
             )}>
                 {initial}
             </div>
-
-            {/* The Frame Overlay/Container */}
-            {frameClass && (
-                <div className={cn("absolute inset-[-4px] pointer-events-none z-20", frameClass)} />
-            )}
         </div>
     );
 }

@@ -5,7 +5,7 @@ import { generateProblemForSession, MathProblem } from "@/lib/math-tiers";
 import { BANDS, getBandForTier } from "@/lib/tier-system";
 import { updateTiers } from "@/lib/actions/game";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, ChevronRight, XCircle, Zap, Target } from "lucide-react";
+import { CheckCircle2, ChevronRight, XCircle, Zap, Target, X } from "lucide-react";
 
 interface PlacementTestProps {
     onComplete: () => void;
@@ -212,9 +212,18 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
                         </h2>
                         <p className="text-zinc-400 text-sm">Testing your starting level</p>
                     </div>
-                    <div className="text-right">
-                        <div className="text-xs uppercase tracking-widest text-zinc-500">Timer</div>
-                        <div className="text-2xl font-mono text-zinc-300">{timer.toFixed(1)}s</div>
+                    <div className="flex items-center gap-4">
+                        <div className="text-right">
+                            <div className="text-xs uppercase tracking-widest text-zinc-500">Timer</div>
+                            <div className="text-2xl font-mono text-zinc-300">{timer.toFixed(1)}s</div>
+                        </div>
+                        <button
+                            onClick={onComplete}
+                            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-500 hover:text-white"
+                            title="Skip placement test"
+                        >
+                            <X size={20} />
+                        </button>
                     </div>
                 </div>
 

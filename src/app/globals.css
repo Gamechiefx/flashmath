@@ -452,9 +452,33 @@ input[type="number"] {
 }
 
 .frame-gold-hex {
-  /* Hexagon border logic */
-  background: linear-gradient(to bottom, #fcd34d, #b45309);
+  /* Golden hexagon frame with shimmer */
+  background: linear-gradient(
+    90deg,
+    #b45309,
+    #d97706,
+    #f59e0b,
+    #fbbf24,
+    #fcd34d,
+    #fff7ed,
+    #fcd34d,
+    #fbbf24,
+    #f59e0b,
+    #d97706,
+    #b45309
+  );
+  background-size: 200% 100%;
   clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  animation: gold-shimmer 4s linear infinite;
+}
+
+@keyframes gold-shimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
 }
 
 .frame-nebula {

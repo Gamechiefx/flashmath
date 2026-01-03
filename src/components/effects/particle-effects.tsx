@@ -158,11 +158,15 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
 
     // 1. INPUT LISTENER EFFECT
     useEffect(() => {
-        const allowedPaths = ['/practice', '/placement', '/shop', '/locker', '/arena'];
+        // Only show particles in practice and arena matches
+        const allowedPaths = ['/practice', '/arena/match'];
         if (effectType === 'default' || !allowedPaths.some(p => pathname.includes(p))) return;
 
         const handleInput = (e: KeyboardEvent) => {
-            // Check keydown event for actual typing
+            // Only trigger particles for number keys, minus, and plus
+            const allowedKeys = /^[0-9\-+]$/;
+            if (!allowedKeys.test(e.key)) return;
+
             if (effectType.includes('sparks')) spawnFragments();
             if (effectType.includes('glitch')) spawnGlitch();
 
