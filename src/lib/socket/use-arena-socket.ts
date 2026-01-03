@@ -27,6 +27,38 @@ interface Question {
     operation: string;
 }
 
+/**
+ * Performance stats for ELO calculations
+ */
+interface PerformanceStats {
+    accuracy: number;       // 0-1 decimal
+    avgSpeedMs: number;     // Average answer time in ms
+    maxStreak: number;      // Max correct streak
+    aps: number;            // Arena Performance Score (0-1000)
+}
+
+/**
+ * Connection quality states for match integrity
+ */
+export type ConnectionState = 'GREEN' | 'YELLOW' | 'RED';
+
+interface ConnectionMetrics {
+    rtt: number;           // Round-trip time in ms
+    jitter: number;        // RTT variance
+    loss: number;          // Packet loss percentage
+    state: ConnectionState;
+    disconnects: number;
+}
+
+interface ConnectionStates {
+    [playerId: string]: ConnectionMetrics;
+}
+
+interface MatchIntegrityInfo {
+    matchIntegrity: ConnectionState;
+    playerIntegrity: Record<string, { state: ConnectionState; metrics: ConnectionMetrics }>;
+}
+
 interface UseArenaSocketOptions {
     matchId: string;
     userId: string;
@@ -36,10 +68,11 @@ interface UseArenaSocketOptions {
     onAnswerResult?: (data: { odUserId: string; odIsCorrect: boolean; odPlayers: Record<string, Player> }) => void;
     onNewQuestion?: (data: { question: Question }) => void;
     onTimeUpdate?: (data: { timeLeft: number }) => void;
-    onMatchEnd?: (data: { players: Record<string, Player> }) => void;
+    onMatchEnd?: (data: { players: Record<string, Player>; performanceStats?: Record<string, PerformanceStats> } & Partial<MatchIntegrityInfo>) => void;
     onPlayerJoined?: (data: { players: Record<string, Player>; playerId: string; playerName: string }) => void;
     onPlayerLeft?: (data: { odUserId: string }) => void;
     onPlayerForfeit?: (data: { odForfeitedUserId: string; odForfeitedUserName: string }) => void;
+    onConnectionStatesUpdate?: (states: ConnectionStates) => void;
     isAiMatch?: boolean;
 }
 
@@ -57,6 +90,7 @@ export function useArenaSocket({
     onPlayerJoined,
     onPlayerLeft,
     onPlayerForfeit,
+    onConnectionStatesUpdate,
 }: UseArenaSocketOptions) {
     const socketRef = useRef<Socket | null>(null);
     const [connected, setConnected] = useState(false);
@@ -67,6 +101,9 @@ export function useArenaSocket({
     const [matchEnded, setMatchEnded] = useState(false);
     const [waitingForOpponent, setWaitingForOpponent] = useState(true);
     const [opponentForfeited, setOpponentForfeited] = useState<string | null>(null);
+    const [performanceStats, setPerformanceStats] = useState<Record<string, PerformanceStats>>({});
+    const [connectionStates, setConnectionStates] = useState<ConnectionStates>({});
+    const [matchIntegrity, setMatchIntegrity] = useState<ConnectionState>('GREEN');
 
     useEffect(() => {
         // Connect to WebSocket server
@@ -165,10 +202,28 @@ export function useArenaSocket({
             onTimeUpdate?.(data);
         });
 
+        // Connection quality ping/pong
+        socket.on('connection_ping', (data: { t: number }) => {
+            // Respond immediately with pong
+            socket.emit('connection_pong', { t: data.t, matchId, userId });
+        });
+
+        // Connection states update from server
+        socket.on('connection_states', (data: { states: ConnectionStates }) => {
+            setConnectionStates(data.states);
+            onConnectionStatesUpdate?.(data.states);
+        });
+
         socket.on('match_end', (data) => {
             console.log('[Arena Socket] Match ended:', data);
             setMatchEnded(true);
             setPlayers(data.players);
+            if (data.performanceStats) {
+                setPerformanceStats(data.performanceStats);
+            }
+            if (data.matchIntegrity) {
+                setMatchIntegrity(data.matchIntegrity);
+            }
             onMatchEnd?.(data);
         });
 
@@ -221,6 +276,9 @@ export function useArenaSocket({
         matchEnded,
         waitingForOpponent,
         opponentForfeited,
+        performanceStats,
+        connectionStates,
+        matchIntegrity,
         submitAnswer,
         leaveMatch,
     };

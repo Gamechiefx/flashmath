@@ -39,6 +39,8 @@ interface QueueEntry {
     odEquippedTitle: string;
     odLevel: number;
     odJoinedAt: number;
+    odConfidence: number;       // Player confidence score (0-1)
+    odIsReturningPlayer: boolean; // Flagged as returning player
 }
 
 interface MatchResult {
@@ -48,14 +50,307 @@ interface MatchResult {
     odIsAiMatch: boolean;
 }
 
+// Import matchmaking constants from shared config
+import { MATCHMAKING, PLACEMENT } from '@/lib/arena/constants.js';
+
 const QUEUE_PREFIX = 'arena:queue:';
 const MATCH_PREFIX = 'arena:match:';
-const ELO_RANGE = 200; // Match with players ±200 ELO
-const TIER_RANGE = 20; // Match with players ±20 tiers (one band width)
-const AI_TIMEOUT_MS = 15000; // Start AI match after 15 seconds
+
+// Matchmaking thresholds from constants (100-tier system)
+const TIER_RANGE = MATCHMAKING.TIER_RANGE;                    // ±20 tiers (one band width)
+const INITIAL_ELO_RANGE = MATCHMAKING.INITIAL_ELO_RANGE;      // ±50 ELO to start
+const ELO_EXPANSION_RATE = MATCHMAKING.ELO_EXPANSION_RATE;    // +25 ELO per interval
+const ELO_EXPANSION_INTERVAL = MATCHMAKING.ELO_EXPANSION_INTERVAL / 1000; // 10 seconds (convert to seconds)
+const MAX_ELO_RANGE = MATCHMAKING.MAX_ELO_RANGE;              // ±300 ELO max
+const AI_TIMEOUT_MS = MATCHMAKING.AI_FALLBACK_TIMEOUT;        // 15 seconds for AI fallback
+
+// Confidence-based matchmaking (replaces hard gating)
+const CONFIDENCE_BRACKETS = MATCHMAKING.CONFIDENCE_BRACKETS;
+const CONFIDENCE_BRACKET_WEIGHT = MATCHMAKING.CONFIDENCE_BRACKET_WEIGHT;
+const HIGH_RANK_ELO_THRESHOLD = MATCHMAKING.HIGH_RANK_ELO_THRESHOLD;
+
+/**
+ * Get confidence bracket for a player
+ */
+function getConfidenceBracket(confidence: number): keyof typeof CONFIDENCE_BRACKETS {
+    if (confidence >= CONFIDENCE_BRACKETS.ESTABLISHED.min) return 'ESTABLISHED';
+    if (confidence >= CONFIDENCE_BRACKETS.DEVELOPING.min) return 'DEVELOPING';
+    return 'NEWCOMER';
+}
+
+// =============================================================================
+// MATCH REASONING - For FlashAuditor Match History
+// =============================================================================
+
+/**
+ * Match factor that contributed to the matchmaking decision
+ */
+export interface MatchFactor {
+    type: 'elo' | 'tier' | 'confidence' | 'returning' | 'queue_time' | 'ai_fallback';
+    label: string;
+    description: string;
+    impact: 'positive' | 'neutral' | 'negative';
+}
+
+/**
+ * Complete matchmaking reasoning for a match
+ */
+export interface MatchReasoning {
+    qualityScore: number;           // 0-100, how good the match was
+    eloDiff: number;                // ELO difference
+    tierDiff: number;               // Practice tier difference  
+    playerBracket: string;          // NEWCOMER | DEVELOPING | ESTABLISHED
+    opponentBracket: string;        // NEWCOMER | DEVELOPING | ESTABLISHED
+    factors: MatchFactor[];         // Array of contributing factors
+    isAiMatch: boolean;
+    queueTimeSeconds: number;
+}
+
+/**
+ * Get tier band name for display
+ */
+function getTierBandName(tier: number): string {
+    if (tier <= 20) return 'Foundation (1-20)';
+    if (tier <= 40) return 'Intermediate (21-40)';
+    if (tier <= 60) return 'Advanced (41-60)';
+    if (tier <= 80) return 'Expert (61-80)';
+    return 'Master (81-100)';
+}
+
+/**
+ * Generate match reasoning based on matchmaking parameters
+ * Internal sync version for use within this file
+ */
+function generateMatchReasoningSync(params: {
+    playerElo: number;
+    playerTier: number;
+    playerConfidence: number;
+    playerIsReturning: boolean;
+    opponentElo: number;
+    opponentTier: number;
+    opponentConfidence: number;
+    opponentIsReturning: boolean;
+    queueTimeSeconds: number;
+    isAiMatch: boolean;
+}): MatchReasoning {
+    const factors: MatchFactor[] = [];
+    let qualityScore = 100; // Start with perfect score, deduct for discrepancies
+
+    const eloDiff = Math.abs(params.playerElo - params.opponentElo);
+    const tierDiff = Math.abs(params.playerTier - params.opponentTier);
+    const playerBracket = getConfidenceBracket(params.playerConfidence);
+    const opponentBracket = getConfidenceBracket(params.opponentConfidence);
+
+    // --- ELO Factor ---
+    if (eloDiff <= 50) {
+        factors.push({
+            type: 'elo',
+            label: 'Close ELO',
+            description: `Only ${eloDiff} ELO difference - very balanced match`,
+            impact: 'positive'
+        });
+    } else if (eloDiff <= 150) {
+        factors.push({
+            type: 'elo',
+            label: 'Similar ELO',
+            description: `${eloDiff} ELO difference - fair match`,
+            impact: 'positive'
+        });
+        qualityScore -= Math.floor((eloDiff - 50) / 10); // Slight deduction
+    } else {
+        factors.push({
+            type: 'elo',
+            label: 'ELO Gap',
+            description: `${eloDiff} ELO difference - expanded range after ${params.queueTimeSeconds}s queue`,
+            impact: 'negative'
+        });
+        qualityScore -= Math.min(30, Math.floor((eloDiff - 150) / 5));
+    }
+
+    // --- Tier Factor ---
+    const playerTierBand = getTierBandName(params.playerTier);
+    const opponentTierBand = getTierBandName(params.opponentTier);
+    
+    if (playerTierBand === opponentTierBand) {
+        factors.push({
+            type: 'tier',
+            label: 'Same Tier Band',
+            description: `Both in ${playerTierBand}`,
+            impact: 'positive'
+        });
+    } else if (tierDiff <= 20) {
+        factors.push({
+            type: 'tier',
+            label: 'Adjacent Tiers',
+            description: `${tierDiff} tier difference (${playerTierBand} vs ${opponentTierBand})`,
+            impact: 'neutral'
+        });
+        qualityScore -= 5;
+    } else {
+        factors.push({
+            type: 'tier',
+            label: 'Tier Gap',
+            description: `${tierDiff} tier difference - wider search`,
+            impact: 'negative'
+        });
+        qualityScore -= 10;
+    }
+
+    // --- Confidence Bracket Factor ---
+    if (playerBracket === opponentBracket) {
+        factors.push({
+            type: 'confidence',
+            label: 'Experience Match',
+            description: `Both are ${playerBracket} players`,
+            impact: 'positive'
+        });
+    } else {
+        factors.push({
+            type: 'confidence',
+            label: 'Mixed Experience',
+            description: `${playerBracket} vs ${opponentBracket}`,
+            impact: 'neutral'
+        });
+        qualityScore -= 5;
+    }
+
+    // --- Returning Player Factor ---
+    if (params.playerIsReturning && params.opponentIsReturning) {
+        factors.push({
+            type: 'returning',
+            label: 'Returning Players',
+            description: 'Both players are recalibrating ranks',
+            impact: 'positive'
+        });
+    } else if (params.playerIsReturning || params.opponentIsReturning) {
+        factors.push({
+            type: 'returning',
+            label: 'Placement Match',
+            description: params.playerIsReturning 
+                ? 'You are in placement - ELO changes doubled'
+                : 'Opponent is in placement',
+            impact: 'neutral'
+        });
+    }
+
+    // --- Queue Time Factor ---
+    if (params.queueTimeSeconds <= 5) {
+        factors.push({
+            type: 'queue_time',
+            label: 'Instant Match',
+            description: `Found in ${params.queueTimeSeconds}s`,
+            impact: 'positive'
+        });
+    } else if (params.queueTimeSeconds <= 15) {
+        factors.push({
+            type: 'queue_time',
+            label: 'Quick Match',
+            description: `Found in ${params.queueTimeSeconds}s`,
+            impact: 'positive'
+        });
+    } else {
+        factors.push({
+            type: 'queue_time',
+            label: 'Extended Search',
+            description: `${params.queueTimeSeconds}s queue - widened search range`,
+            impact: 'neutral'
+        });
+    }
+
+    // --- AI Fallback Factor ---
+    if (params.isAiMatch) {
+        factors.push({
+            type: 'ai_fallback',
+            label: 'AI Opponent',
+            description: `No players available after ${params.queueTimeSeconds}s - matched with AI`,
+            impact: 'neutral'
+        });
+        qualityScore = Math.max(50, qualityScore - 20); // AI matches cap at lower quality
+    }
+
+    // Clamp quality score
+    qualityScore = Math.max(0, Math.min(100, qualityScore));
+
+    return {
+        qualityScore,
+        eloDiff,
+        tierDiff,
+        playerBracket,
+        opponentBracket,
+        factors,
+        isAiMatch: params.isAiMatch,
+        queueTimeSeconds: params.queueTimeSeconds
+    };
+}
+
+/**
+ * Generate match reasoning - Async export for server action compatibility
+ */
+export async function generateMatchReasoning(params: {
+    playerElo: number;
+    playerTier: number;
+    playerConfidence: number;
+    playerIsReturning: boolean;
+    opponentElo: number;
+    opponentTier: number;
+    opponentConfidence: number;
+    opponentIsReturning: boolean;
+    queueTimeSeconds: number;
+    isAiMatch: boolean;
+}): Promise<MatchReasoning> {
+    return generateMatchReasoningSync(params);
+}
+
+/**
+ * Calculate match quality score between two players
+ * Lower score = better match
+ */
+function calculateMatchScore(
+    player1: { elo: number; confidence: number; tier: number },
+    player2: { elo: number; confidence: number; tier: number }
+): number {
+    let score = 0;
+    
+    // ELO difference (primary factor)
+    score += Math.abs(player1.elo - player2.elo);
+    
+    // Confidence bracket mismatch penalty
+    const p1Bracket = getConfidenceBracket(player1.confidence);
+    const p2Bracket = getConfidenceBracket(player2.confidence);
+    if (p1Bracket !== p2Bracket) {
+        score += CONFIDENCE_BRACKET_WEIGHT;
+    }
+    
+    // High rank quality matching: stricter at Diamond+
+    if (player1.elo >= HIGH_RANK_ELO_THRESHOLD || player2.elo >= HIGH_RANK_ELO_THRESHOLD) {
+        // At high ranks, confidence mismatch is more penalized
+        if (p1Bracket !== p2Bracket) {
+            score += CONFIDENCE_BRACKET_WEIGHT; // Double penalty at high ranks
+        }
+    }
+    
+    return score;
+}
+
+/**
+ * Calculate the current ELO range based on queue time
+ * Starts at INITIAL_ELO_RANGE and expands every ELO_EXPANSION_INTERVAL seconds
+ */
+function calculateEloRange(queueTimeSeconds: number): number {
+    const expansions = Math.floor(queueTimeSeconds / ELO_EXPANSION_INTERVAL);
+    const expandedRange = INITIAL_ELO_RANGE + (expansions * ELO_EXPANSION_RATE);
+    return Math.min(expandedRange, MAX_ELO_RANGE);
+}
 
 /**
  * Join the matchmaking queue
+ * 
+ * Gate checks:
+ * 1. User must be authenticated
+ * 2. Confidence-based matchmaking: low confidence players matched together (no hard gate)
+ * 
+ * NEW: Instead of blocking low-confidence players, we now include confidence
+ * in the queue entry and use it for smarter matchmaking (pairing similar players).
  */
 export async function joinQueue(params: {
     mode: string;
@@ -65,7 +360,9 @@ export async function joinQueue(params: {
     equippedBanner: string;
     equippedTitle: string;
     level: number;
-}): Promise<{ success: boolean; queuePosition?: number; error?: string }> {
+    confidence?: number;  // Practice confidence score (0-1)
+    isReturningPlayer?: boolean; // Flagged as returning player
+}): Promise<{ success: boolean; queuePosition?: number; error?: string; confidenceBracket?: string }> {
     const session = await auth();
     if (!session?.user) {
         return { success: false, error: 'Unauthorized' };
@@ -73,6 +370,11 @@ export async function joinQueue(params: {
 
     const userId = (session.user as any).id;
     const userName = session.user.name || 'Player';
+    const confidence = params.confidence ?? 0.5; // Default to 50% if not provided
+    const confidenceBracket = getConfidenceBracket(confidence);
+
+    // Log confidence bracket for debugging
+    console.log(`[Matchmaking] ${userName} joining queue - confidence: ${(confidence * 100).toFixed(1)}% (${confidenceBracket})`);
 
     const redis = await getRedis();
     if (!redis) {
@@ -95,6 +397,8 @@ export async function joinQueue(params: {
         odEquippedTitle: params.equippedTitle,
         odLevel: params.level,
         odJoinedAt: Date.now(),
+        odConfidence: confidence,
+        odIsReturningPlayer: params.isReturningPlayer ?? false,
     };
 
     try {
@@ -119,9 +423,9 @@ export async function joinQueue(params: {
         // Get queue position
         const position = await redis.zrank(queueKey, JSON.stringify(entry));
 
-        console.log(`[Matchmaking] ${userName} joined queue for ${params.mode} ${params.operation} (ELO: ${params.elo})`);
+        console.log(`[Matchmaking] ${userName} joined queue for ${params.mode} ${params.operation} (ELO: ${params.elo}, Bracket: ${confidenceBracket})`);
 
-        return { success: true, queuePosition: position || 0 };
+        return { success: true, queuePosition: position || 0, confidenceBracket };
     } catch (error) {
         console.error('[Matchmaking] Join queue error:', error);
         return { success: false, error: 'Failed to join queue' };
@@ -166,6 +470,11 @@ export async function leaveQueue(params: {
 
 /**
  * Check for a match (poll-based for now)
+ * 
+ * NEW: Uses confidence-based matching to pair similar behavior players.
+ * - Low confidence players matched with other low confidence
+ * - High rank (Diamond+) gets stricter confidence matching
+ * - Returning players prefer matching with other returning players
  */
 export async function checkForMatch(params: {
     mode: string;
@@ -173,11 +482,14 @@ export async function checkForMatch(params: {
     elo: number;
     tier: number; // player's practice tier (1-100)
     queueTime: number; // seconds in queue
+    confidence?: number; // confidence score (0-1)
+    isReturningPlayer?: boolean; // returning player flag
 }): Promise<{
     matched: boolean;
     matchId?: string;
-    opponent?: { name: string; elo: number; tier: string; banner: string; title: string; level: number };
+    opponent?: { name: string; elo: number; tier: string; banner: string; title: string; level: number; confidenceBracket?: string };
     isAiMatch?: boolean;
+    matchReasoning?: MatchReasoning; // For FlashAuditor Match History
 }> {
     const session = await auth();
     if (!session?.user) {
@@ -218,92 +530,150 @@ export async function checkForMatch(params: {
             };
         }
 
-        // Find potential matches (players within ELO range)
-        const minElo = params.elo - ELO_RANGE;
-        const maxElo = params.elo + ELO_RANGE;
+        // Find potential matches (players within expanding ELO range)
+        // Range starts at ±50 and expands by +25 every 10 seconds, capped at ±300
+        const currentEloRange = calculateEloRange(params.queueTime);
+        const minElo = params.elo - currentEloRange;
+        const maxElo = params.elo + currentEloRange;
 
         const candidates = await redis.zrangebyscore(queueKey, minElo, maxElo);
 
-        console.log(`[Matchmaking] Checking for match: user=${userId}, elo=${params.elo}, tier=${params.tier}, range=${minElo}-${maxElo}, candidates=${candidates.length}`);
+        const playerConfidence = params.confidence ?? 0.5;
+        const playerBracket = getConfidenceBracket(playerConfidence);
+        const playerIsReturning = params.isReturningPlayer ?? false;
 
-        // Find a different player (not self) within tier range
+        console.log(`[Matchmaking] Checking for match: user=${userId}, elo=${params.elo}, tier=${params.tier}, confidence=${(playerConfidence * 100).toFixed(1)}% (${playerBracket}), eloRange=±${currentEloRange} (${minElo}-${maxElo}), queueTime=${params.queueTime}s, candidates=${candidates.length}`);
+
+        // Parse all candidates and score them for best match quality
+        interface ScoredCandidate {
+            entry: QueueEntry;
+            str: string;
+            score: number;
+        }
+        const scoredCandidates: ScoredCandidate[] = [];
+
         for (const candidateStr of candidates) {
             const candidate = JSON.parse(candidateStr) as QueueEntry;
-            console.log(`[Matchmaking] Candidate: ${candidate.odUserName} (${candidate.odUserId}), elo=${candidate.odElo}, tier=${candidate.odTier}`);
-            if (candidate.odUserId !== userId) {
-                // Check if candidate already has a pending match (prevents race condition)
-                const candidateMatch = await redis.get(`${MATCH_PREFIX}player:${candidate.odUserId}`);
-                if (candidateMatch) {
-                    console.log(`[Matchmaking] Skipping ${candidate.odUserName}: already in a match`);
-                    continue;
-                }
-
-                // Check tier is within range
-                const candidateTier = parseInt(candidate.odTier) || 0;
-                if (Math.abs(params.tier - candidateTier) > TIER_RANGE) {
-                    console.log(`[Matchmaking] Skipping ${candidate.odUserName}: tier ${candidateTier} outside range ±${TIER_RANGE} from ${params.tier}`);
-                    continue; // Skip - tier too different
-                }
-
-                // Use deterministic match creation: lower userId creates the match
-                // This prevents both players from creating separate matches simultaneously
-                if (userId > candidate.odUserId) {
-                    console.log(`[Matchmaking] Deferring to ${candidate.odUserName} (lower userId) to create match`);
-                    continue;
-                }
-
-                // Found a match! Create match and remove both from queue
-                const matchId = `match-${uuidv4()}`;
-
-                // Get current user's entry
-                const entries = await redis.zrange(queueKey, 0, -1);
-                let currentUserEntry: QueueEntry | null = null;
-                for (const entryStr of entries) {
-                    const entry = JSON.parse(entryStr) as QueueEntry;
-                    if (entry.odUserId === userId) {
-                        currentUserEntry = entry;
-                        await redis.zrem(queueKey, entryStr);
-                        break;
-                    }
-                }
-
-                if (!currentUserEntry) {
-                    continue; // User not in queue anymore
-                }
-
-                // Remove matched opponent from queue
-                await redis.zrem(queueKey, candidateStr);
-
-                // Create match entry
-                const match: MatchResult = {
-                    matchId,
-                    odPlayer1: currentUserEntry,
-                    odPlayer2: candidate,
-                    odIsAiMatch: false,
-                };
-
-                // Store match for both players (expires in 5 minutes)
-                const matchStr = JSON.stringify(match);
-                await redis.setex(`${MATCH_PREFIX}player:${currentUserEntry.odUserId}`, 300, matchStr);
-                await redis.setex(`${MATCH_PREFIX}player:${candidate.odUserId}`, 300, matchStr);
-                await redis.setex(`${MATCH_PREFIX}${matchId}`, 3600, matchStr); // Match data expires in 1 hour
-
-                console.log(`[Matchmaking] Match created: ${matchId} - ${currentUserEntry.odUserName} vs ${candidate.odUserName}`);
-
-                return {
-                    matched: true,
-                    matchId,
-                    opponent: {
-                        name: candidate.odUserName,
-                        elo: candidate.odElo,
-                        tier: candidate.odTier,
-                        banner: candidate.odEquippedBanner,
-                        title: candidate.odEquippedTitle,
-                        level: candidate.odLevel,
-                    },
-                    isAiMatch: false,
-                };
+            
+            if (candidate.odUserId === userId) continue; // Skip self
+            
+            // Check if candidate already has a pending match
+            const candidateMatch = await redis.get(`${MATCH_PREFIX}player:${candidate.odUserId}`);
+            if (candidateMatch) {
+                console.log(`[Matchmaking] Skipping ${candidate.odUserName}: already in a match`);
+                continue;
             }
+
+            // Check tier is within range
+            const candidateTier = parseInt(candidate.odTier) || 0;
+            if (Math.abs(params.tier - candidateTier) > TIER_RANGE) {
+                console.log(`[Matchmaking] Skipping ${candidate.odUserName}: tier ${candidateTier} outside range ±${TIER_RANGE} from ${params.tier}`);
+                continue;
+            }
+
+            // Use deterministic match creation: lower userId creates the match
+            if (userId > candidate.odUserId) {
+                console.log(`[Matchmaking] Deferring to ${candidate.odUserName} (lower userId) to create match`);
+                continue;
+            }
+
+            // Calculate match quality score
+            const candidateConfidence = candidate.odConfidence ?? 0.5;
+            let score = calculateMatchScore(
+                { elo: params.elo, confidence: playerConfidence, tier: params.tier },
+                { elo: candidate.odElo, confidence: candidateConfidence, tier: candidateTier }
+            );
+
+            // Bonus: Prefer matching returning players together
+            if (playerIsReturning && candidate.odIsReturningPlayer) {
+                score -= PLACEMENT.RETURNING_PLAYER_WEIGHT; // Lower score = better match
+            } else if (playerIsReturning !== candidate.odIsReturningPlayer) {
+                // Slight penalty for mixing returning with non-returning
+                score += 25;
+            }
+
+            scoredCandidates.push({
+                entry: candidate,
+                str: candidateStr,
+                score
+            });
+        }
+
+        // Sort by score (lower = better match)
+        scoredCandidates.sort((a, b) => a.score - b.score);
+
+        // Take the best match
+        for (const { entry: candidate, str: candidateStr, score } of scoredCandidates) {
+            const candidateBracket = getConfidenceBracket(candidate.odConfidence ?? 0.5);
+            console.log(`[Matchmaking] Best candidate: ${candidate.odUserName}, elo=${candidate.odElo}, bracket=${candidateBracket}, score=${score}`);
+
+            // Found a match! Create match and remove both from queue
+            const matchId = `match-${uuidv4()}`;
+
+            // Get current user's entry
+            const entries = await redis.zrange(queueKey, 0, -1);
+            let currentUserEntry: QueueEntry | null = null;
+            for (const entryStr of entries) {
+                const entry = JSON.parse(entryStr) as QueueEntry;
+                if (entry.odUserId === userId) {
+                    currentUserEntry = entry;
+                    await redis.zrem(queueKey, entryStr);
+                    break;
+                }
+            }
+
+            if (!currentUserEntry) {
+                continue; // User not in queue anymore
+            }
+
+            // Remove matched opponent from queue
+            await redis.zrem(queueKey, candidateStr);
+
+            // Create match entry
+            const match: MatchResult = {
+                matchId,
+                odPlayer1: currentUserEntry,
+                odPlayer2: candidate,
+                odIsAiMatch: false,
+            };
+
+            // Store match for both players (expires in 5 minutes)
+            const matchStr = JSON.stringify(match);
+            await redis.setex(`${MATCH_PREFIX}player:${currentUserEntry.odUserId}`, 300, matchStr);
+            await redis.setex(`${MATCH_PREFIX}player:${candidate.odUserId}`, 300, matchStr);
+            await redis.setex(`${MATCH_PREFIX}${matchId}`, 3600, matchStr); // Match data expires in 1 hour
+
+            console.log(`[Matchmaking] Match created: ${matchId} - ${currentUserEntry.odUserName} vs ${candidate.odUserName}`);
+
+            // Generate match reasoning for FlashAuditor Match History
+            const matchReasoning = generateMatchReasoningSync({
+                playerElo: params.elo,
+                playerTier: params.tier,
+                playerConfidence: playerConfidence,
+                playerIsReturning: playerIsReturning,
+                opponentElo: candidate.odElo,
+                opponentTier: parseInt(candidate.odTier) || 0,
+                opponentConfidence: candidate.odConfidence ?? 0.5,
+                opponentIsReturning: candidate.odIsReturningPlayer ?? false,
+                queueTimeSeconds: params.queueTime,
+                isAiMatch: false,
+            });
+
+            return {
+                matched: true,
+                matchId,
+                opponent: {
+                    name: candidate.odUserName,
+                    elo: candidate.odElo,
+                    tier: candidate.odTier,
+                    banner: candidate.odEquippedBanner,
+                    title: candidate.odEquippedTitle,
+                    level: candidate.odLevel,
+                    confidenceBracket: getConfidenceBracket(candidate.odConfidence ?? 0.5),
+                },
+                isAiMatch: false,
+                matchReasoning,
+            };
         }
 
         // No match found - check if should start AI match
@@ -325,7 +695,7 @@ export async function checkForMatch(params: {
 /**
  * Create an AI match when no players are available
  */
-async function createAiMatch(userId: string, userName: string, params: { mode: string; operation: string; elo: number; tier: number }) {
+async function createAiMatch(userId: string, userName: string, params: { mode: string; operation: string; elo: number; tier: number; queueTime?: number; confidence?: number; isReturningPlayer?: boolean }) {
     const matchId = `match-${uuidv4()}`;
 
     // Generate AI opponent stats (slightly varied from player)
@@ -351,7 +721,9 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             odEquippedBanner: 'default',
             odEquippedTitle: 'default',
             odLevel: 1,
-            odJoinedAt: Date.now()
+            odJoinedAt: Date.now(),
+            odConfidence: params.confidence ?? 0.5,
+            odIsReturningPlayer: params.isReturningPlayer ?? false,
         },
         odPlayer2: {
             odUserId: 'ai-' + matchId, // Unique ID for AI
@@ -363,7 +735,9 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             odEquippedBanner: aiBanners[Math.floor(Math.random() * aiBanners.length)],
             odEquippedTitle: aiTitles[Math.floor(Math.random() * aiTitles.length)],
             odLevel: Math.floor(Math.random() * 50) + 10,
-            odJoinedAt: Date.now()
+            odJoinedAt: Date.now(),
+            odConfidence: 0.7, // AI has established confidence
+            odIsReturningPlayer: false,
         },
         odIsAiMatch: true,
     };
@@ -373,6 +747,21 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
     if (redis) {
         await redis.setex(`${MATCH_PREFIX}${matchId}`, 3600, JSON.stringify(match));
     }
+
+    // Generate match reasoning for FlashAuditor Match History
+    const queueTimeSeconds = params.queueTime ?? 15;
+    const matchReasoning = generateMatchReasoningSync({
+        playerElo: params.elo,
+        playerTier: params.tier,
+        playerConfidence: params.confidence ?? 0.5,
+        playerIsReturning: params.isReturningPlayer ?? false,
+        opponentElo: params.elo + aiEloVariance,
+        opponentTier: aiTier,
+        opponentConfidence: 0.7,
+        opponentIsReturning: false,
+        queueTimeSeconds,
+        isAiMatch: true,
+    });
 
     return {
         matched: true,
@@ -386,6 +775,7 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             level: match.odPlayer2?.odLevel || 1,
         },
         isAiMatch: true,
+        matchReasoning,
     };
 }
 
@@ -442,15 +832,201 @@ export async function clearMatch(matchId: string): Promise<{ success: boolean }>
 }
 
 /**
- * Calculate ELO change with performance bonuses
+ * Performance metrics for ELO calculation
+ */
+interface PerformanceMetrics {
+    aps: number;           // Arena Performance Score (0-1000)
+    accuracy: number;      // Accuracy as decimal (0-1)
+    avgSpeedMs: number;    // Average answer time in milliseconds
+    maxStreak: number;     // Maximum correct answer streak
+}
+
+/**
+ * APS tier configuration for K-factor scaling
+ */
+const APS_TIERS = {
+    ELITE:    { min: 800, winnerMult: 1.25, loserMult: 0.75 },
+    HIGH:     { min: 600, winnerMult: 1.10, loserMult: 0.90 },
+    BASELINE: { min: 400, winnerMult: 1.00, loserMult: 1.00 },
+    LOW:      { min: 200, winnerMult: 0.90, loserMult: 1.10 },
+    POOR:     { min: 0,   winnerMult: 0.75, loserMult: 1.25 }
+};
+
+/**
+ * Threshold bonuses for performance milestones
+ */
+const PERFORMANCE_BONUSES = {
+    ACCURACY_PERFECT: { threshold: 1.00, bonus: 8 },
+    ACCURACY_HIGH:    { threshold: 0.90, bonus: 5 },
+    ACCURACY_GOOD:    { threshold: 0.80, bonus: 2 },
+    SPEED_DEMON:      { threshold: 2000, bonus: 5 },
+    SPEED_QUICK:      { threshold: 3000, bonus: 2 },
+    STREAK_HOT:       { threshold: 10, bonus: 5 },
+    STREAK_SOLID:     { threshold: 5,  bonus: 2 }
+};
+
+/**
+ * Loser protection thresholds
+ */
+const LOSER_PROTECTION = {
+    HIGH_APS: { threshold: 700, multiplier: 0.75 },
+    MID_APS:  { threshold: 500, multiplier: 0.85 }
+};
+
+const MAX_WINNER_BONUS = 10;
+const MAX_LOSER_BONUS = 5;
+
+/**
+ * Get APS tier multiplier based on APS score
+ */
+function getApsTierMultiplier(aps: number, isWinner: boolean): number {
+    if (aps >= APS_TIERS.ELITE.min) {
+        return isWinner ? APS_TIERS.ELITE.winnerMult : APS_TIERS.ELITE.loserMult;
+    } else if (aps >= APS_TIERS.HIGH.min) {
+        return isWinner ? APS_TIERS.HIGH.winnerMult : APS_TIERS.HIGH.loserMult;
+    } else if (aps >= APS_TIERS.BASELINE.min) {
+        return isWinner ? APS_TIERS.BASELINE.winnerMult : APS_TIERS.BASELINE.loserMult;
+    } else if (aps >= APS_TIERS.LOW.min) {
+        return isWinner ? APS_TIERS.LOW.winnerMult : APS_TIERS.LOW.loserMult;
+    } else {
+        return isWinner ? APS_TIERS.POOR.winnerMult : APS_TIERS.POOR.loserMult;
+    }
+}
+
+/**
+ * Calculate threshold bonuses based on performance metrics
+ */
+function calculateThresholdBonuses(metrics: PerformanceMetrics): number {
+    let totalBonus = 0;
+
+    // Accuracy bonus (highest applicable)
+    if (metrics.accuracy >= PERFORMANCE_BONUSES.ACCURACY_PERFECT.threshold) {
+        totalBonus += PERFORMANCE_BONUSES.ACCURACY_PERFECT.bonus;
+    } else if (metrics.accuracy >= PERFORMANCE_BONUSES.ACCURACY_HIGH.threshold) {
+        totalBonus += PERFORMANCE_BONUSES.ACCURACY_HIGH.bonus;
+    } else if (metrics.accuracy >= PERFORMANCE_BONUSES.ACCURACY_GOOD.threshold) {
+        totalBonus += PERFORMANCE_BONUSES.ACCURACY_GOOD.bonus;
+    }
+
+    // Speed bonus (highest applicable, lower is better)
+    if (metrics.avgSpeedMs > 0 && metrics.avgSpeedMs < PERFORMANCE_BONUSES.SPEED_DEMON.threshold) {
+        totalBonus += PERFORMANCE_BONUSES.SPEED_DEMON.bonus;
+    } else if (metrics.avgSpeedMs > 0 && metrics.avgSpeedMs < PERFORMANCE_BONUSES.SPEED_QUICK.threshold) {
+        totalBonus += PERFORMANCE_BONUSES.SPEED_QUICK.bonus;
+    }
+
+    // Streak bonus (highest applicable)
+    if (metrics.maxStreak >= PERFORMANCE_BONUSES.STREAK_HOT.threshold) {
+        totalBonus += PERFORMANCE_BONUSES.STREAK_HOT.bonus;
+    } else if (metrics.maxStreak >= PERFORMANCE_BONUSES.STREAK_SOLID.threshold) {
+        totalBonus += PERFORMANCE_BONUSES.STREAK_SOLID.bonus;
+    }
+
+    return totalBonus;
+}
+
+/**
+ * Get loser protection multiplier based on APS
+ */
+function getLoserProtectionMultiplier(aps: number): number {
+    if (aps >= LOSER_PROTECTION.HIGH_APS.threshold) {
+        return LOSER_PROTECTION.HIGH_APS.multiplier;
+    } else if (aps >= LOSER_PROTECTION.MID_APS.threshold) {
+        return LOSER_PROTECTION.MID_APS.multiplier;
+    }
+    return 1.0; // No protection
+}
+
+/**
+ * Calculate ELO change with APS scaling and threshold bonuses
+ * 
+ * Formula:
+ * 1. Calculate base ELO change using standard Elo formula
+ * 2. Scale by APS tier multiplier (higher APS = better multiplier)
+ * 3. Apply loser protection for high-performing losers
+ * 4. Add threshold bonuses for accuracy, speed, and streak milestones
+ * 5. Cap bonuses to prevent runaway gains
+ * 
  * @param playerElo - Current player ELO
- * @param opponentElo - Opponent's ELO
+ * @param opponentElo - Opponent's ELO  
  * @param won - Whether the player won
- * @param performanceBonus - Bonus/penalty based on performance (0-1 scale, 0.5 = neutral)
- * @param streakBonus - Bonus from win streak (0+)
+ * @param metrics - Performance metrics (APS, accuracy, speed, streak)
  * @param kFactor - Base K-factor (default 32)
  */
 function calculateEloChange(
+    playerElo: number,
+    opponentElo: number,
+    won: boolean,
+    metrics?: PerformanceMetrics,
+    kFactor: number = 32
+): { eloChange: number; bonusBreakdown: { aps: number; accuracy: number; speed: number; streak: number } } {
+    // Standard Elo expected score calculation
+    const expectedScore = 1 / (1 + Math.pow(10, (opponentElo - playerElo) / 400));
+    const actualScore = won ? 1 : 0;
+
+    // Base ELO change
+    let baseChange = kFactor * (actualScore - expectedScore);
+
+    // Default breakdown (no bonuses)
+    let bonusBreakdown = { aps: 0, accuracy: 0, speed: 0, streak: 0 };
+
+    // If no metrics provided, return base change
+    if (!metrics) {
+        return { eloChange: Math.round(baseChange), bonusBreakdown };
+    }
+
+    // Step 1: Apply APS tier multiplier
+    const apsTierMultiplier = getApsTierMultiplier(metrics.aps, won);
+    const apsScaledChange = baseChange * apsTierMultiplier;
+    bonusBreakdown.aps = Math.round(apsScaledChange - baseChange);
+
+    // Step 2: Apply loser protection if applicable
+    let protectedChange = apsScaledChange;
+    if (!won) {
+        const protectionMultiplier = getLoserProtectionMultiplier(metrics.aps);
+        protectedChange = apsScaledChange * protectionMultiplier;
+    }
+
+    // Step 3: Calculate threshold bonuses
+    const thresholdBonus = calculateThresholdBonuses(metrics);
+
+    // Determine individual bonus contributions for breakdown
+    if (metrics.accuracy >= PERFORMANCE_BONUSES.ACCURACY_PERFECT.threshold) {
+        bonusBreakdown.accuracy = PERFORMANCE_BONUSES.ACCURACY_PERFECT.bonus;
+    } else if (metrics.accuracy >= PERFORMANCE_BONUSES.ACCURACY_HIGH.threshold) {
+        bonusBreakdown.accuracy = PERFORMANCE_BONUSES.ACCURACY_HIGH.bonus;
+    } else if (metrics.accuracy >= PERFORMANCE_BONUSES.ACCURACY_GOOD.threshold) {
+        bonusBreakdown.accuracy = PERFORMANCE_BONUSES.ACCURACY_GOOD.bonus;
+    }
+
+    if (metrics.avgSpeedMs > 0 && metrics.avgSpeedMs < PERFORMANCE_BONUSES.SPEED_DEMON.threshold) {
+        bonusBreakdown.speed = PERFORMANCE_BONUSES.SPEED_DEMON.bonus;
+    } else if (metrics.avgSpeedMs > 0 && metrics.avgSpeedMs < PERFORMANCE_BONUSES.SPEED_QUICK.threshold) {
+        bonusBreakdown.speed = PERFORMANCE_BONUSES.SPEED_QUICK.bonus;
+    }
+
+    if (metrics.maxStreak >= PERFORMANCE_BONUSES.STREAK_HOT.threshold) {
+        bonusBreakdown.streak = PERFORMANCE_BONUSES.STREAK_HOT.bonus;
+    } else if (metrics.maxStreak >= PERFORMANCE_BONUSES.STREAK_SOLID.threshold) {
+        bonusBreakdown.streak = PERFORMANCE_BONUSES.STREAK_SOLID.bonus;
+    }
+
+    // Step 4: Cap bonuses
+    const maxBonus = won ? MAX_WINNER_BONUS : MAX_LOSER_BONUS;
+    const cappedBonus = Math.min(thresholdBonus, maxBonus);
+
+    // For losers, bonuses reduce the loss (add to the negative change)
+    // For winners, bonuses add to the gain
+    const finalChange = Math.round(protectedChange) + cappedBonus;
+
+    return { eloChange: finalChange, bonusBreakdown };
+}
+
+/**
+ * Legacy wrapper for backward compatibility
+ * Converts old-style parameters to new format
+ */
+function calculateEloChangeLegacy(
     playerElo: number,
     opponentElo: number,
     won: boolean,
@@ -458,23 +1034,16 @@ function calculateEloChange(
     streakBonus: number = 0,
     kFactor: number = 32
 ): number {
-    const expectedScore = 1 / (1 + Math.pow(10, (opponentElo - playerElo) / 400));
-    const actualScore = won ? 1 : 0;
-
-    // Base ELO change
-    let baseChange = kFactor * (actualScore - expectedScore);
-
-    // Apply performance multiplier (0.8x to 1.5x based on how well you performed)
-    // performanceBonus ranges from 0 (terrible) to 1 (dominant)
-    const performanceMultiplier = 0.8 + (performanceBonus * 0.7);
-    baseChange *= performanceMultiplier;
-
-    // Add streak bonus for winners (up to +5 for 5+ streak)
-    if (won && streakBonus > 0) {
-        baseChange += Math.min(streakBonus, 5);
-    }
-
-    return Math.round(baseChange);
+    // Convert legacy parameters to approximate metrics
+    const metrics: PerformanceMetrics = {
+        aps: Math.round(performanceBonus * 1000),  // Scale 0-1 to 0-1000
+        accuracy: performanceBonus,
+        avgSpeedMs: 3500,  // Assume average speed
+        maxStreak: Math.min(streakBonus, 10)
+    };
+    
+    const result = calculateEloChange(playerElo, opponentElo, won, metrics, kFactor);
+    return result.eloChange;
 }
 
 /**
@@ -509,12 +1078,30 @@ function calculateAverageElo(elos: Record<string, number>): number {
 }
 
 /**
+ * Performance stats passed from game loop for ELO calculations
+ */
+interface MatchPerformanceStats {
+    accuracy: number;       // 0-1 decimal
+    avgSpeedMs: number;     // Average answer time in ms
+    maxStreak: number;      // Max correct streak
+    aps: number;            // Arena Performance Score (0-1000)
+}
+
+// Import decay system functions
+import { updateArenaActivity, recordPlacementMatch, getPlacementProgress } from '@/lib/arena/decay';
+
+/**
  * Save match result and update ELO + Award Coins
  * 
  * New ELO Structure:
  * - Duel (1v1): Per-operation ELO (addition, subtraction, multiplication, division)
  * - Team (2v2-5v5): Per-mode + per-operation ELO
  * - Mixed operation matches do NOT affect ELO (unranked)
+ * 
+ * Performance-based ELO:
+ * - APS scales K-factor (higher APS = better multiplier)
+ * - Threshold bonuses for accuracy, speed, and streak milestones
+ * - Loser protection for high-performing losers
  */
 export async function saveMatchResult(params: {
     matchId: string;
@@ -526,6 +1113,15 @@ export async function saveMatchResult(params: {
     loserQuestionsAnswered?: number;
     operation: string;
     mode: string;
+    // Performance stats for speed/accuracy ELO integration
+    winnerPerformance?: MatchPerformanceStats;
+    loserPerformance?: MatchPerformanceStats;
+    // Match reasoning for FlashAuditor Match History
+    matchReasoning?: MatchReasoning;
+    // Match integrity state for connection quality
+    matchIntegrity?: 'GREEN' | 'YELLOW' | 'RED';
+    // Draw handling
+    isDraw?: boolean;
 }): Promise<{
     success: boolean;
     winnerEloChange?: number;
@@ -533,23 +1129,53 @@ export async function saveMatchResult(params: {
     winnerCoinsEarned?: number;
     loserCoinsEarned?: number;
     isRanked?: boolean;
+    isVoid?: boolean;
+    isDraw?: boolean;
+    voidReason?: string;
     error?: string
 }> {
+    console.log(`[Match] saveMatchResult CALLED: matchId=${params.matchId}, winner=${params.winnerId}, loser=${params.loserId}, winnerScore=${params.winnerScore}, loserScore=${params.loserScore}, operation=${params.operation}, mode=${params.mode}, isDraw=${params.isDraw}, matchIntegrity=${params.matchIntegrity}`);
+    
     const session = await auth();
     if (!session?.user) {
+        console.log('[Match] saveMatchResult REJECTED: Unauthorized');
         return { success: false, error: 'Unauthorized' };
     }
 
     const userId = (session.user as any).id;
+    console.log(`[Match] saveMatchResult userId=${userId}`);
 
     // Only allow match participants to save results
     if (userId !== params.winnerId && userId !== params.loserId) {
+        console.log(`[Match] saveMatchResult REJECTED: Not a participant (userId=${userId}, winner=${params.winnerId}, loser=${params.loserId})`);
         return { success: false, error: 'Not a match participant' };
     }
 
     // Determine if this is a ranked match (not mixed operation)
     const isRanked = isRankedOperation(params.operation);
     const isDuel = params.mode === '1v1';
+
+    // Update arena activity timestamps for both human players
+    const isWinnerHumanEarly = !params.winnerId.startsWith('ai-') && !params.winnerId.startsWith('ai_bot_');
+    const isLoserHumanEarly = !params.loserId.startsWith('ai-') && !params.loserId.startsWith('ai_bot_');
+    
+    if (isWinnerHumanEarly) {
+        await updateArenaActivity(params.winnerId);
+    }
+    if (isLoserHumanEarly) {
+        await updateArenaActivity(params.loserId);
+    }
+
+    // Check if players are in placement mode (returning players)
+    let winnerPlacement = { inPlacementMode: false, eloMultiplier: 1.0 };
+    let loserPlacement = { inPlacementMode: false, eloMultiplier: 1.0 };
+    
+    if (isWinnerHumanEarly) {
+        winnerPlacement = await getPlacementProgress(params.winnerId);
+    }
+    if (isLoserHumanEarly) {
+        loserPlacement = await getPlacementProgress(params.loserId);
+    }
 
     try {
         const { execute, getDatabase } = await import("@/lib/db");
@@ -561,6 +1187,12 @@ export async function saveMatchResult(params: {
         const redis = await getRedis();
         const saveLockKey = `arena:save_lock:${params.matchId}`;
 
+        // Calculate coin rewards upfront (needed for duplicate responses too)
+        const winnerCorrectAnswers = Math.floor(params.winnerScore / 100);
+        const loserCorrectAnswers = Math.floor(params.loserScore / 100);
+        const winnerCoinsEarned = (winnerCorrectAnswers * 2) + 10;
+        const loserCoinsEarned = loserCorrectAnswers * 2;
+        
         if (redis) {
             const lockAcquired = await redis.setnx(saveLockKey, userId);
             if (!lockAcquired) {
@@ -576,8 +1208,8 @@ export async function saveMatchResult(params: {
                         success: true,
                         winnerEloChange: existingMatch.winner_elo_change,
                         loserEloChange: existingMatch.loser_elo_change,
-                        winnerCoinsEarned: 0,
-                        loserCoinsEarned: 0,
+                        winnerCoinsEarned,
+                        loserCoinsEarned,
                         isRanked
                     };
                 }
@@ -597,17 +1229,13 @@ export async function saveMatchResult(params: {
                 success: true,
                 winnerEloChange: existingMatch.winner_elo_change,
                 loserEloChange: existingMatch.loser_elo_change,
-                winnerCoinsEarned: 0,
-                loserCoinsEarned: 0,
+                winnerCoinsEarned,
+                loserCoinsEarned,
                 isRanked
             };
         }
 
-        // Calculate coin rewards (awarded regardless of ranked status)
-        const winnerCorrectAnswers = Math.floor(params.winnerScore / 100);
-        const loserCorrectAnswers = Math.floor(params.loserScore / 100);
-        const winnerCoinsEarned = (winnerCorrectAnswers * 2) + 10;
-        const loserCoinsEarned = loserCorrectAnswers * 2;
+        console.log(`[Match] Coin calculation: winnerCorrect=${winnerCorrectAnswers}, loserCorrect=${loserCorrectAnswers}, winnerCoins=${winnerCoinsEarned}, loserCoins=${loserCoinsEarned}`);
 
         let winnerEloChange = 0;
         let loserEloChange = 0;
@@ -635,14 +1263,120 @@ export async function saveMatchResult(params: {
                 loserCurrentElo = loserData?.[eloColumn] || 300;
             }
 
-            // Calculate performance bonus
-            const totalScore = params.winnerScore + params.loserScore;
-            const winnerPerformance = totalScore > 0 ? params.winnerScore / totalScore : 0.5;
-            const loserPerformance = totalScore > 0 ? params.loserScore / totalScore : 0.5;
+            // Build performance metrics for new ELO calculation
+            // If performance stats provided, use them; otherwise fallback to legacy estimation
+            let winnerMetrics: PerformanceMetrics | undefined;
+            let loserMetrics: PerformanceMetrics | undefined;
 
-            // Calculate ELO changes
-            winnerEloChange = calculateEloChange(winnerCurrentElo, loserCurrentElo, true, winnerPerformance, winnerStreak);
-            loserEloChange = calculateEloChange(loserCurrentElo, winnerCurrentElo, false, loserPerformance, 0);
+            if (params.winnerPerformance) {
+                winnerMetrics = {
+                    aps: params.winnerPerformance.aps,
+                    accuracy: params.winnerPerformance.accuracy,
+                    avgSpeedMs: params.winnerPerformance.avgSpeedMs,
+                    maxStreak: params.winnerPerformance.maxStreak
+                };
+            } else {
+                // Legacy fallback: estimate from score ratio
+                const totalScore = params.winnerScore + params.loserScore;
+                const winnerScoreRatio = totalScore > 0 ? params.winnerScore / totalScore : 0.5;
+                winnerMetrics = {
+                    aps: Math.round(winnerScoreRatio * 600 + 200), // Estimate 200-800 range
+                    accuracy: winnerScoreRatio,
+                    avgSpeedMs: 3000,
+                    maxStreak: Math.max(winnerStreak, 3)
+                };
+            }
+
+            if (params.loserPerformance) {
+                loserMetrics = {
+                    aps: params.loserPerformance.aps,
+                    accuracy: params.loserPerformance.accuracy,
+                    avgSpeedMs: params.loserPerformance.avgSpeedMs,
+                    maxStreak: params.loserPerformance.maxStreak
+                };
+            } else {
+                // Legacy fallback
+                const totalScore = params.winnerScore + params.loserScore;
+                const loserScoreRatio = totalScore > 0 ? params.loserScore / totalScore : 0.5;
+                loserMetrics = {
+                    aps: Math.round(loserScoreRatio * 600 + 200),
+                    accuracy: loserScoreRatio,
+                    avgSpeedMs: 3500,
+                    maxStreak: 2
+                };
+            }
+
+            // Calculate ELO changes with performance-based bonuses
+            // Apply placement multiplier for returning players (doubled K-factor)
+            const winnerKFactor = 32 * winnerPlacement.eloMultiplier;
+            const loserKFactor = 32 * loserPlacement.eloMultiplier;
+            
+            const winnerResult = calculateEloChange(winnerCurrentElo, loserCurrentElo, true, winnerMetrics, winnerKFactor);
+            const loserResult = calculateEloChange(loserCurrentElo, winnerCurrentElo, false, loserMetrics, loserKFactor);
+            
+            winnerEloChange = winnerResult.eloChange;
+            loserEloChange = loserResult.eloChange;
+            
+            // BOT MATCH ELO CAP: No ELO gain from bots after tier 20
+            const isBotMatch = !isWinnerHuman || !isLoserHuman;
+            const BOT_ELO_TIER_CAP = 20;
+            
+            if (isBotMatch) {
+                // Get the human player's tier for this operation
+                const humanPlayerId = isWinnerHuman ? params.winnerId : params.loserId;
+                const humanPlayerData = db.prepare(`SELECT math_tiers FROM users WHERE id = ?`).get(humanPlayerId) as { math_tiers: string } | undefined;
+                
+                let playerTier = 0;
+                if (humanPlayerData?.math_tiers) {
+                    try {
+                        const tiers = JSON.parse(humanPlayerData.math_tiers);
+                        playerTier = tiers[params.operation] || 0;
+                    } catch (e) { /* ignore parse errors */ }
+                }
+                
+                if (playerTier > BOT_ELO_TIER_CAP) {
+                    console.log(`[Match] Bot match ELO capped: Player tier ${playerTier} > ${BOT_ELO_TIER_CAP}, no ELO change`);
+                    // Zero out ELO changes for bot matches above tier cap
+                    if (isWinnerHuman) {
+                        winnerEloChange = 0;
+                    }
+                    if (isLoserHuman) {
+                        loserEloChange = 0;
+                    }
+                } else {
+                    console.log(`[Match] Bot match ELO allowed: Player tier ${playerTier} <= ${BOT_ELO_TIER_CAP}`);
+                }
+            }
+            
+            // MATCH INTEGRITY: Void ELO for YELLOW/RED matches
+            const integrity = params.matchIntegrity || 'GREEN';
+            console.log(`[Match] Integrity check: matchIntegrity=${integrity}, isDraw=${params.isDraw}, winnerScore=${params.winnerScore}, loserScore=${params.loserScore}`);
+            
+            if (integrity === 'YELLOW' || integrity === 'RED') {
+                console.log(`[Match] VOIDING ELO due to ${integrity} integrity state`);
+                winnerEloChange = 0;
+                loserEloChange = 0;
+            }
+            
+            // DRAW HANDLING: No ELO change for draws
+            if (params.isDraw) {
+                console.log(`[Match] Draw detected - no ELO change for either player`);
+                winnerEloChange = 0;
+                loserEloChange = 0;
+            }
+            
+            console.log(`[Match] Final ELO changes: winner=${winnerEloChange}, loser=${loserEloChange}`);
+            
+            // Log placement multipliers if active
+            if (winnerPlacement.inPlacementMode) {
+                console.log(`[Match] Winner in placement mode: K=${winnerKFactor} (${winnerPlacement.eloMultiplier}x)`);
+            }
+            if (loserPlacement.inPlacementMode) {
+                console.log(`[Match] Loser in placement mode: K=${loserKFactor} (${loserPlacement.eloMultiplier}x)`);
+            }
+
+            console.log(`[Match] ELO calc - Winner: base=${winnerResult.eloChange} (acc:${winnerResult.bonusBreakdown.accuracy}, spd:${winnerResult.bonusBreakdown.speed}, str:${winnerResult.bonusBreakdown.streak})`);
+            console.log(`[Match] ELO calc - Loser: base=${loserResult.eloChange} (acc:${loserResult.bonusBreakdown.accuracy}, spd:${loserResult.bonusBreakdown.speed}, str:${loserResult.bonusBreakdown.streak})`);
 
             const newWinnerElo = Math.max(100, winnerCurrentElo + winnerEloChange);
             const newLoserElo = Math.max(100, loserCurrentElo + loserEloChange);
@@ -705,7 +1439,7 @@ export async function saveMatchResult(params: {
                     WHERE id = ?
                 `).run(newWinnerElo, newModeAvg, winnerStreak, newBestStreak, newCoins, params.winnerId);
 
-                console.log(`[Match] Winner updated: ${eloColumn}=${newWinnerElo}, avg=${newModeAvg}, streak=${winnerStreak}`);
+                console.log(`[Match] Winner updated: ${eloColumn}=${newWinnerElo}, avg=${newModeAvg}, streak=${winnerStreak}, coins=${newCoins} (+${winnerCoinsEarned})`);
             }
 
             // Update loser
@@ -759,7 +1493,16 @@ export async function saveMatchResult(params: {
                     WHERE id = ?
                 `).run(newLoserElo, newModeAvg, newCoins, params.loserId);
 
-                console.log(`[Match] Loser updated: ${eloColumn}=${newLoserElo}, avg=${newModeAvg}`);
+                console.log(`[Match] Loser updated: ${eloColumn}=${newLoserElo}, avg=${newModeAvg}, coins=${newCoins} (+${loserCoinsEarned})`);
+            }
+            // Record placement match progress for returning players
+            if (winnerPlacement.inPlacementMode) {
+                const progress = await recordPlacementMatch(params.winnerId);
+                console.log(`[Match] Winner placement progress: ${progress.matchesRemaining} matches remaining`);
+            }
+            if (loserPlacement.inPlacementMode) {
+                const progress = await recordPlacementMatch(params.loserId);
+                console.log(`[Match] Loser placement progress: ${progress.matchesRemaining} matches remaining`);
             }
         } else {
             // Unranked (mixed) - just update coins
@@ -774,17 +1517,108 @@ export async function saveMatchResult(params: {
             console.log(`[Match] Unranked match (mixed) - coins only`);
         }
 
-        // Save match to history
+        // Save match to history with performance stats (including AI matches for full history)
         const isAiMatch = !isWinnerHuman || !isLoserHuman;
-        if (!isAiMatch) {
-            try {
-                db.prepare(`
-                    INSERT OR IGNORE INTO arena_matches (id, winner_id, loser_id, winner_score, loser_score, operation, mode, winner_elo_change, loser_elo_change, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                `).run(params.matchId, params.winnerId, params.loserId, params.winnerScore, params.loserScore, params.operation, params.mode, winnerEloChange, loserEloChange);
-            } catch (e: any) {
-                if (!e.message?.includes('UNIQUE constraint')) throw e;
+        try {
+            // Include performance stats if available
+            const winnerAcc = params.winnerPerformance?.accuracy ?? null;
+            const winnerSpeed = params.winnerPerformance?.avgSpeedMs ?? null;
+            const winnerStrk = params.winnerPerformance?.maxStreak ?? null;
+            const winnerAps = params.winnerPerformance?.aps ?? null;
+            const loserAcc = params.loserPerformance?.accuracy ?? null;
+            const loserSpeed = params.loserPerformance?.avgSpeedMs ?? null;
+            const loserStrk = params.loserPerformance?.maxStreak ?? null;
+            const loserAps = params.loserPerformance?.aps ?? null;
+            
+            // Generate match reasoning if not provided
+            let matchReasoning = params.matchReasoning;
+            if (!matchReasoning) {
+                // Get player data for reasoning generation
+                const humanPlayerId = isWinnerHuman ? params.winnerId : params.loserId;
+                const eloColumn = getEloColumnName(params.mode, params.operation);
+                
+                const humanData = db.prepare(`
+                    SELECT ${eloColumn} as elo, math_tiers
+                    FROM users WHERE id = ?
+                `).get(humanPlayerId) as { elo?: number; math_tiers?: string } | undefined;
+                
+                let humanTier = 0;
+                if (humanData?.math_tiers) {
+                    try {
+                        const tiers = JSON.parse(humanData.math_tiers);
+                        humanTier = tiers[params.operation] || 0;
+                    } catch { /* ignore */ }
+                }
+                
+                const humanElo = humanData?.elo || 300;
+                // Use default confidence (0.5) - actual confidence is calculated dynamically elsewhere
+                const humanConfidence = 0.5;
+                
+                // For AI matches, estimate opponent stats
+                // For human matches, try to get opponent data
+                let opponentElo = humanElo;
+                let opponentTier = humanTier;
+                let opponentConfidence = 0.5;
+                
+                if (!isAiMatch) {
+                    const opponentId = isWinnerHuman ? params.loserId : params.winnerId;
+                    const opponentData = db.prepare(`
+                        SELECT ${eloColumn} as elo, math_tiers
+                        FROM users WHERE id = ?
+                    `).get(opponentId) as { elo?: number; math_tiers?: string } | undefined;
+                    
+                    opponentElo = opponentData?.elo || 300;
+                    if (opponentData?.math_tiers) {
+                        try {
+                            const tiers = JSON.parse(opponentData.math_tiers);
+                            opponentTier = tiers[params.operation] || 0;
+                        } catch { /* ignore */ }
+                    }
+                } else {
+                    // AI opponent - estimate similar skill level with some variance
+                    opponentElo = humanElo + (Math.random() * 100 - 50);
+                    opponentTier = humanTier;
+                }
+                
+                // Generate reasoning
+                matchReasoning = generateMatchReasoningSync({
+                    playerElo: isWinnerHuman ? humanElo : opponentElo,
+                    playerTier: isWinnerHuman ? humanTier : opponentTier,
+                    playerConfidence: humanConfidence,
+                    playerIsReturning: false,
+                    opponentElo: isWinnerHuman ? opponentElo : humanElo,
+                    opponentTier: isWinnerHuman ? opponentTier : humanTier,
+                    opponentConfidence: opponentConfidence,
+                    opponentIsReturning: false,
+                    queueTimeSeconds: 0, // Not available at save time
+                    isAiMatch: isAiMatch,
+                });
             }
+            
+            // Serialize match reasoning to JSON
+            const matchReasoningJson = matchReasoning 
+                ? JSON.stringify(matchReasoning) 
+                : null;
+
+            db.prepare(`
+                INSERT OR IGNORE INTO arena_matches (
+                    id, winner_id, loser_id, winner_score, loser_score, 
+                    operation, mode, winner_elo_change, loser_elo_change,
+                    winner_accuracy, winner_avg_speed_ms, winner_max_streak, winner_aps,
+                    loser_accuracy, loser_avg_speed_ms, loser_max_streak, loser_aps,
+                    match_reasoning, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            `).run(
+                params.matchId, params.winnerId, params.loserId, 
+                params.winnerScore, params.loserScore, 
+                params.operation, params.mode, 
+                winnerEloChange, loserEloChange,
+                winnerAcc, winnerSpeed, winnerStrk, winnerAps,
+                loserAcc, loserSpeed, loserStrk, loserAps,
+                matchReasoningJson
+            );
+        } catch (e: any) {
+            if (!e.message?.includes('UNIQUE constraint')) throw e;
         }
 
         // Revalidate
@@ -794,13 +1628,20 @@ export async function saveMatchResult(params: {
         revalidatePath("/stats");
         revalidatePath("/dashboard");
 
+        const integrity = params.matchIntegrity || 'GREEN';
+        // Only RED voids the match - YELLOW is just a warning, match still counts
+        const isVoid = integrity === 'RED';
+        
         return {
             success: true,
             winnerEloChange,
             loserEloChange,
             winnerCoinsEarned,
             loserCoinsEarned,
-            isRanked
+            isRanked,
+            isVoid,
+            isDraw: params.isDraw || false,
+            voidReason: isVoid ? `Match voided due to ${integrity} connection quality` : undefined
         };
     } catch (error: any) {
         console.error('[Match] Save result error:', error);
@@ -1046,5 +1887,154 @@ export async function getMatchEmojis(matchId: string) {
         return messages.map((m: string) => JSON.parse(m));
     } catch (error) {
         return [];
+    }
+}
+
+// =============================================================================
+// MATCH HISTORY - For FlashAuditor Match History Tab
+// =============================================================================
+
+/**
+ * Match history entry for display in FlashAuditor
+ */
+export interface MatchHistoryEntry {
+    id: string;
+    opponentName: string;
+    opponentId: string;
+    isWin: boolean;
+    isDraw?: boolean;
+    playerScore: number;
+    opponentScore: number;
+    eloChange: number;
+    operation: string;
+    mode: string;
+    isAiMatch: boolean;
+    matchReasoning: MatchReasoning | null;
+    createdAt: string;
+    // Relative time for display
+    timeAgo: string;
+}
+
+/**
+ * Calculate relative time string (e.g., "2 hours ago")
+ */
+function getTimeAgo(dateString: string): string {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffDays > 0) {
+        return diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
+    }
+    if (diffHours > 0) {
+        return diffHours === 1 ? '1 hour ago' : `${diffHours} hours ago`;
+    }
+    if (diffMins > 0) {
+        return diffMins === 1 ? '1 minute ago' : `${diffMins} minutes ago`;
+    }
+    return 'Just now';
+}
+
+/**
+ * Get match history for the current user
+ * Returns the last N matches with reasoning for FlashAuditor display
+ */
+export async function getMatchHistory(limit: number = 10): Promise<{
+    matches: MatchHistoryEntry[];
+    error?: string;
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { matches: [], error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+
+    try {
+        const { getDatabase } = await import("@/lib/db");
+        const db = getDatabase();
+
+        // Get matches where user was winner or loser, ordered by most recent
+        const matches = db.prepare(`
+            SELECT 
+                am.id,
+                am.winner_id,
+                am.loser_id,
+                am.winner_score,
+                am.loser_score,
+                am.winner_elo_change,
+                am.loser_elo_change,
+                am.operation,
+                am.mode,
+                am.match_reasoning,
+                am.created_at,
+                CASE 
+                    WHEN am.winner_id = ? THEN am.loser_id 
+                    ELSE am.winner_id 
+                END as opponent_id,
+                CASE 
+                    WHEN am.winner_id = ? THEN loser.name 
+                    ELSE winner.name 
+                END as opponent_name
+            FROM arena_matches am
+            LEFT JOIN users winner ON winner.id = am.winner_id
+            LEFT JOIN users loser ON loser.id = am.loser_id
+            WHERE am.winner_id = ? OR am.loser_id = ?
+            ORDER BY am.created_at DESC
+            LIMIT ?
+        `).all(userId, userId, userId, userId, limit) as any[];
+
+        const historyEntries: MatchHistoryEntry[] = matches.map(match => {
+            // Check for draw: same score means draw
+            const isDraw = match.winner_score === match.loser_score;
+            const isWin = !isDraw && match.winner_id === userId;
+            const isLoss = !isDraw && match.loser_id === userId;
+            const isAiMatch = match.opponent_id?.startsWith('ai-') || match.opponent_id?.startsWith('ai_bot_') || false;
+            
+            // Parse match reasoning if available
+            let matchReasoning: MatchReasoning | null = null;
+            if (match.match_reasoning) {
+                try {
+                    matchReasoning = JSON.parse(match.match_reasoning);
+                } catch (e) {
+                    console.warn('[MatchHistory] Failed to parse match_reasoning:', e);
+                }
+            }
+
+            // For draws, both players see the same score
+            // For non-draws, show correct score based on win/loss
+            const playerScore = isDraw 
+                ? match.winner_score 
+                : (match.winner_id === userId ? match.winner_score : match.loser_score);
+            const opponentScore = isDraw 
+                ? match.loser_score 
+                : (match.winner_id === userId ? match.loser_score : match.winner_score);
+
+            return {
+                id: match.id,
+                opponentName: match.opponent_name || (isAiMatch ? 'AI Opponent' : 'Unknown'),
+                opponentId: match.opponent_id || '',
+                isWin,
+                isDraw,
+                playerScore,
+                opponentScore,
+                eloChange: isDraw ? 0 : (isWin ? (match.winner_elo_change || 0) : (match.loser_elo_change || 0)),
+                operation: match.operation || 'mixed',
+                mode: match.mode || '1v1',
+                isAiMatch,
+                matchReasoning,
+                createdAt: match.created_at,
+                timeAgo: getTimeAgo(match.created_at),
+            };
+        });
+
+        return { matches: historyEntries };
+    } catch (error) {
+        console.error('[MatchHistory] Error fetching match history:', error);
+        return { matches: [], error: 'Failed to fetch match history' };
     }
 }

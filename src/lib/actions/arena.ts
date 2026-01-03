@@ -3,6 +3,7 @@
 import { auth } from "@/auth";
 import { queryOne, query, getDatabase } from "@/lib/db";
 import { ITEMS } from "@/lib/items";
+import { getDecayStatus } from "@/lib/arena/decay";
 
 /**
  * Get arena eligibility data for the current user
@@ -114,12 +115,46 @@ export async function getArenaEligibilityData() {
 
     const confidence = (volumeFactor * 0.4) + (consistencyFactor * 0.3) + (recencyFactor * 0.3);
 
+    // Get decay status for the user
+    const decayStatus = await getDecayStatus(userId);
+
+    // Determine confidence bracket
+    let bracket: 'NEWCOMER' | 'DEVELOPING' | 'ESTABLISHED';
+    if (confidence >= 0.7) {
+        bracket = 'ESTABLISHED';
+    } else if (confidence >= 0.3) {
+        bracket = 'DEVELOPING';
+    } else {
+        bracket = 'NEWCOMER';
+    }
+
     return {
         practiceStats: {
             totalSessions,
             recentAccuracy,
             daysSinceLastPractice,
             confidence: Math.round(confidence * 100) / 100
+        },
+        // Full confidence breakdown for FlashAuditor
+        confidenceBreakdown: {
+            overall: Math.round(confidence * 100) / 100,
+            volume: Math.round(volumeFactor * 100) / 100,
+            consistency: Math.round(consistencyFactor * 100) / 100,
+            recency: Math.round(recencyFactor * 100) / 100,
+            totalSessions,
+            sessionsPerWeek: Math.round(sessionsPerWeek * 10) / 10,
+            daysSinceLastPractice,
+            bracket
+        },
+        // Decay status
+        decayInfo: {
+            phase: decayStatus.phase,
+            phaseLabel: decayStatus.phaseLabel,
+            daysUntilNextPhase: decayStatus.daysUntilNextPhase,
+            eloAtRisk: decayStatus.eloAtRisk,
+            isReturningPlayer: decayStatus.isReturningPlayer,
+            placementMatchesRequired: decayStatus.placementMatchesRequired,
+            placementMatchesCompleted: decayStatus.placementMatchesCompleted
         },
         userAge,
         isAdmin // Admin bypasses all requirements

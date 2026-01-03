@@ -380,20 +380,51 @@ class MatchState {
         // Calculate Elo changes
         const eloChanges = this.calculateEloChanges(winner, loser);
 
-        // Emit game over event
+        // Calculate APS and performance stats for both players
+        const winnerAPS = this.calculateAPS(winner);
+        const loserAPS = this.calculateAPS(loser);
+
+        // Calculate average answer speed in ms
+        const winnerAvgSpeed = winner.correctAnswers > 0 
+            ? Math.round(winner.totalAnswerTime / winner.correctAnswers) 
+            : 0;
+        const loserAvgSpeed = loser.correctAnswers > 0 
+            ? Math.round(loser.totalAnswerTime / loser.correctAnswers) 
+            : 0;
+
+        // Build performance stats objects for ELO calculation
+        const winnerPerformance = {
+            accuracy: winner.totalAnswers > 0 ? winner.correctAnswers / winner.totalAnswers : 0,
+            avgSpeedMs: winnerAvgSpeed,
+            maxStreak: winner.maxStreak || 0,
+            aps: winnerAPS.aps
+        };
+
+        const loserPerformance = {
+            accuracy: loser.totalAnswers > 0 ? loser.correctAnswers / loser.totalAnswers : 0,
+            avgSpeedMs: loserAvgSpeed,
+            maxStreak: loser.maxStreak || 0,
+            aps: loserAPS.aps
+        };
+
+        // Emit game over event with performance stats
         this.room.emit(EVENTS.GAME_OVER, {
             matchId: this.id,
             winner: {
                 id: winner.id,
                 name: winner.name,
                 score: winner.score,
-                eloChange: eloChanges.winner
+                eloChange: eloChanges.winner,
+                performance: winnerPerformance,
+                apsBreakdown: winnerAPS.components
             },
             loser: {
                 id: loser.id,
                 name: loser.name,
                 score: loser.score,
-                eloChange: eloChanges.loser
+                eloChange: eloChanges.loser,
+                performance: loserPerformance,
+                apsBreakdown: loserAPS.components
             },
             finalScores: this.players.map(p => ({
                 id: p.id,

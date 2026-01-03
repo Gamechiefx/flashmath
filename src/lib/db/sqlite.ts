@@ -196,6 +196,91 @@ function initializeSchema() {
         // Column might already exist, that's fine
     }
 
+    // Add arena_matches performance stats columns for speed/accuracy ELO integration
+    const arenaMatchesColumns = [
+        { name: 'winner_accuracy', type: 'REAL' },
+        { name: 'winner_avg_speed_ms', type: 'INTEGER' },
+        { name: 'winner_max_streak', type: 'INTEGER' },
+        { name: 'winner_aps', type: 'INTEGER' },
+        { name: 'loser_accuracy', type: 'REAL' },
+        { name: 'loser_avg_speed_ms', type: 'INTEGER' },
+        { name: 'loser_max_streak', type: 'INTEGER' },
+        { name: 'loser_aps', type: 'INTEGER' },
+    ];
+    for (const col of arenaMatchesColumns) {
+        try {
+            database.exec(`ALTER TABLE arena_matches ADD COLUMN ${col.name} ${col.type}`);
+            console.log(`[SQLite] Added ${col.name} column to arena_matches`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exists
+            }
+        }
+    }
+
+    // Add match_reasoning column for storing matchmaking rationale (FlashAuditor Match History)
+    try {
+        database.exec("ALTER TABLE arena_matches ADD COLUMN match_reasoning TEXT");
+        console.log('[SQLite] Added match_reasoning column to arena_matches');
+    } catch (e: any) {
+        if (!e.message.includes('duplicate column')) {
+            // Expected if column already exists
+        }
+    }
+
+    // Add decay & returning player system columns
+    const decayColumns = [
+        { name: 'last_arena_activity', type: 'TEXT' },
+        { name: 'decay_warning_sent', type: 'TEXT' },
+        { name: 'is_returning_player', type: 'INTEGER', default: 0 },
+        { name: 'placement_matches_required', type: 'INTEGER', default: 0 },
+        { name: 'placement_matches_completed', type: 'INTEGER', default: 0 },
+        { name: 'total_elo_decayed', type: 'INTEGER', default: 0 },
+        { name: 'last_decay_applied', type: 'TEXT' },
+    ];
+    for (const col of decayColumns) {
+        try {
+            const defaultClause = col.default !== undefined ? ` DEFAULT ${col.default}` : '';
+            database.exec(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}${defaultClause}`);
+            console.log(`[SQLite] Added ${col.name} column for decay system`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exists
+            }
+        }
+    }
+    
+    // Initialize last_arena_activity for existing users with arena matches
+    try {
+        database.exec(`
+            UPDATE users SET last_arena_activity = created_at 
+            WHERE last_arena_activity IS NULL 
+            AND (arena_duel_wins > 0 OR arena_duel_losses > 0 OR arena_team_wins > 0 OR arena_team_losses > 0)
+        `);
+    } catch (e: any) {
+        // Expected if no users match
+    }
+
+    // Add leaderboard indexes for efficient ranking queries
+    const leaderboardIndexes = [
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_elo ON users(arena_elo_duel DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_team_elo ON users(arena_elo_team DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_addition ON users(arena_elo_duel_addition DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_subtraction ON users(arena_elo_duel_subtraction DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_multiplication ON users(arena_elo_duel_multiplication DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_division ON users(arena_elo_duel_division DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_arena_matches_operation ON arena_matches(operation, created_at DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_arena_matches_mode ON arena_matches(mode, created_at DESC)'
+    ];
+    for (const indexSql of leaderboardIndexes) {
+        try {
+            database.exec(indexSql);
+        } catch (e: any) {
+            // Index might already exist
+        }
+    }
+    console.log('[SQLite] Ensured leaderboard indexes exist');
+
     // Seed default leagues if empty
     const leagueCount = database.prepare('SELECT COUNT(*) as count FROM leagues').get() as { count: number };
     if (leagueCount.count === 0) {

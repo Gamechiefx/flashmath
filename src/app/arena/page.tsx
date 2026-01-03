@@ -33,6 +33,8 @@ export default async function ArenaPage() {
                     practiceStats={eligibilityData.practiceStats}
                     userAge={eligibilityData.userAge}
                     isAdmin={eligibilityData.isAdmin}
+                    confidenceBreakdown={eligibilityData.confidenceBreakdown}
+                    decayInfo={eligibilityData.decayInfo}
                 />
             </div>
         </main>

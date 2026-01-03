@@ -92,39 +92,47 @@ export function FriendListItem({
             onMouseEnter={() => setShowActions(true)}
             onMouseLeave={() => setShowActions(false)}
         >
-            {/* Avatar with status indicator */}
-            <div className="relative">
-                <UserAvatar
-                    user={{
-                        name: friend.odName,
-                        equipped_items: { frame: friend.odEquippedFrame },
-                    }}
-                    size="sm"
-                    className={cn(
-                        friendStatus === 'away' && "grayscale-[30%]",
-                        friendStatus === 'offline' && "grayscale"
-                    )}
-                />
-                {/* Status indicator dot */}
-                <div className={cn(
-                    "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background",
-                    config.indicator,
-                    config.glow
-                )} />
-            </div>
+            {/* Avatar */}
+            <UserAvatar
+                user={{
+                    name: friend.odName,
+                    equipped_items: { frame: friend.odEquippedFrame },
+                }}
+                size="sm"
+                className={cn(
+                    friendStatus === 'away' && "grayscale-[30%]",
+                    friendStatus === 'offline' && "grayscale"
+                )}
+            />
 
-            {/* Name and level */}
+            {/* Name, level, and rank */}
             <div className="flex-1 min-w-0">
-                <div className={cn(
-                    "font-bold text-sm truncate",
-                    friendStatus === 'offline' && "text-muted-foreground"
-                )}>
-                    {friend.odName}
+                <div className="flex items-center gap-2">
+                    <span className={cn(
+                        "font-bold text-sm truncate",
+                        friendStatus === 'offline' && "text-muted-foreground"
+                    )}>
+                        {friend.odName}
+                    </span>
+                    {/* Rank Badge */}
+                    <span className={cn(
+                        "text-[8px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider",
+                        friend.odDuelRank === 'DIAMOND' && "bg-cyan-500/20 text-cyan-400",
+                        friend.odDuelRank === 'PLATINUM' && "bg-slate-300/20 text-slate-300",
+                        friend.odDuelRank === 'GOLD' && "bg-yellow-500/20 text-yellow-400",
+                        friend.odDuelRank === 'SILVER' && "bg-zinc-400/20 text-zinc-400",
+                        friend.odDuelRank === 'BRONZE' && "bg-amber-700/20 text-amber-600",
+                        !friend.odDuelRank && "bg-zinc-500/20 text-zinc-500"
+                    )}>
+                        {friend.odDuelRank || 'BRONZE'} {friend.odDuelDivision || 'I'}
+                    </span>
                 </div>
                 <div className="text-[10px] text-muted-foreground uppercase tracking-widest flex items-center gap-1">
-                    LVL {friend.odLevel}
+                    <span>LVL {friend.odLevel}</span>
+                    <span className="text-zinc-600">•</span>
+                    <span>{friend.odDuelElo || 300} ELO</span>
                     {friendStatus !== 'offline' && (
-                        <span className={cn("ml-2 flex items-center gap-1", config.text)}>
+                        <span className={cn("ml-1 flex items-center gap-1", config.text)}>
                             {friendStatus === 'away' && <Coffee size={10} />}
                             ● {config.label}
                         </span>

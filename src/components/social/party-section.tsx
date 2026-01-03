@@ -273,6 +273,18 @@ export function PartySection({
                                     <div className="flex-1 min-w-0">
                                         <div className="font-bold text-sm truncate flex items-center gap-2">
                                             {member.odName}
+                                            {/* Rank Badge */}
+                                            <span className={cn(
+                                                "text-[7px] font-bold px-1 py-0.5 rounded uppercase tracking-wider",
+                                                member.odDuelRank === 'DIAMOND' && "bg-cyan-500/20 text-cyan-400",
+                                                member.odDuelRank === 'PLATINUM' && "bg-slate-300/20 text-slate-300",
+                                                member.odDuelRank === 'GOLD' && "bg-yellow-500/20 text-yellow-400",
+                                                member.odDuelRank === 'SILVER' && "bg-zinc-400/20 text-zinc-400",
+                                                member.odDuelRank === 'BRONZE' && "bg-amber-700/20 text-amber-600",
+                                                !member.odDuelRank && "bg-zinc-500/20 text-zinc-500"
+                                            )}>
+                                                {member.odDuelRank || 'BRONZE'} {member.odDuelDivision || 'I'}
+                                            </span>
                                             {member.isLeader && (
                                                 <span className="text-[8px] text-accent uppercase tracking-widest">
                                                     Leader
@@ -284,8 +296,10 @@ export function PartySection({
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="text-[10px] text-muted-foreground">
-                                            LVL {member.odLevel}
+                                        <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                            <span>LVL {member.odLevel}</span>
+                                            <span className="text-zinc-600">•</span>
+                                            <span>{member.odDuelElo || 300} ELO</span>
                                         </div>
                                     </div>
                                     

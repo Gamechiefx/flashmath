@@ -14,6 +14,7 @@ interface ArenaQueueClientProps {
         mathTiers: Record<string, number>;
         equippedBanner?: string;
         equippedTitle?: string;
+        confidence?: number; // Practice confidence score (0-1)
     };
     operation: string;
     arenaStats: {
@@ -54,6 +55,7 @@ export function ArenaQueueClient({ data, operation, arenaStats, mode = '1v1' }: 
                         isRanked={arenaStats.isRanked ?? true}
                         equippedBanner={data.equippedBanner || 'default'}
                         equippedTitle={data.equippedTitle || 'Challenger'}
+                        confidence={data.confidence}
                     />
                 </Suspense>
             </div>

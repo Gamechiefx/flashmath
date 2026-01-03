@@ -286,11 +286,8 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     const [selectedMode, setSelectedMode] = useState<string>('1v1');
     const [selectedOperation, setSelectedOperation] = useState<Operation>('mixed');
 
-    // Get rank info based on selected mode
+    // Determine if duel or team mode is selected (for operation-specific ELO display on mode cards)
     const isDuel = selectedMode === '1v1';
-    const userRank = isDuel ? arenaStats.duel.rank : arenaStats.team.rank;
-    const userDivision = isDuel ? arenaStats.duel.rankDivision : arenaStats.team.rankDivision;
-    const userElo = isDuel ? arenaStats.duel.elo : arenaStats.team.elo;
 
     // Build modes with dynamic ELO based on selected operation
     const vsModes: GameMode[] = [
@@ -319,17 +316,76 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
         <div className="h-full flex flex-col max-w-[1400px] mx-auto px-6 py-4 overflow-hidden relative">
             <ParticleBackground />
 
+            {/* Competitive Rank Card - Fixed to far left of viewport, clickable to leaderboard */}
+            <Link href="/arena/leaderboard" className="fixed left-4 top-24 z-50">
+                <motion.div 
+                    initial={{ x: -100, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    whileHover={{ scale: 1.02, x: 4 }}
+                    whileTap={{ scale: 0.98 }}
+                    transition={{ type: 'spring', damping: 20, stiffness: 150 }}
+                    className="flex flex-col rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/20 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-xl overflow-hidden cursor-pointer hover:border-primary/40 hover:shadow-primary/20 transition-all group"
+                >
+                    {/* Decorative glow */}
+                    <div className="absolute -top-10 -left-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl pointer-events-none group-hover:bg-primary/30 transition-colors" />
+                    <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-amber-500/15 rounded-full blur-2xl pointer-events-none" />
+                    
+                    {/* Header Label */}
+                    <div className="relative px-4 py-2 bg-gradient-to-r from-primary/20 via-amber-500/10 to-transparent border-b border-white/10">
+                        <div className="flex items-center gap-2">
+                            <span className="text-lg">🏆</span>
+                            <span className="text-[10px] font-black bg-gradient-to-r from-primary via-amber-400 to-primary bg-clip-text text-transparent uppercase tracking-[0.25em]">
+                                Competitive Rank
+                            </span>
+                            <span className="ml-auto text-[9px] text-white/40 group-hover:text-primary/70 transition-colors">
+                                View Leaderboards →
+                            </span>
+                        </div>
+                    </div>
+                    
+                    {/* Rank Content */}
+                    <div className="flex items-center gap-4 p-3">
+                        {/* Duel Rank */}
+                        <div className="flex items-center gap-2.5">
+                        <RankBadge rank={arenaStats.duel.rank} division={arenaStats.duel.rankDivision} elo={arenaStats.duel.elo} />
+                        <div className="flex flex-col">
+                            <span className="text-[8px] font-black text-orange-400/60 uppercase tracking-[0.15em]">Duel</span>
+                            <span className="text-sm font-black text-white">{arenaStats.duel.rank} {arenaStats.duel.rankDivision}</span>
+                            <span className="text-[10px] font-bold text-white/50">{arenaStats.duel.elo} ELO</span>
+                        </div>
+                    </div>
+                    
+                    {/* Separator */}
+                    <div className="w-px h-10 bg-white/10" />
+                    
+                    {/* Team Rank - Show full rank if played, otherwise show teaser */}
+                    {arenaStats.team.elo !== 300 ? (
+                        <div className="flex items-center gap-2.5">
+                            <RankBadge rank={arenaStats.team.rank} division={arenaStats.team.rankDivision} elo={arenaStats.team.elo} />
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-black text-blue-400/60 uppercase tracking-[0.15em]">Team</span>
+                                <span className="text-sm font-black text-white">{arenaStats.team.rank} {arenaStats.team.rankDivision}</span>
+                                <span className="text-[10px] font-bold text-white/50">{arenaStats.team.elo} ELO</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-2.5 opacity-70">
+                            <div className="w-14 h-14 rounded-lg bg-white/10 border border-dashed border-white/30 flex items-center justify-center">
+                                <span className="text-xl text-white/60">👥</span>
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[8px] font-black text-blue-400/60 uppercase tracking-[0.15em]">Team</span>
+                                <span className="text-xs font-bold text-white/70">Play team modes</span>
+                                <span className="text-[10px] font-bold text-white/50">to unlock rank</span>
+                            </div>
+                        </div>
+                    )}
+                    </div>
+                </motion.div>
+            </Link>
+
             {/* Header Bar */}
             <div className="relative flex items-center justify-center mb-10 shrink-0 min-h-[90px] w-full z-10">
-
-                {/* Rank Badge - Far Left */}
-                <div className="absolute left-4 flex items-center gap-4 p-3 rounded-2xl bg-white/5 border border-white/10 shadow-2xl backdrop-blur-md">
-                    <RankBadge rank={userRank} division={userDivision} elo={userElo} />
-                    <div className="flex flex-col">
-                        <span className="text-[9px] font-black text-white/40 uppercase tracking-[0.2em]">Competitive Rank</span>
-                        <span className="text-base font-black text-white">{userRank} {userDivision}</span>
-                    </div>
-                </div>
 
                 {/* Title - Truly Centered */}
                 <div className="flex flex-col items-center">

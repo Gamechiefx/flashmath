@@ -46,6 +46,7 @@ export function RealTimeMatch({
 
     const [answer, setAnswer] = useState('');
     const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
+    const [lastCorrectAnswer, setLastCorrectAnswer] = useState<number | null>(null); // Show correct answer briefly on wrong
     const [eloChange, setEloChange] = useState<number | null>(null);
     const [coinsEarned, setCoinsEarned] = useState<number | null>(null);
     const [hasSavedResult, setHasSavedResult] = useState(false);
@@ -87,6 +88,9 @@ export function RealTimeMatch({
         matchEnded,
         waitingForOpponent,
         opponentForfeited,
+        performanceStats,
+        connectionStates,
+        matchIntegrity,
         submitAnswer: socketSubmitAnswer,
         leaveMatch,
     } = useArenaSocket({
@@ -96,6 +100,9 @@ export function RealTimeMatch({
         operation,
         isAiMatch,
     });
+    
+    // Get my connection state
+    const myConnectionState = connectionStates[currentUserId] || { state: 'GREEN', rtt: 0 };
 
     // Get player data
     const you = players[currentUserId];
@@ -179,14 +186,24 @@ export function RealTimeMatch({
                 const yourScore = you!.odScore || 0;
                 const oppScore = opponent!.odScore || 0;
 
-                // Determine winner (ties go to opponent for simplicity)
+                // Handle draws properly - in a draw, both get same treatment
+                const isDraw = yourScore === oppScore;
                 const youWon = yourScore > oppScore;
-                const winnerId = youWon ? currentUserId : opponentId!;
-                const loserId = youWon ? opponentId! : currentUserId;
-                const winnerScore = Math.max(yourScore, oppScore);
-                const loserScore = Math.min(yourScore, oppScore);
+                
+                // For draws, use consistent ordering (current user first)
+                const winnerId = isDraw ? currentUserId : (youWon ? currentUserId : opponentId!);
+                const loserId = isDraw ? opponentId! : (youWon ? opponentId! : currentUserId);
+                const winnerScore = isDraw ? yourScore : Math.max(yourScore, oppScore);
+                const loserScore = isDraw ? oppScore : Math.min(yourScore, oppScore);
 
-                console.log('[Match] Saving result:', { winnerId, loserId, winnerScore, loserScore, youWon });
+                // Get performance stats for winner and loser
+                const winnerPerformance = performanceStats?.[winnerId];
+                const loserPerformance = performanceStats?.[loserId];
+
+                console.log('[Match] Saving result:', { 
+                    winnerId, loserId, winnerScore, loserScore, youWon,
+                    winnerPerformance, loserPerformance, matchIntegrity
+                });
 
                 const { saveMatchResult } = await import('@/lib/actions/matchmaking');
                 const result = await saveMatchResult({
@@ -197,6 +214,10 @@ export function RealTimeMatch({
                     loserScore,
                     operation,
                     mode: '1v1',
+                    winnerPerformance,
+                    loserPerformance,
+                    matchIntegrity: matchIntegrity || 'GREEN',
+                    isDraw,
                 });
 
                 console.log('[Match] Save result response:', JSON.stringify(result, null, 2));
@@ -224,46 +245,95 @@ export function RealTimeMatch({
         saveResult();
     }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation, router, update]);
 
+    // Ref to track if we're currently processing an answer to prevent double submission
+    const isProcessingRef = useRef(false);
+
     const handleSubmit = useCallback(() => {
-        if (!answer.trim() || !currentQuestion) return;
+        // Don't submit if already processing or showing result
+        if (!answer.trim() || !currentQuestion || showResult || isProcessingRef.current) return;
 
         const numAnswer = parseInt(answer, 10);
         if (isNaN(numAnswer)) return;
+
+        // Mark as processing
+        isProcessingRef.current = true;
 
         const isCorrect = numAnswer === currentQuestion.answer;
         setShowResult(isCorrect ? 'correct' : 'wrong');
 
-        // Send answer to server
+        // Send answer to server (counts towards accuracy regardless of correct/wrong)
         socketSubmitAnswer(numAnswer);
 
-        // Clear after brief feedback
-        setTimeout(() => {
-            setShowResult(null);
-            setAnswer('');
-        }, 200);
-    }, [answer, currentQuestion, socketSubmitAnswer]);
+        if (isCorrect) {
+            // Correct: Clear after brief feedback
+            setTimeout(() => {
+                setShowResult(null);
+                setAnswer('');
+                setLastCorrectAnswer(null);
+                isProcessingRef.current = false;
+            }, 200);
+        } else {
+            // Wrong: Show correct answer briefly, then auto-continue
+            // Brief flash so they see the mistake but don't lose time
+            setLastCorrectAnswer(currentQuestion.answer);
+            setTimeout(() => {
+                setShowResult(null);
+                setAnswer('');
+                setLastCorrectAnswer(null);
+                isProcessingRef.current = false;
+            }, 400); // Slightly longer than correct (400ms) so they notice but keeps pace
+        }
+    }, [answer, currentQuestion, socketSubmitAnswer, showResult]);
 
-    // Auto-submit when the answer is correct (no Enter needed)
+    // Auto-submit when answer has enough digits (correct OR wrong)
     useEffect(() => {
-        if (!answer.trim() || !currentQuestion) return;
+        // Don't process if already showing result or currently processing
+        if (!answer.trim() || !currentQuestion || showResult || isProcessingRef.current) return;
 
         const numAnswer = parseInt(answer, 10);
         if (isNaN(numAnswer)) return;
 
-        // Auto-submit if correct
-        if (numAnswer === currentQuestion.answer) {
+        // Get the expected answer's digit length
+        const expectedAnswerStr = String(Math.abs(currentQuestion.answer));
+        const typedDigits = answer.replace('-', ''); // Remove negative sign
+        
+        // Only auto-submit when we have typed enough digits
+        if (typedDigits.length < expectedAnswerStr.length) return;
+
+        // Mark as processing
+        isProcessingRef.current = true;
+
+        const isCorrect = numAnswer === currentQuestion.answer;
+        
+        if (isCorrect) {
+            // Correct: quick feedback and continue
             setShowResult('correct');
             socketSubmitAnswer(numAnswer);
 
             setTimeout(() => {
                 setShowResult(null);
                 setAnswer('');
+                setLastCorrectAnswer(null);
+                isProcessingRef.current = false;
             }, 200);
+        } else {
+            // Wrong: show error, submit to server, brief flash then continue
+            setShowResult('wrong');
+            setLastCorrectAnswer(currentQuestion.answer);
+            socketSubmitAnswer(numAnswer);
+
+            setTimeout(() => {
+                setShowResult(null);
+                setAnswer('');
+                setLastCorrectAnswer(null);
+                isProcessingRef.current = false;
+            }, 400); // Slightly longer for wrong so they notice
         }
-    }, [answer, currentQuestion, socketSubmitAnswer]);
+    }, [answer, currentQuestion, socketSubmitAnswer, showResult]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
+        // Only allow Enter if not already processing
+        if (e.key === 'Enter' && !showResult && !isProcessingRef.current) {
             handleSubmit();
         }
     };
@@ -877,9 +947,17 @@ export function RealTimeMatch({
                                         <span className="text-cyan-400">{currentQuestion?.question ? currentQuestion.question.split(' ')[1] : '+'}</span>
                                         <span>{currentQuestion?.question ? currentQuestion.question.split(' ')[2] : '?'}</span>
                                         <span className="text-white/40">=</span>
-                                        <span className={answer ? 'text-cyan-400' : 'text-white/20 animate-pulse'}>
-                                            {answer || '?'}
-                                        </span>
+                                        {showResult === 'wrong' && lastCorrectAnswer !== null ? (
+                                            // Show wrong answer crossed out and correct answer
+                                            <>
+                                                <span className="text-red-400 line-through opacity-60">{answer}</span>
+                                                <span className="text-green-400 ml-2">{lastCorrectAnswer}</span>
+                                            </>
+                                        ) : (
+                                            <span className={answer ? 'text-cyan-400' : 'text-white/20 animate-pulse'}>
+                                                {answer || '?'}
+                                            </span>
+                                        )}
                                     </div>
                                 </motion.div>
                             </AnimatePresence>
@@ -987,6 +1065,32 @@ export function RealTimeMatch({
             >
                 <LogOut size={18} />
             </button>
+
+            {/* Connection Quality Indicator - Bottom Center */}
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+                <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm rounded-full border border-white/10">
+                    <div 
+                        className={`w-2.5 h-2.5 rounded-full animate-pulse ${
+                            myConnectionState.state === 'GREEN' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]' :
+                            myConnectionState.state === 'YELLOW' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.7)]' :
+                            'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]'
+                        }`}
+                    />
+                    <span className={`text-xs font-bold uppercase tracking-wider ${
+                        myConnectionState.state === 'GREEN' ? 'text-emerald-400' :
+                        myConnectionState.state === 'YELLOW' ? 'text-amber-400' :
+                        'text-red-400'
+                    }`}>
+                        {myConnectionState.state === 'GREEN' ? 'RANKED' :
+                         myConnectionState.state === 'YELLOW' ? 'UNSTABLE' : 'VOID'}
+                    </span>
+                    {myConnectionState.rtt > 0 && (
+                        <span className="text-[10px] text-white/40 font-medium">
+                            {myConnectionState.rtt}ms
+                        </span>
+                    )}
+                </div>
+            </div>
 
             {/* Sound Toggle */}
             <div className="fixed bottom-8 right-8 z-50">

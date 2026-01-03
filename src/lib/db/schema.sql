@@ -107,6 +107,15 @@ CREATE TABLE IF NOT EXISTS users (
     
     -- Date of Birth (set once during registration, cannot be changed)
     dob TEXT,
+    
+    -- Decay & Returning Player System
+    last_arena_activity TEXT,           -- Last arena match timestamp
+    decay_warning_sent TEXT,            -- When decay warning was sent
+    is_returning_player INTEGER DEFAULT 0, -- 1 if needs placement matches
+    placement_matches_required INTEGER DEFAULT 0, -- Number of placement matches needed
+    placement_matches_completed INTEGER DEFAULT 0, -- Completed placement matches
+    total_elo_decayed INTEGER DEFAULT 0,   -- Track total ELO lost to decay
+    last_decay_applied TEXT,            -- When last decay was applied
 
     -- Timestamps
     created_at TEXT NOT NULL,
@@ -327,6 +336,15 @@ CREATE TABLE IF NOT EXISTS arena_matches (
     mode TEXT NOT NULL,
     winner_elo_change INTEGER DEFAULT 0,
     loser_elo_change INTEGER DEFAULT 0,
+    -- Performance stats for speed/accuracy ELO integration
+    winner_accuracy REAL,
+    winner_avg_speed_ms INTEGER,
+    winner_max_streak INTEGER,
+    winner_aps INTEGER,
+    loser_accuracy REAL,
+    loser_avg_speed_ms INTEGER,
+    loser_max_streak INTEGER,
+    loser_aps INTEGER,
     created_at TEXT NOT NULL,
     FOREIGN KEY (winner_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (loser_id) REFERENCES users(id) ON DELETE CASCADE
@@ -335,6 +353,16 @@ CREATE TABLE IF NOT EXISTS arena_matches (
 CREATE INDEX IF NOT EXISTS idx_arena_matches_winner ON arena_matches(winner_id);
 CREATE INDEX IF NOT EXISTS idx_arena_matches_loser ON arena_matches(loser_id);
 CREATE INDEX IF NOT EXISTS idx_arena_matches_created ON arena_matches(created_at);
+CREATE INDEX IF NOT EXISTS idx_arena_matches_operation ON arena_matches(operation, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_arena_matches_mode ON arena_matches(mode, created_at DESC);
+
+-- Leaderboard indexes for efficient ranking queries
+CREATE INDEX IF NOT EXISTS idx_users_duel_elo ON users(arena_elo_duel DESC);
+CREATE INDEX IF NOT EXISTS idx_users_team_elo ON users(arena_elo_team DESC);
+CREATE INDEX IF NOT EXISTS idx_users_duel_addition ON users(arena_elo_duel_addition DESC);
+CREATE INDEX IF NOT EXISTS idx_users_duel_subtraction ON users(arena_elo_duel_subtraction DESC);
+CREATE INDEX IF NOT EXISTS idx_users_duel_multiplication ON users(arena_elo_duel_multiplication DESC);
+CREATE INDEX IF NOT EXISTS idx_users_duel_division ON users(arena_elo_duel_division DESC);
 
 -- ==============================================
 -- SOCIAL SYSTEM TABLES (Friends, Parties)

@@ -143,6 +143,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         (session.user as any).id = user.id;
                         (session.user as any).level = user.level;
                         (session.user as any).coins = user.coins;
+                        console.log(`[SESSION] User ${user.name} coins from DB: ${user.coins}`);
                         (session.user as any).equipped_items = user.equipped_items;
                         (session.user as any).emailVerified = !!user.email_verified;
                         (session.user as any).createdAt = user.created_at;

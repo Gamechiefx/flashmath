@@ -30,6 +30,15 @@ export async function resetUserData() {
         // Delete all achievements for this user
         db.prepare('DELETE FROM user_achievements WHERE user_id = ?').run(userId);
 
+        // Delete all arena match history for this user (as winner or loser)
+        db.prepare('DELETE FROM arena_matches WHERE winner_id = ? OR loser_id = ?').run(userId, userId);
+
+        // Delete all friendships (both directions)
+        db.prepare('DELETE FROM friendships WHERE user_id = ? OR friend_id = ?').run(userId, userId);
+
+        // Delete all friend requests (sent or received)
+        db.prepare('DELETE FROM friend_requests WHERE sender_id = ? OR receiver_id = ?').run(userId, userId);
+
         // Reset user's total XP, level, coins, math_tiers, and equipped_items
         try {
             // Try with new arena columns first (duel + team structure)
@@ -155,6 +164,14 @@ export async function deleteUserAccount() {
         db.prepare('DELETE FROM league_participants WHERE user_id = ?').run(userId);
         db.prepare('DELETE FROM inventory WHERE user_id = ?').run(userId);
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+        db.prepare('DELETE FROM user_achievements WHERE user_id = ?').run(userId);
+
+        // Delete arena match history
+        db.prepare('DELETE FROM arena_matches WHERE winner_id = ? OR loser_id = ?').run(userId, userId);
+
+        // Delete friendships and friend requests
+        db.prepare('DELETE FROM friendships WHERE user_id = ? OR friend_id = ?').run(userId, userId);
+        db.prepare('DELETE FROM friend_requests WHERE sender_id = ? OR receiver_id = ?').run(userId, userId);
 
         // Delete the user account
         db.prepare('DELETE FROM users WHERE id = ?').run(userId);

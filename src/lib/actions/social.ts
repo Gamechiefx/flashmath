@@ -7,6 +7,7 @@
 
 import { auth } from "@/auth";
 import { getDatabase, generateId, now } from "@/lib/db/sqlite";
+const { getLeagueFromElo } = require('@/lib/arena/leagues.js');
 
 // =============================================================================
 // TYPES
@@ -23,6 +24,10 @@ export interface Friend {
     odLastActive: string | null;
     friendshipId: string;
     friendsSince: string;
+    // Arena stats (Duel only)
+    odDuelElo: number;
+    odDuelRank: string;
+    odDuelDivision: string;
 }
 
 export interface FriendRequest {
@@ -57,6 +62,10 @@ export interface PartyMember {
     odOnline: boolean;
     isLeader: boolean;
     joinedAt: string;
+    // Arena stats (Duel only)
+    odDuelElo: number;
+    odDuelRank: string;
+    odDuelDivision: string;
 }
 
 export interface PartyInvite {
@@ -112,7 +121,8 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
                 u.name,
                 u.level,
                 u.equipped_items,
-                u.last_active
+                u.last_active,
+                u.arena_elo_duel
             FROM friendships f
             JOIN users u ON f.friend_id = u.id
             WHERE f.user_id = ?
@@ -127,6 +137,10 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
                     : f.equipped_items || {};
             } catch { }
 
+            // Calculate rank from ELO
+            const duelElo = f.arena_elo_duel || 300;
+            const leagueInfo = getLeagueFromElo(duelElo);
+
             return {
                 id: f.user_id,
                 odUserId: f.user_id,
@@ -138,6 +152,9 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
                 odLastActive: f.last_active,
                 friendshipId: f.friendship_id,
                 friendsSince: f.friends_since,
+                odDuelElo: duelElo,
+                odDuelRank: leagueInfo.league, // Use 'league' (BRONZE) not 'leagueName' (Bronze)
+                odDuelDivision: leagueInfo.divisionRoman,
             };
         });
 
@@ -572,7 +589,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
             if (partyData) {
                 // Get all members
                 const members = db.prepare(`
-                    SELECT pm.user_id, pm.joined_at, u.name, u.level, u.equipped_items, u.last_active
+                    SELECT pm.user_id, pm.joined_at, u.name, u.level, u.equipped_items, u.last_active, u.arena_elo_duel
                     FROM party_members pm
                     JOIN users u ON pm.user_id = u.id
                     WHERE pm.party_id = ?
@@ -592,12 +609,19 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                             equipped = JSON.parse(m.equipped_items || '{}');
                         } catch { }
 
+                        // Calculate rank from ELO
+                        const duelElo = m.arena_elo_duel || 300;
+                        const leagueInfo = getLeagueFromElo(duelElo);
+
                         return {
                             odUserId: m.user_id,
                             odName: m.name,
                             odLevel: m.level || 1,
                             odEquippedFrame: equipped.frame || 'default',
                             odOnline: isUserOnline(m.last_active),
+                            odDuelElo: duelElo,
+                            odDuelRank: leagueInfo.league, // Use 'league' (BRONZE) not 'leagueName' (Bronze)
+                            odDuelDivision: leagueInfo.divisionRoman,
                             isLeader: m.user_id === partyData.leader_id,
                             joinedAt: m.joined_at,
                         };

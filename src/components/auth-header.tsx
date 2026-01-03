@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { Zap, LogOut, LayoutDashboard, Settings, Volume2, VolumeX, Trophy, Swords, Maximize2, Minimize2 } from "lucide-react";
+import { Zap, LogOut, LayoutDashboard, Settings, Volume2, VolumeX, Trophy, Swords, Maximize2, Minimize2, Shield } from "lucide-react";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { soundEngine } from "@/lib/sound-engine";
@@ -169,6 +169,18 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                                         <Settings size={16} />
                                         <span className="text-sm font-bold uppercase tracking-widest">Settings</span>
                                     </Link>
+
+                                    {/* Admin Console - Only for admins/mods */}
+                                    {((session.user as any)?.is_admin ||
+                                      ['moderator', 'admin', 'super_admin'].includes((session.user as any)?.role)) && (
+                                        <Link
+                                            href="/admin"
+                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-500/10 transition-colors text-purple-400"
+                                        >
+                                            <Shield size={16} />
+                                            <span className="text-sm font-bold uppercase tracking-widest">Admin Console</span>
+                                        </Link>
+                                    )}
 
                                     <div className="h-[1px] bg-white/10 my-1" />
 

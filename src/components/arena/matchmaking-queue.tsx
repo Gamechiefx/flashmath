@@ -20,6 +20,7 @@ interface MatchmakingQueueProps {
     isRanked?: boolean; // Whether this match affects ELO (false for mixed operation)
     equippedBanner?: string;
     equippedTitle?: string;
+    confidence?: number; // Practice confidence score (0-1) for queue eligibility
 }
 
 const OPERATION_LABELS: Record<string, { symbol: string; name: string }> = {
@@ -63,7 +64,7 @@ function RankBadge({ rank, division }: { rank: string; division: string }) {
     );
 }
 
-export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, division, elo, operation = 'mixed', mode = '1v1', isRanked = true, equippedBanner = 'default', equippedTitle = 'Challenger' }: MatchmakingQueueProps) {
+export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, division, elo, operation = 'mixed', mode = '1v1', isRanked = true, equippedBanner = 'default', equippedTitle = 'Challenger', confidence }: MatchmakingQueueProps) {
     const router = useRouter();
     const opLabel = OPERATION_LABELS[operation] || OPERATION_LABELS.mixed;
 
@@ -209,10 +210,17 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                     equippedBanner,
                     equippedTitle,
                     level,
+                    confidence, // Pass confidence for eligibility check
                 });
 
                 if (!joinResult.success) {
                     console.error('[Queue] Failed to join:', joinResult.error);
+                    // If rejected due to confidence, redirect back to arena
+                    if (joinResult.error?.includes('confidence')) {
+                        setIsSearching(false);
+                        router.push('/arena?error=low_confidence');
+                        return;
+                    }
                 } else {
                     console.log('[Queue] Joined successfully');
                 }

@@ -6,8 +6,11 @@ import {
     AnimatePresence
 } from 'framer-motion';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-// Note: Link still used for practice and enter arena buttons
+import { ChevronDown, ChevronUp, Zap, AlertTriangle, Activity, Award } from 'lucide-react';
+import { useAuditor } from '@/components/auditor';
+import type { ConfidenceBreakdown, DecayInfo } from './flash-auditor';
+
+// Note: Confidence no longer gates arena access - it's used for matchmaking quality
 
 interface ArenaEligibilityProps {
     practiceStats: {
@@ -18,24 +21,29 @@ interface ArenaEligibilityProps {
     };
     userAge: number | null;
     isAdmin?: boolean;
+    // New: Full confidence breakdown for FlashAuditor
+    confidenceBreakdown?: ConfidenceBreakdown;
+    decayInfo?: DecayInfo;
 }
 
-export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: ArenaEligibilityProps) {
-    const [ageVerified, setAgeVerified] = useState(false);
+export function ArenaEligibility({ 
+    practiceStats, 
+    userAge, 
+    isAdmin = false,
+    confidenceBreakdown,
+    decayInfo 
+}: ArenaEligibilityProps) {
     const [isEligible, setIsEligible] = useState(false);
     const [requirementsExpanded, setRequirementsExpanded] = useState(true);
 
-    // Requirements
-    const MIN_CONFIDENCE = 0.3;
-    const MIN_SESSIONS = 5;
-    const MIN_ACCURACY = 60;
+    // Basic requirements (confidence no longer gates - just for matchmaking)
+    const MIN_SESSIONS = 1; // Reduced from 5 - we now use confidence-based matching
+    const MIN_ACCURACY = 50; // Reduced - new players matched with similar
     const MIN_AGE = 13;
 
-    // Check eligibility
+    // Check eligibility - simplified since confidence is no longer a gate
     const hasEnoughPractice = practiceStats.totalSessions >= MIN_SESSIONS;
-    const hasRecentPractice = practiceStats.daysSinceLastPractice <= 7;
-    const hasGoodAccuracy = (practiceStats.recentAccuracy ?? 0) >= MIN_ACCURACY;
-    const hasConfidence = practiceStats.confidence >= MIN_CONFIDENCE;
+    const hasGoodAccuracy = practiceStats.totalSessions === 0 || (practiceStats.recentAccuracy ?? 0) >= MIN_ACCURACY;
     const meetsAge = isAdmin || (userAge !== null && userAge >= MIN_AGE);
 
     useEffect(() => {
@@ -45,13 +53,27 @@ export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: Ar
             setRequirementsExpanded(false);
             return;
         }
-        const eligible = hasEnoughPractice && hasRecentPractice && hasGoodAccuracy && hasConfidence && meetsAge;
+        
+        // Simplified eligibility: just age and basic practice
+        const eligible = hasEnoughPractice && meetsAge;
         setIsEligible(eligible);
+        
         // Auto-collapse when all requirements are met
         if (eligible) {
             setRequirementsExpanded(false);
         }
-    }, [isAdmin, hasEnoughPractice, hasRecentPractice, hasGoodAccuracy, hasConfidence, meetsAge]);
+    }, [isAdmin, hasEnoughPractice, hasGoodAccuracy, meetsAge]);
+
+    // Build confidence breakdown from practiceStats if not provided
+    const confidence: ConfidenceBreakdown = confidenceBreakdown || {
+        overall: practiceStats.confidence,
+        volume: Math.min(1, Math.log10(practiceStats.totalSessions + 1) / Math.log10(51)),
+        consistency: 0.5, // Estimated without full data
+        recency: practiceStats.daysSinceLastPractice <= 7 ? 1 : Math.max(0, 1 - (practiceStats.daysSinceLastPractice - 7) / 30),
+        totalSessions: practiceStats.totalSessions,
+        sessionsPerWeek: practiceStats.totalSessions / 4, // Rough estimate
+        daysSinceLastPractice: practiceStats.daysSinceLastPractice
+    };
 
     const requirements = [
         {
@@ -61,32 +83,18 @@ export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: Ar
             met: meetsAge
         },
         {
-            id: 'sessions',
-            label: 'Practice Sessions',
-            description: `Complete at least ${MIN_SESSIONS} practice sessions`,
+            id: 'intro',
+            label: 'Introduction Complete',
+            description: `Complete at least ${MIN_SESSIONS} practice session to learn the ropes`,
             met: hasEnoughPractice,
             progress: Math.min(100, (practiceStats.totalSessions / MIN_SESSIONS) * 100),
-            current: practiceStats.totalSessions,
+            current: Math.min(practiceStats.totalSessions, MIN_SESSIONS),
             required: MIN_SESSIONS
-        },
-        {
-            id: 'accuracy',
-            label: 'Recent Accuracy',
-            description: `Maintain ${MIN_ACCURACY}%+ accuracy in recent practice`,
-            met: hasGoodAccuracy,
-            progress: practiceStats.recentAccuracy ?? 0,
-            current: practiceStats.recentAccuracy ?? 0,
-            required: MIN_ACCURACY
-        },
-        {
-            id: 'recency',
-            label: 'Recent Activity',
-            description: 'Practice within the last 7 days',
-            met: hasRecentPractice,
-            current: practiceStats.daysSinceLastPractice,
-            required: 7
         }
     ];
+
+    // Show warning if accuracy is very low
+    const showAccuracyWarning = practiceStats.totalSessions >= 3 && (practiceStats.recentAccuracy ?? 0) < MIN_ACCURACY;
 
     return (
         <div className="space-y-6">
@@ -104,115 +112,129 @@ export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: Ar
                 </p>
             </motion.div>
 
-            {/* Requirements Card - Collapsible */}
-            <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.1 }}
-                className="glass rounded-2xl overflow-hidden"
-            >
-                {/* Clickable Header */}
-                <button
-                    onClick={() => setRequirementsExpanded(!requirementsExpanded)}
-                    className="w-full p-6 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
+            {/* FlashAuditor Card - Opens slide-out panel */}
+            <FlashAuditorCard 
+                confidence={confidence}
+                decayInfo={decayInfo}
+            />
+
+            {/* Requirements Card - Collapsible (only show if not met) */}
+            {!isEligible && (
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="glass rounded-2xl overflow-hidden"
                 >
-                    <h2 className="text-xl font-semibold flex items-center gap-2">
-                        <span className="text-2xl">🛡️</span>
-                        Arena Requirements
-                        {isEligible && (
-                            <span className="ml-2 px-2 py-0.5 text-xs font-bold uppercase bg-green-500/20 text-green-400 rounded-full">
-                                All Met ✓
-                            </span>
+                    {/* Clickable Header */}
+                    <button
+                        onClick={() => setRequirementsExpanded(!requirementsExpanded)}
+                        className="w-full p-6 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
+                    >
+                        <h2 className="text-xl font-semibold flex items-center gap-2">
+                            <span className="text-2xl">🛡️</span>
+                            Arena Requirements
+                        </h2>
+                        {requirementsExpanded ? (
+                            <ChevronUp size={20} className="text-muted-foreground" />
+                        ) : (
+                            <ChevronDown size={20} className="text-muted-foreground" />
                         )}
-                    </h2>
-                    {requirementsExpanded ? (
-                        <ChevronUp size={20} className="text-muted-foreground" />
-                    ) : (
-                        <ChevronDown size={20} className="text-muted-foreground" />
-                    )}
-                </button>
+                    </button>
 
-                {/* Collapsible Content */}
-                <AnimatePresence>
-                    {requirementsExpanded && (
-                        <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="overflow-hidden"
-                        >
-                            <div className="px-6 pb-6 space-y-3">
-                                {requirements.map((req, index) => (
-                                    <motion.div
-                                        key={req.id}
-                                        initial={{ opacity: 0, x: -20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: 0.1 + index * 0.05 }}
-                                        className={`p-4 rounded-xl border transition-all ${req.met
-                                            ? 'bg-green-500/10 border-green-500/30'
-                                            : 'bg-card border-border'
-                                            }`}
-                                    >
-                                        <div className="flex items-start justify-between gap-4">
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2">
-                                                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${req.met ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
-                                                        }`}>
-                                                        {req.met ? '✓' : index + 1}
-                                                    </span>
-                                                    <span className="font-medium">{req.label}</span>
-                                                </div>
-                                                <p className="text-sm text-muted-foreground mt-1 ml-8">
-                                                    {req.description}
-                                                </p>
-
-                                                {/* Progress bar for quantifiable requirements */}
-                                                {req.progress !== undefined && (
-                                                    <div className="ml-8 mt-2">
-                                                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                                            <motion.div
-                                                                initial={{ width: 0 }}
-                                                                animate={{ width: `${Math.min(100, req.progress)}%` }}
-                                                                transition={{ delay: 0.3, duration: 0.5 }}
-                                                                className={`h-full rounded-full ${req.met ? 'bg-green-500' : 'bg-primary'
-                                                                    }`}
-                                                            />
-                                                        </div>
-                                                        <p className="text-xs text-muted-foreground mt-1">
-                                                            {req.current} / {req.required}
-                                                            {req.id === 'accuracy' && '%'}
-                                                        </p>
+                    {/* Collapsible Content */}
+                    <AnimatePresence>
+                        {requirementsExpanded && (
+                            <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="px-6 pb-6 space-y-3">
+                                    {requirements.map((req, index) => (
+                                        <motion.div
+                                            key={req.id}
+                                            initial={{ opacity: 0, x: -20 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            transition={{ delay: 0.1 + index * 0.05 }}
+                                            className={`p-4 rounded-xl border transition-all ${req.met
+                                                ? 'bg-green-500/10 border-green-500/30'
+                                                : 'bg-card border-border'
+                                                }`}
+                                        >
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-sm ${req.met ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
+                                                            }`}>
+                                                            {req.met ? '✓' : index + 1}
+                                                        </span>
+                                                        <span className="font-medium">{req.label}</span>
                                                     </div>
-                                                )}
+                                                    <p className="text-sm text-muted-foreground mt-1 ml-8">
+                                                        {req.description}
+                                                    </p>
+
+                                                    {/* Progress bar for quantifiable requirements */}
+                                                    {req.progress !== undefined && (
+                                                        <div className="ml-8 mt-2">
+                                                            <div className="h-2 bg-muted rounded-full overflow-hidden">
+                                                                <motion.div
+                                                                    initial={{ width: 0 }}
+                                                                    animate={{ width: `${Math.min(100, req.progress)}%` }}
+                                                                    transition={{ delay: 0.3, duration: 0.5 }}
+                                                                    className={`h-full rounded-full ${req.met ? 'bg-green-500' : 'bg-primary'
+                                                                        }`}
+                                                                />
+                                                            </div>
+                                                            <p className="text-xs text-muted-foreground mt-1">
+                                                                {req.current} / {req.required}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+                </motion.div>
+            )}
 
-                                        </div>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </motion.div>
+            {/* Accuracy Warning */}
+            {showAccuracyWarning && (
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30"
+                >
+                    <p className="text-sm text-yellow-400 flex items-center gap-2">
+                        <span>⚠️</span>
+                        Your accuracy is {practiceStats.recentAccuracy}%. Consider more practice before arena - you&apos;ll be matched with similar players.
+                    </p>
+                </motion.div>
+            )}
 
-            {/* Confidence Score Display */}
+            {/* Matchmaking Info Banner */}
             <motion.div
-                initial={{ opacity: 0, y: 20 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                className="glass rounded-xl p-4 flex items-center justify-between"
+                className="p-4 rounded-xl bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20"
             >
-                <div>
-                    <p className="text-sm text-muted-foreground">Practice Confidence</p>
-                    <p className="text-2xl font-bold">{Math.round(practiceStats.confidence * 100)}%</p>
-                </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${hasConfidence
-                    ? 'bg-green-500/20 text-green-500'
-                    : 'bg-yellow-500/20 text-yellow-500'
-                    }`}>
-                    {hasConfidence ? 'Ready' : 'Keep Practicing'}
-                </div>
+                <p className="text-sm text-cyan-300/80">
+                    <span className="font-bold text-cyan-400">Fair Matchmaking:</span>{' '}
+                    {practiceStats.confidence < 0.3 
+                        ? "As a newcomer, you'll be matched with other new players for balanced matches."
+                        : practiceStats.confidence < 0.7
+                            ? "You'll be matched with players of similar experience levels."
+                            : "You're in the experienced player pool with quality matchmaking."
+                    }
+                </p>
             </motion.div>
 
             {/* CTA Button */}
@@ -251,6 +273,162 @@ export function ArenaEligibility({ practiceStats, userAge, isAdmin = false }: Ar
                     </div>
                 )}
             </motion.div>
+        </div>
+    );
+}
+
+// =============================================================================
+// FlashAuditor Card - Compact version that opens the slide-out panel
+// =============================================================================
+
+function FlashAuditorCard({ 
+    confidence, 
+    decayInfo 
+}: { 
+    confidence: ConfidenceBreakdown; 
+    decayInfo?: DecayInfo;
+}) {
+    const { openPanel } = useAuditor();
+    
+    const overallPercent = Math.round(confidence.overall * 100);
+    
+    // Get bracket styling
+    const getBracketStyle = () => {
+        if (confidence.overall >= 0.7) {
+            return { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500/30', label: 'ESTABLISHED' };
+        }
+        if (confidence.overall >= 0.3) {
+            return { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30', label: 'DEVELOPING' };
+        }
+        return { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30', label: 'NEWCOMER' };
+    };
+    
+    const bracketStyle = getBracketStyle();
+    const hasWarning = decayInfo && decayInfo.phase !== 'active';
+    const isReturning = decayInfo?.isReturningPlayer && decayInfo.placementMatchesCompleted < decayInfo.placementMatchesRequired;
+    
+    // Get confidence color
+    const getConfidenceColor = () => {
+        if (confidence.overall >= 0.8) return 'text-emerald-400';
+        if (confidence.overall >= 0.6) return 'text-green-400';
+        if (confidence.overall >= 0.4) return 'text-yellow-400';
+        if (confidence.overall >= 0.2) return 'text-orange-400';
+        return 'text-red-400';
+    };
+    
+    return (
+        <motion.button
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={openPanel}
+            className="w-full p-4 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 
+                border border-white/10 backdrop-blur-xl hover:border-cyan-500/30 transition-all
+                text-left relative overflow-hidden group"
+        >
+            {/* Background glow on hover */}
+            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 to-blue-500/0 
+                group-hover:from-cyan-500/5 group-hover:to-blue-500/5 transition-all duration-300" />
+            
+            <div className="relative flex items-center justify-between">
+                {/* Left side - Icon and title */}
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 
+                            border border-cyan-500/30">
+                            <Zap className="w-5 h-5 text-cyan-400" />
+                        </div>
+                        {/* Warning indicator */}
+                        {hasWarning && (
+                            <motion.div
+                                animate={{ scale: [1, 1.2, 1] }}
+                                transition={{ duration: 1.5, repeat: Infinity }}
+                                className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-yellow-500 
+                                    border-2 border-slate-900"
+                            />
+                        )}
+                    </div>
+                    
+                    <div>
+                        <h3 className="font-bold text-white text-sm">FlashAuditor</h3>
+                        <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`text-xs px-2 py-0.5 rounded-full border ${bracketStyle.bg} ${bracketStyle.text} ${bracketStyle.border}`}>
+                                {bracketStyle.label}
+                            </span>
+                            {isReturning && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                                    PLACEMENT
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Right side - Confidence score */}
+                <div className="text-right">
+                    <div className={`text-3xl font-black ${getConfidenceColor()}`}>
+                        {overallPercent}%
+                    </div>
+                    <div className="text-xs text-white/50">
+                        Tap for details
+                    </div>
+                </div>
+            </div>
+            
+            {/* Mini progress bars */}
+            <div className="flex gap-2 mt-3">
+                <MiniProgressBar value={confidence.volume} label="Vol" />
+                <MiniProgressBar value={confidence.consistency} label="Con" />
+                <MiniProgressBar value={confidence.recency} label="Rec" />
+            </div>
+            
+            {/* Decay warning */}
+            {hasWarning && decayInfo && (
+                <div className="mt-3 flex items-center gap-2 text-xs">
+                    {decayInfo.phase === 'returning' ? (
+                        <>
+                            <Activity className="w-3 h-3 text-purple-400" />
+                            <span className="text-purple-400">
+                                {decayInfo.placementMatchesRequired - decayInfo.placementMatchesCompleted} placement matches remaining
+                            </span>
+                        </>
+                    ) : (
+                        <>
+                            <AlertTriangle className="w-3 h-3 text-yellow-400" />
+                            <span className="text-yellow-400">
+                                {decayInfo.phaseLabel}: {decayInfo.eloAtRisk} ELO at risk
+                            </span>
+                        </>
+                    )}
+                </div>
+            )}
+        </motion.button>
+    );
+}
+
+function MiniProgressBar({ value, label }: { value: number; label: string }) {
+    const getColor = () => {
+        if (value >= 0.7) return 'bg-emerald-500';
+        if (value >= 0.4) return 'bg-yellow-500';
+        return 'bg-orange-500';
+    };
+    
+    return (
+        <div className="flex-1">
+            <div className="flex items-center justify-between text-[10px] text-white/50 mb-0.5">
+                <span>{label}</span>
+                <span>{Math.round(value * 100)}%</span>
+            </div>
+            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${value * 100}%` }}
+                    transition={{ duration: 0.8, ease: 'easeOut' }}
+                    className={`h-full rounded-full ${getColor()}`}
+                />
+            </div>
         </div>
     );
 }

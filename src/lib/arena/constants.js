@@ -41,28 +41,99 @@ export const SKILL_TIER_LEVELS = {
 export const OPERATIONS = ['addition', 'subtraction', 'multiplication', 'division'];
 
 // =============================================================================
-// MATCHMAKING CONFIGURATION
+// MATCHMAKING CONFIGURATION (100-Tier System)
 // =============================================================================
+// The 100-tier system has 5 bands of 20 tiers each:
+// - Foundation (F): 1-20
+// - Intermediate (I): 21-40
+// - Advanced (A): 41-60
+// - Expert (E): 61-80
+// - Master (M): 81-100
 
 export const MATCHMAKING = {
-    // Gate 1: Tier Compatibility - users must be within ±TIER_RANGE tiers
-    TIER_RANGE: 1,
+    // Gate 1: Tier Compatibility (100-tier system)
+    // ±20 tiers = approximately one band width
+    // This keeps players within similar skill levels while allowing some flexibility
+    TIER_RANGE: 20,
 
-    // Gate 2: Elo Proximity
-    INITIAL_ELO_RANGE: 50,      // Start matching within ±50 Elo
-    ELO_EXPANSION_RATE: 25,     // Expand by 25 Elo every expansion interval
-    ELO_EXPANSION_INTERVAL: 10000, // Expand every 10 seconds
-    MAX_ELO_RANGE: 300,         // Cap at ±300 Elo difference
+    // Gate 2: ELO Proximity with Expanding Range
+    // Starts with a reasonable range, expands over time to reduce queue times
+    INITIAL_ELO_RANGE: 100,       // Start matching within ±100 ELO (reasonable for fair matches)
+    ELO_EXPANSION_RATE: 50,       // Expand by 50 ELO every expansion interval (faster matching)
+    ELO_EXPANSION_INTERVAL: 5000, // Expand every 5 seconds (faster expansion)
+    MAX_ELO_RANGE: 300,           // Cap at ±300 ELO difference
 
-    // Anti-Smurf: Practice Confidence threshold
-    MIN_CONFIDENCE_SCORE: 0.3,  // Minimum confidence (0-1) to enter matchmaking
+    // Gate 3: Confidence-Based Matchmaking (replaces hard gating)
+    // Instead of blocking low-confidence players, we match them with similar players
+    CONFIDENCE_BRACKETS: {
+        NEWCOMER:     { min: 0.00, max: 0.30, label: 'Newcomer',    priority: 1 },
+        DEVELOPING:   { min: 0.30, max: 0.70, label: 'Developing',  priority: 2 },
+        ESTABLISHED:  { min: 0.70, max: 1.00, label: 'Established', priority: 3 }
+    },
+    // Prefer matching within same confidence bracket (soft preference, not hard gate)
+    CONFIDENCE_BRACKET_WEIGHT: 50,  // Extra ELO-equivalent penalty for mismatched brackets
 
     // Queue settings
-    QUEUE_TIMEOUT: 120000,      // 2 minutes max wait time
-    MATCH_READY_TIMEOUT: 15000, // 15 seconds to accept match
+    QUEUE_TIMEOUT: 120000,        // 2 minutes max wait time
+    MATCH_READY_TIMEOUT: 15000,   // 15 seconds to accept match
+    AI_FALLBACK_TIMEOUT: 15000,   // Start AI match after 15 seconds if no human found
 
-    // Default Elo for new players
-    DEFAULT_ELO: 1000
+    // Default ELO for new players
+    DEFAULT_ELO: 1000,
+
+    // High-Rank Quality Matching (Diamond+)
+    // At high ranks, additionally consider APS history for better match quality
+    HIGH_RANK_ELO_THRESHOLD: 2000, // Diamond starts at 2000 ELO
+    HIGH_RANK_APS_WEIGHT: 0.15,    // APS contributes 15% to match score at high ranks
+    HIGH_RANK_CONFIDENCE_STRICT: true // Require same confidence bracket at high ranks
+};
+
+// =============================================================================
+// DECAY & RETURNING PLAYER SYSTEM
+// =============================================================================
+// Skills decay without practice. This keeps rankings accurate and encourages
+// regular play. Returning players get placement matches for fair re-calibration.
+
+export const DECAY = {
+    // Grace period - no decay
+    GRACE_PERIOD_DAYS: 7,         // No decay for first 7 days of inactivity
+    
+    // Warning phase (8-14 days)
+    WARNING_START_DAYS: 8,        // Start warning at day 8
+    WARNING_ELO_DECAY_PER_DAY: 5, // -5 ELO per day during warning
+    
+    // Active decay phase (15-30 days)
+    DECAY_START_DAYS: 15,         // Full decay starts at day 15
+    DECAY_ELO_PER_DAY: 10,        // -10 ELO per day
+    
+    // Severe decay (31+ days)
+    SEVERE_DECAY_START_DAYS: 31,
+    SEVERE_ELO_PER_DAY: 15,       // -15 ELO per day
+    TIER_DECAY_PER_WEEK: 1,       // -1 tier per week at severe decay
+    
+    // Returning player threshold
+    RETURNING_PLAYER_DAYS: 60,    // Flagged as returning player after 60 days
+    
+    // Decay caps (prevent going too low)
+    MIN_ELO_FLOOR: 200,           // ELO cannot drop below 200
+    MIN_TIER_FLOOR: 1,            // Tier cannot drop below 1 (F1)
+    
+    // Confidence threshold for returning player flag
+    LOW_CONFIDENCE_THRESHOLD: 0.15  // Below 15% triggers returning player status
+};
+
+export const PLACEMENT = {
+    // Returning player placement matches
+    MATCHES_REQUIRED: 3,          // 3 placement matches to recalibrate
+    ELO_MULTIPLIER: 2.0,          // K-factor doubled during placement
+    
+    // Soft reset for moderate inactivity (30-60 days)
+    SOFT_RESET_ELO_PENALTY: 100,  // -100 ELO for soft reset
+    SOFT_RESET_DAYS: 30,          // Soft reset triggers after 30 days
+    
+    // Match other returning players when possible
+    PREFER_RETURNING_PLAYERS: true,
+    RETURNING_PLAYER_WEIGHT: 100  // Heavy preference for matching returning players together
 };
 
 // =============================================================================
@@ -105,7 +176,49 @@ export const GAME = {
 
     // Confidence-scaled K: Low confidence = dampened ELO changes
     MIN_CONFIDENCE_K_MULTIPLIER: 0.5,  // At confidence=0.3, K is halved
-    FULL_CONFIDENCE_THRESHOLD: 0.7     // At confidence>=0.7, full K factor
+    FULL_CONFIDENCE_THRESHOLD: 0.7,    // At confidence>=0.7, full K factor
+
+    // =================================================================
+    // PERFORMANCE-BASED ELO BONUSES (Speed & Accuracy Integration)
+    // =================================================================
+    
+    // APS-Scaled K-Factor Multipliers
+    // Higher APS = bigger gains for winners, smaller losses for losers
+    APS_TIERS: {
+        ELITE:    { min: 800, winnerMult: 1.25, loserMult: 0.75 },  // Elite performance
+        HIGH:     { min: 600, winnerMult: 1.10, loserMult: 0.90 },  // High performance
+        BASELINE: { min: 400, winnerMult: 1.00, loserMult: 1.00 },  // Average
+        LOW:      { min: 200, winnerMult: 0.90, loserMult: 1.10 },  // Below average
+        POOR:     { min: 0,   winnerMult: 0.75, loserMult: 1.25 }   // Poor performance
+    },
+
+    // Threshold Bonuses (flat ELO additions)
+    // Awarded for meeting specific performance thresholds
+    PERFORMANCE_BONUSES: {
+        // Accuracy bonuses (mutually exclusive - highest applies)
+        ACCURACY_PERFECT: { threshold: 1.00, bonus: 8 },  // 100% accuracy
+        ACCURACY_HIGH:    { threshold: 0.90, bonus: 5 },  // 90%+ accuracy
+        ACCURACY_GOOD:    { threshold: 0.80, bonus: 2 },  // 80%+ accuracy
+
+        // Speed bonuses (mutually exclusive - highest applies)
+        SPEED_DEMON:      { threshold: 2000, bonus: 5 },  // Avg < 2 seconds (in ms)
+        SPEED_QUICK:      { threshold: 3000, bonus: 2 },  // Avg < 3 seconds (in ms)
+
+        // Streak bonuses (mutually exclusive - highest applies)
+        STREAK_HOT:       { threshold: 10, bonus: 5 },    // 10+ streak
+        STREAK_SOLID:     { threshold: 5,  bonus: 2 }     // 5+ streak
+    },
+
+    // Bonus caps to prevent runaway ELO gains
+    MAX_WINNER_BONUS: 10,  // Winners can earn max +10 from bonuses
+    MAX_LOSER_BONUS: 5,    // Losers can earn max +5 from bonuses (reduces loss)
+
+    // Loser Protection - reduce ELO loss based on APS
+    LOSER_PROTECTION: {
+        HIGH_APS: { threshold: 700, multiplier: 0.75 },   // Lose only 75%
+        MID_APS:  { threshold: 500, multiplier: 0.85 },   // Lose only 85%
+        LOW_APS:  { threshold: 0,   multiplier: 1.00 }    // Full loss
+    }
 };
 
 // =============================================================================
@@ -172,5 +285,7 @@ module.exports = {
     MATCHMAKING,
     GAME,
     EVENTS,
-    REDIS_KEYS
+    REDIS_KEYS,
+    DECAY,
+    PLACEMENT
 };

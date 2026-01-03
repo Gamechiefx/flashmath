@@ -34,6 +34,7 @@ import { AudioSettingsProvider } from "@/components/audio-settings-provider";
 import { SessionGuard } from "@/components/session-guard";
 import { DevFooter } from "@/components/dev-footer";
 import { SocialProvider, SocialFAB, SocialPanel } from "@/components/social";
+import { AuditorProvider, AuditorPanel, AuditorFab } from "@/components/auditor";
 import { Toaster } from "sonner";
 export default async function RootLayout({
   children,
@@ -66,11 +67,16 @@ export default async function RootLayout({
                 disableTransitionOnChange
               >
                 <SocialProvider>
-                  <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
-                  {children}
-                  <SocialFAB />
-                  <SocialPanel />
-                  <Toaster 
+                  <AuditorProvider>
+                    <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
+                    {children}
+                    {/* Social Panel - Right side */}
+                    <SocialFAB />
+                    <SocialPanel />
+                    {/* FlashAuditor Panel - Left side */}
+                    <AuditorFab />
+                    <AuditorPanel />
+                    <Toaster 
                     position="top-center" 
                     closeButton
                     theme="dark"
@@ -89,6 +95,7 @@ export default async function RootLayout({
                       },
                     }}
                   />
+                  </AuditorProvider>
                 </SocialProvider>
               </ThemeProvider>
             </ItemPreviewProvider>

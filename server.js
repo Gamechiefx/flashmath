@@ -23,6 +23,267 @@ const activeMatches = new Map();
 const socketToMatch = new Map();
 
 // =============================================================================
+// CONNECTION QUALITY STATE MACHINE (GREEN / YELLOW / RED)
+// =============================================================================
+
+const INTEGRITY_STATE = {
+    GREEN: 'GREEN',   // Ranked, full ELO
+    YELLOW: 'YELLOW', // Void, no ELO change
+    RED: 'RED'        // Forfeit
+};
+
+const CONNECTION_THRESHOLDS = {
+    // Relaxed thresholds for real-world connections through proxies
+    GREEN: { maxRtt: 180, maxJitter: 50, maxLoss: 0.03, maxDisconnectSec: 3 },
+    YELLOW: { maxRtt: 300, maxJitter: 100, maxLoss: 0.08, maxDisconnectSec: 15 },
+    // Beyond YELLOW = RED
+};
+
+const HYSTERESIS = {
+    GREEN_TO_YELLOW: 3000,   // 3s of bad conditions before downgrade
+    YELLOW_TO_GREEN: 8000,   // 8s of good conditions to recover
+    YELLOW_TO_RED: 20000,    // 20s in YELLOW = escalate to RED
+    MAX_DISCONNECTS: 3,      // 3 disconnects = immediate RED
+    RTT_SAMPLE_SIZE: 10,     // Keep last 10 RTT samples
+};
+
+/**
+ * Initialize connection stats for a player
+ */
+function initConnectionStats() {
+    return {
+        state: INTEGRITY_STATE.GREEN,
+        rttSamples: [],
+        pingCount: 0,
+        pongCount: 0,
+        disconnectCount: 0,
+        disconnectSecondsTotal: 0,
+        lastDisconnectTime: null,
+        isCurrentlyDisconnected: false,
+        stateEnteredAt: Date.now(),
+        conditionMetSince: null,
+        lastCondition: INTEGRITY_STATE.GREEN,
+        lastPingTime: null,
+    };
+}
+
+/**
+ * Calculate median of an array
+ */
+function median(arr) {
+    if (!arr || arr.length === 0) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Calculate jitter (standard deviation of RTT samples)
+ */
+function calculateJitter(samples) {
+    if (!samples || samples.length < 2) return 0;
+    const avg = samples.reduce((a, b) => a + b, 0) / samples.length;
+    const squareDiffs = samples.map(s => Math.pow(s - avg, 2));
+    return Math.sqrt(squareDiffs.reduce((a, b) => a + b, 0) / samples.length);
+}
+
+/**
+ * Evaluate connection quality → returns GREEN/YELLOW/RED condition
+ */
+function evaluateConnectionCondition(stats, playerId = 'unknown') {
+    // Grace period: Need at least 5 pong responses before evaluating
+    // This ensures we have actual RTT data and accounts for in-flight pings
+    if (stats.pongCount < 5) {
+        console.log(`[Connection] ${playerId}: Grace period (pongCount=${stats.pongCount} < 5), returning GREEN`);
+        return INTEGRITY_STATE.GREEN; // Assume good until proven otherwise
+    }
+    
+    const medianRtt = median(stats.rttSamples);
+    const jitter = calculateJitter(stats.rttSamples);
+    
+    // Calculate loss accounting for in-flight pings (allow 2 pings to be in-flight)
+    // Only count as loss if we're missing more than 2 pongs
+    const expectedPongs = Math.max(0, stats.pingCount - 2);
+    const loss = expectedPongs > 0 ? Math.max(0, 1 - (stats.pongCount / expectedPongs)) : 0;
+    
+    const disconnectSec = stats.disconnectSecondsTotal;
+    
+    console.log(`[Connection] ${playerId}: Evaluating - medianRtt=${medianRtt.toFixed(0)}ms, jitter=${jitter.toFixed(1)}ms, loss=${(loss*100).toFixed(1)}%, disconnects=${stats.disconnectCount}, disconnectSec=${disconnectSec.toFixed(1)}`);
+    
+    // Check RED conditions first (immediate)
+    if (medianRtt > CONNECTION_THRESHOLDS.YELLOW.maxRtt) {
+        console.log(`[Connection] ${playerId}: RED - medianRtt ${medianRtt.toFixed(0)} > ${CONNECTION_THRESHOLDS.YELLOW.maxRtt}`);
+        return INTEGRITY_STATE.RED;
+    }
+    if (jitter > CONNECTION_THRESHOLDS.YELLOW.maxJitter) {
+        console.log(`[Connection] ${playerId}: RED - jitter ${jitter.toFixed(1)} > ${CONNECTION_THRESHOLDS.YELLOW.maxJitter}`);
+        return INTEGRITY_STATE.RED;
+    }
+    if (loss > CONNECTION_THRESHOLDS.YELLOW.maxLoss) {
+        console.log(`[Connection] ${playerId}: RED - loss ${(loss*100).toFixed(1)}% > ${CONNECTION_THRESHOLDS.YELLOW.maxLoss*100}%`);
+        return INTEGRITY_STATE.RED;
+    }
+    if (disconnectSec > CONNECTION_THRESHOLDS.YELLOW.maxDisconnectSec) {
+        console.log(`[Connection] ${playerId}: RED - disconnectSec ${disconnectSec.toFixed(1)} > ${CONNECTION_THRESHOLDS.YELLOW.maxDisconnectSec}`);
+        return INTEGRITY_STATE.RED;
+    }
+    if (stats.disconnectCount >= HYSTERESIS.MAX_DISCONNECTS) {
+        console.log(`[Connection] ${playerId}: RED - disconnectCount ${stats.disconnectCount} >= ${HYSTERESIS.MAX_DISCONNECTS}`);
+        return INTEGRITY_STATE.RED;
+    }
+    
+    // Check YELLOW conditions
+    if (medianRtt > CONNECTION_THRESHOLDS.GREEN.maxRtt ||
+        jitter > CONNECTION_THRESHOLDS.GREEN.maxJitter ||
+        loss > CONNECTION_THRESHOLDS.GREEN.maxLoss ||
+        disconnectSec > CONNECTION_THRESHOLDS.GREEN.maxDisconnectSec) {
+        console.log(`[Connection] ${playerId}: YELLOW - exceeded GREEN thresholds`);
+        return INTEGRITY_STATE.YELLOW;
+    }
+    
+    console.log(`[Connection] ${playerId}: GREEN - all conditions met`);
+    return INTEGRITY_STATE.GREEN;
+}
+
+/**
+ * Update player's connection state with hysteresis
+ * Returns true if state changed
+ */
+function updateConnectionState(player, playerId = 'unknown') {
+    if (!player.connectionStats) {
+        player.connectionStats = initConnectionStats();
+    }
+    
+    const stats = player.connectionStats;
+    const currentCondition = evaluateConnectionCondition(stats, playerId);
+    const now = Date.now();
+    const previousState = stats.state;
+    
+    // Track how long current condition has been met
+    if (stats.lastCondition !== currentCondition) {
+        stats.conditionMetSince = now;
+        stats.lastCondition = currentCondition;
+    }
+    
+    const conditionDuration = now - (stats.conditionMetSince || now);
+    
+    // State transitions with hysteresis
+    switch (stats.state) {
+        case INTEGRITY_STATE.GREEN:
+            if (currentCondition === INTEGRITY_STATE.RED) {
+                stats.state = INTEGRITY_STATE.RED; // Immediate on hard RED
+                stats.stateEnteredAt = now;
+            } else if (currentCondition === INTEGRITY_STATE.YELLOW && 
+                       conditionDuration >= HYSTERESIS.GREEN_TO_YELLOW) {
+                stats.state = INTEGRITY_STATE.YELLOW;
+                stats.stateEnteredAt = now;
+            }
+            break;
+            
+        case INTEGRITY_STATE.YELLOW:
+            if (currentCondition === INTEGRITY_STATE.RED) {
+                stats.state = INTEGRITY_STATE.RED; // Immediate
+                stats.stateEnteredAt = now;
+            } else if (currentCondition === INTEGRITY_STATE.GREEN && 
+                       conditionDuration >= HYSTERESIS.YELLOW_TO_GREEN) {
+                stats.state = INTEGRITY_STATE.GREEN;
+                stats.stateEnteredAt = now;
+            } else if (now - stats.stateEnteredAt >= HYSTERESIS.YELLOW_TO_RED) {
+                stats.state = INTEGRITY_STATE.RED; // Too long in YELLOW
+                stats.stateEnteredAt = now;
+            }
+            break;
+            
+        case INTEGRITY_STATE.RED:
+            // No recovery from RED during match
+            break;
+    }
+    
+    return stats.state !== previousState;
+}
+
+/**
+ * Get connection quality metrics for a player
+ */
+function getConnectionMetrics(stats) {
+    if (!stats) return { rtt: 0, jitter: 0, loss: 0, state: INTEGRITY_STATE.GREEN };
+    return {
+        rtt: Math.round(median(stats.rttSamples)),
+        jitter: Math.round(calculateJitter(stats.rttSamples)),
+        loss: stats.pingCount > 0 ? Math.round((1 - stats.pongCount / stats.pingCount) * 100) : 0,
+        state: stats.state,
+        disconnects: stats.disconnectCount,
+    };
+}
+
+// =============================================================================
+// LEADERBOARD SYSTEM
+// =============================================================================
+
+// Track sockets subscribed to leaderboard updates
+// Key: "duel:addition:weekly" or "team:overall:alltime", Value: Set of socket IDs
+const leaderboardSubscriptions = new Map();
+
+/**
+ * Get the subscription key for a leaderboard
+ */
+function getLeaderboardKey(type, operation, timeFilter) {
+    return `${type}:${operation}:${timeFilter}`;
+}
+
+/**
+ * Subscribe a socket to leaderboard updates
+ */
+function subscribeToLeaderboard(socketId, type, operation, timeFilter) {
+    const key = getLeaderboardKey(type, operation, timeFilter);
+    if (!leaderboardSubscriptions.has(key)) {
+        leaderboardSubscriptions.set(key, new Set());
+    }
+    leaderboardSubscriptions.get(key).add(socketId);
+    console.log(`[Leaderboard] Socket ${socketId} subscribed to ${key}`);
+}
+
+/**
+ * Unsubscribe a socket from all leaderboards
+ */
+function unsubscribeFromAllLeaderboards(socketId) {
+    for (const [key, sockets] of leaderboardSubscriptions.entries()) {
+        sockets.delete(socketId);
+        if (sockets.size === 0) {
+            leaderboardSubscriptions.delete(key);
+        }
+    }
+}
+
+/**
+ * Broadcast leaderboard update to all subscribed sockets
+ */
+function broadcastLeaderboardUpdate(io, type, operation, affectedUserIds) {
+    // Broadcast to both weekly and alltime subscriptions
+    const timeFilters = ['weekly', 'alltime'];
+    const operations = operation === 'mixed' ? [] : ['overall', operation];
+    
+    for (const tf of timeFilters) {
+        for (const op of operations) {
+            const key = getLeaderboardKey(type, op, tf);
+            const sockets = leaderboardSubscriptions.get(key);
+            if (sockets && sockets.size > 0) {
+                console.log(`[Leaderboard] Broadcasting update to ${sockets.size} sockets for ${key}`);
+                for (const socketId of sockets) {
+                    io.to(socketId).emit('leaderboard:update', {
+                        type,
+                        operation: op,
+                        timeFilter: tf,
+                        affectedUserIds,
+                        timestamp: Date.now(),
+                    });
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
 // PRESENCE SYSTEM
 // =============================================================================
 
@@ -242,10 +503,15 @@ app.prepare().then(() => {
                 odName: userName,
                 odScore: 0,
                 odStreak: 0,
+                odMaxStreak: 0,  // Track best streak for APS
                 odQuestionsAnswered: 0,
+                odCorrectAnswers: 0,  // Track for accuracy calculation
+                odTotalAnswerTime: 0,  // Track for speed calculation (ms)
                 odLastAnswerCorrect: null,
                 odSocketId: socket.id,
                 odCurrentQuestion: playerQuestion,
+                odLastQuestionTime: Date.now(),  // Track when question was shown
+                connectionStats: initConnectionStats(),  // Connection quality tracking
             };
 
             console.log(`[Arena Socket] ${userName} joined match ${matchId} (AI: ${match.isAiMatch}, ${Object.keys(match.players).length} players)`);
@@ -355,13 +621,135 @@ app.prepare().then(() => {
                     }
 
                     m.odTimeLeft--;
+                    
+                    // =========================================================
+                    // CONNECTION QUALITY MONITORING
+                    // =========================================================
+                    const connectionStates = {};
+                    for (const [playerId, player] of Object.entries(m.players)) {
+                        // Skip bots
+                        if (playerId.startsWith('ai') || player.isBot) continue;
+                        
+                        const playerSocket = io.sockets.sockets.get(player.odSocketId);
+                        if (playerSocket && player.connectionStats) {
+                            // Send ping
+                            player.connectionStats.pingCount++;
+                            player.connectionStats.lastPingTime = Date.now();
+                            playerSocket.emit('connection_ping', { t: Date.now() });
+                            
+                            // Update connection state with hysteresis
+                            const stateChanged = updateConnectionState(player, playerId);
+                            
+                            // Get metrics for this player
+                            connectionStates[playerId] = getConnectionMetrics(player.connectionStats);
+                            
+                            if (stateChanged) {
+                                console.log(`[Connection] ${player.odName} state changed to ${player.connectionStats.state}`);
+                            }
+                        } else if (player.connectionStats && !player.connectionStats.isCurrentlyDisconnected) {
+                            // Player socket not found - mark as disconnected
+                            player.connectionStats.isCurrentlyDisconnected = true;
+                            player.connectionStats.lastDisconnectTime = Date.now();
+                            player.connectionStats.disconnectCount++;
+                        }
+                        
+                        // Track disconnect duration
+                        if (player.connectionStats?.isCurrentlyDisconnected && player.connectionStats.lastDisconnectTime) {
+                            player.connectionStats.disconnectSecondsTotal += 1;
+                        }
+                    }
+                    
+                    // Broadcast connection states to all players
+                    if (Object.keys(connectionStates).length > 0) {
+                        io.to(matchId).emit('connection_states', { states: connectionStates });
+                    }
+                    // =========================================================
+                    
                     io.to(matchId).emit('time_update', { timeLeft: m.odTimeLeft });
 
                     if (m.odTimeLeft <= 0) {
                         clearInterval(m.timer);
                         if (m.botInterval) clearInterval(m.botInterval);
                         m.odEnded = true;
-                        io.to(matchId).emit('match_end', { players: m.players });
+
+                        // Calculate performance stats for each player
+                        const performanceStats = {};
+                        for (const [playerId, player] of Object.entries(m.players)) {
+                            const totalAnswers = player.odQuestionsAnswered || 0;
+                            const correctAnswers = player.odCorrectAnswers || 0;
+                            const accuracy = totalAnswers > 0 ? correctAnswers / totalAnswers : 0;
+                            const avgSpeedMs = correctAnswers > 0 
+                                ? Math.round((player.odTotalAnswerTime || 0) / correctAnswers) 
+                                : 0;
+                            const maxStreak = player.odMaxStreak || 0;
+
+                            // Calculate APS (0-1000 scale)
+                            // Weights: Accuracy 40%, Streak 35%, Speed 25%
+                            const streakNormalized = Math.min(1, maxStreak / 10);
+                            const speedRatio = avgSpeedMs > 0 
+                                ? Math.max(0, 1 - (avgSpeedMs / 60000)) // Normalize to 60s max
+                                : 0;
+                            const speedMultiplier = accuracy >= 0.7 ? 1 : 0.5;  // Penalty if <70% accuracy
+                            const aps = Math.round(
+                                ((accuracy * 0.40) + (streakNormalized * 0.35) + (speedRatio * speedMultiplier * 0.25)) * 1000
+                            );
+
+                            performanceStats[playerId] = {
+                                accuracy: accuracy,
+                                avgSpeedMs: avgSpeedMs,
+                                maxStreak: maxStreak,
+                                aps: aps
+                            };
+                        }
+
+                        // Determine match integrity based on connection states
+                        let matchIntegrity = INTEGRITY_STATE.GREEN;
+                        const playerIntegrity = {};
+                        
+                        for (const [playerId, player] of Object.entries(m.players)) {
+                            if (playerId.startsWith('ai') || player.isBot) {
+                                console.log(`[Match] Skipping AI player ${playerId} for integrity check`);
+                                continue;
+                            }
+                            
+                            const stats = player.connectionStats;
+                            const state = stats?.state || INTEGRITY_STATE.GREEN;
+                            const metrics = getConnectionMetrics(stats);
+                            
+                            console.log(`[Match] Player ${playerId} final state: ${state}, pings=${stats?.pingCount || 0}, pongs=${stats?.pongCount || 0}, rttSamples=${stats?.rttSamples?.length || 0}, medianRtt=${metrics?.medianRtt || 'N/A'}ms`);
+                            
+                            playerIntegrity[playerId] = {
+                                state: state,
+                                metrics: metrics
+                            };
+                            
+                            // Overall match integrity = worst player state
+                            if (state === INTEGRITY_STATE.RED) {
+                                matchIntegrity = INTEGRITY_STATE.RED;
+                            } else if (state === INTEGRITY_STATE.YELLOW && matchIntegrity !== INTEGRITY_STATE.RED) {
+                                matchIntegrity = INTEGRITY_STATE.YELLOW;
+                            }
+                        }
+                        
+                        console.log(`[Match] ${matchId} ended - Final Integrity: ${matchIntegrity}`);
+                        
+                        io.to(matchId).emit('match_end', { 
+                            players: m.players,
+                            performanceStats: performanceStats,
+                            matchIntegrity: matchIntegrity,
+                            playerIntegrity: playerIntegrity
+                        });
+
+                        // Broadcast leaderboard update after match ends
+                        // Determine match type and operation for leaderboard
+                        const matchType = m.odMode === '1v1' ? 'duel' : 'team';
+                        const matchOperation = m.odOperation || 'overall';
+                        const affectedUserIds = Object.keys(m.players).filter(id => !id.startsWith('ai-'));
+                        
+                        if (affectedUserIds.length > 0) {
+                            // Use presenceNs (presence namespace) for leaderboard updates
+                            broadcastLeaderboardUpdate(presenceNs, matchType, matchOperation, affectedUserIds);
+                        }
 
                         // Clean up match after 30 seconds
                         setTimeout(() => {
@@ -405,10 +793,19 @@ app.prepare().then(() => {
             const isCorrect = userAnswer === playerQuestion.answer;
             console.log(`[Arena Socket] Answer ${isCorrect ? 'CORRECT' : 'WRONG'} (expected: ${playerQuestion.answer}, got: ${userAnswer})`);
 
+            // Calculate answer time for speed tracking
+            const answerTime = Date.now() - (player.odLastQuestionTime || Date.now());
+
             // Update player stats
             if (isCorrect) {
                 player.odScore += 100;
                 player.odStreak++;
+                player.odCorrectAnswers = (player.odCorrectAnswers || 0) + 1;
+                player.odTotalAnswerTime = (player.odTotalAnswerTime || 0) + answerTime;
+                // Update max streak
+                if (player.odStreak > (player.odMaxStreak || 0)) {
+                    player.odMaxStreak = player.odStreak;
+                }
             } else {
                 player.odStreak = 0;
             }
@@ -418,6 +815,7 @@ app.prepare().then(() => {
             // Generate new question for this player
             const newQuestion = generateQuestion(match.odOperation);
             player.odCurrentQuestion = newQuestion;
+            player.odLastQuestionTime = Date.now();  // Reset timer for new question
 
             // Broadcast score update to all players
             io.to(matchId).emit('answer_result', {
@@ -436,6 +834,45 @@ app.prepare().then(() => {
                 odUserId,
                 question: newQuestion,
             });
+        });
+
+        // Connection quality pong response
+        socket.on('connection_pong', (data) => {
+            const { t, matchId, userId } = data;
+            const match = activeMatches.get(matchId);
+            if (!match) {
+                // console.log(`[Connection] Pong received but match ${matchId} not found`);
+                return;
+            }
+            
+            const player = match.players[userId];
+            if (!player || !player.connectionStats) {
+                // console.log(`[Connection] Pong received but player ${userId} not found in match`);
+                return;
+            }
+            
+            const rtt = Date.now() - t;
+            const stats = player.connectionStats;
+            
+            // Record pong
+            stats.pongCount++;
+            
+            // Add RTT sample (keep last N samples)
+            stats.rttSamples.push(rtt);
+            if (stats.rttSamples.length > HYSTERESIS.RTT_SAMPLE_SIZE) {
+                stats.rttSamples.shift();
+            }
+            
+            // Log EVERY ping for detailed debugging (can disable later)
+            const medianRtt = median(stats.rttSamples);
+            const jitter = calculateJitter(stats.rttSamples);
+            console.log(`[RTT] ${player.odName}: ping#${stats.pongCount} RTT=${rtt}ms, median=${medianRtt.toFixed(0)}ms, jitter=${jitter.toFixed(1)}ms, state=${stats.state}`);
+            
+            // Mark as connected if was disconnected
+            if (stats.isCurrentlyDisconnected) {
+                stats.isCurrentlyDisconnected = false;
+                console.log(`[Connection] ${player.odName} reconnected (RTT: ${rtt}ms)`);
+            }
         });
 
         // Player disconnects
@@ -657,6 +1094,33 @@ app.prepare().then(() => {
             }
         });
         
+        // =============================================================================
+        // LEADERBOARD EVENTS
+        // =============================================================================
+        
+        // Subscribe to leaderboard updates
+        socket.on('leaderboard:subscribe', (data) => {
+            const { type, operation, timeFilter } = data;
+            if (!type || !operation || !timeFilter) {
+                console.log('[Leaderboard] Invalid subscription data:', data);
+                return;
+            }
+            subscribeToLeaderboard(socket.id, type, operation, timeFilter);
+        });
+        
+        // Unsubscribe from leaderboard updates
+        socket.on('leaderboard:unsubscribe', (data) => {
+            const { type, operation, timeFilter } = data;
+            if (type && operation && timeFilter) {
+                const key = getLeaderboardKey(type, operation, timeFilter);
+                const sockets = leaderboardSubscriptions.get(key);
+                if (sockets) {
+                    sockets.delete(socket.id);
+                    console.log(`[Leaderboard] Socket ${socket.id} unsubscribed from ${key}`);
+                }
+            }
+        });
+        
         // Disconnect
         socket.on('disconnect', async () => {
             const userId = presenceSocketToUser.get(socket.id);
@@ -673,6 +1137,10 @@ app.prepare().then(() => {
                 
                 console.log(`[Presence] ${userId} went offline`);
             }
+            
+            // Clean up leaderboard subscriptions
+            unsubscribeFromAllLeaderboards(socket.id);
+            
             console.log(`[Presence] Client disconnected: ${socket.id}`);
         });
     });
