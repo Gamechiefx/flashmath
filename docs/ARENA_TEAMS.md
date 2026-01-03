@@ -16,12 +16,13 @@
 6. [Live Match HUD](#live-match-hud)
 7. [Disconnect & Timeout Handling](#disconnect--timeout-handling)
 8. [Scoring System](#scoring-system)
-9. [Momentum Mechanics (Casual Only)](#momentum-mechanics-casual-only)
-10. [Role Specialization & Badges](#role-specialization--badges)
-11. [Practice Modes](#practice-modes)
-12. [Post-Match Analytics](#post-match-analytics)
-13. [Database Schema](#database-schema)
-14. [Implementation Checklist](#implementation-checklist)
+9. [Anchor System](#anchor-system)
+10. [Momentum Mechanics (Casual Only)](#momentum-mechanics-casual-only)
+11. [Role Specialization & Badges](#role-specialization--badges)
+12. [Practice Modes](#practice-modes)
+13. [Post-Match Analytics](#post-match-analytics)
+14. [Database Schema](#database-schema)
+15. [Implementation Checklist](#implementation-checklist)
 
 ---
 
@@ -53,82 +54,114 @@ Arena Teams is a **relay-based, team competitive mode** where pre-formed teams (
 
 ## Match Structure & Timing
 
-### 8-Minute Match Format
+### Match Overview
 
-| Phase | Duration | Description |
-|-------|----------|-------------|
-| Pre-Match Strategy | 90s | IGL assigns slots, scouts opponent |
-| Round 1 | 50s | Active relay gameplay |
-| Tactical Break 1 | 15s | Brief pause, stats visible, no changes |
-| Round 2 | 50s | Active relay gameplay |
-| **Halftime** | **90s** | **IGL can reassign slots, strategy** |
-| Round 3 | 50s | Active relay gameplay |
-| Tactical Break 2 | 15s | Brief pause |
-| Round 4 | 50s | Active relay gameplay |
-| Post-Match | 30s | Results, analytics preview |
+| Element | Value |
+|---------|-------|
+| **Format** | 5v5 Team Relay |
+| **Total Rounds** | 8 (4 per half) |
+| **Halves** | 2 |
+| **Questions per Round** | 25 (5 per slot) |
+| **Points per Question** | 100 |
+| **Streak Bonus** | +5 per consecutive correct |
 
-**Total Active Play:** 200 seconds (4 rounds × 50s)  
-**Total Match Time:** ~7.5 minutes (buffer to 8 min)
+### Time Structure
 
-### Questions Per Round by Team Size
+| Element | Duration |
+|---------|----------|
+| **Time per Half** | 6 minutes (8 max with timeouts) |
+| **Time per Round** | 1:20 (80 seconds) |
+| **Break Between Rounds** | 10 seconds |
+| **Halftime** | 2 minutes |
+| **IGL Timeout** | +1 minute (2 per match total) |
 
-| Team Size | Questions/Player/Round | Total Team Questions/Round |
-|-----------|------------------------|---------------------------|
-| 2v2 | 6 | 12 |
-| 3v3 | 5 | 15 |
-| 4v4 | 4 | 16 |
-| 5v5 | 4 | 20 |
+### Clock Rules
+
+| Clock | Behavior |
+|-------|----------|
+| **Relay Clock** | Never stops (players answer continuously) |
+| **Game Clock** | Stops for match operations (breaks, decisions, timeouts) |
+
+### Match Flow
+
+```
+1ST HALF (6 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Round 1 (1:20) → 10s break → Round 2 (1:20) → 10s break →
+Round 3 (1:20) → 10s break → Round 4 (1:20)
+
+HALFTIME (2 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IGL can: Reassign slots, strategize, review stats
+
+2ND HALF (6 minutes)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Round 1 (1:20) → 10s break → Round 2 (1:20) → 10s break →
+Round 3 (1:20) → 10s break →
+          ↓
+    [FINAL ROUND DECISION - IGL chooses: ANCHOR SOLO or NORMAL]
+          ↓
+Round 4 (Final Round)
+```
 
 ### Operation Slots
 
-Each team member is assigned to one operation slot:
+Each of the 5 team members is assigned to one operation slot:
 
-| Slot | Symbol | Description |
-|------|--------|-------------|
-| Addition | + | Basic to advanced addition |
-| Subtraction | − | Basic to advanced subtraction |
-| Multiplication | × | Times tables to multi-digit |
-| Division | ÷ | Division facts to long division |
-| Mixed | ? | Random operations, higher difficulty |
+| Slot | Operation | Questions/Round | Description |
+|------|-----------|-----------------|-------------|
+| 1 | Addition (+) | 5 | Basic to advanced addition |
+| 2 | Multiplication (×) | 5 | Times tables to multi-digit |
+| 3 | Division (÷) | 5 | Division facts to long division |
+| 4 | Subtraction (−) | 5 | Basic to advanced subtraction |
+| 5 | Mixed (?) | 5 | Random operations, higher difficulty |
 
-**Rules:**
-- One player per slot
-- Fewer players = fewer filled slots (2v2 uses 2 slots, etc.)
-- Mixed slot is optional but awards bonus points
-- Assignments lock when match starts
-- Can only change at halftime
+**Total:** 25 questions per round (5 slots × 5 questions)
+
+### Slot Assignment Rules
+
+| Rule | Description |
+|------|-------------|
+| One player per slot | Each player covers exactly one operation |
+| IGL assigns | IGL assigns all 5 players (including themselves) |
+| Reassignment allowed | Can change between any round or at halftime |
+| Anchor flexibility | Anchor role can be assigned to any player |
 
 ---
 
 ## Team & Party Formation
+
+### Team Composition
+
+| Role | Count | Description |
+|------|-------|-------------|
+| **Players** | 5 | Each assigned to an operation slot |
+| **IGL** | 1 | Any player, makes strategic calls, also plays |
+| **Anchor** | 1 | Hovering title, can be any player, special abilities |
+
+*Note: IGL and Anchor can be the same person or different players.*
 
 ### Party System
 
 ```
 Party Structure:
 ├── Party Leader (default IGL)
-├── Members (2-5 total including leader)
+├── Members (5 total including leader)
 ├── Team Name (optional, for persistent teams)
-└── Team Tag (3-4 char, e.g., "FM" for FlashMath)
+├── Team Tag (3-4 char, e.g., "FM" for FlashMath)
+├── IGL Assignment (can be delegated)
+└── Anchor Assignment (hovering role, any player)
 ```
-
-### Team Sizes
-
-| Mode | Min Players | Max Players | Slots Available |
-|------|-------------|-------------|-----------------|
-| 2v2 | 2 | 2 | 2 (e.g., +, ×) |
-| 3v3 | 3 | 3 | 3 (e.g., +, −, ×) |
-| 4v4 | 4 | 4 | 4 (e.g., +, −, ×, ÷) |
-| 5v5 | 5 | 5 | 5 (all slots) |
 
 ### Party Flow
 
 ```
 1. Create Party (leader becomes IGL by default)
-2. Invite Members (friends list or invite code)
-3. Select Mode (2v2 through 5v5)
-4. Enter Queue (ranked or casual)
-5. Match Found → Pre-Match Strategy Phase
+2. Invite Members (5 total required for 5v5)
+3. Assign IGL (if different from leader)
+4. Assign Anchor role
+5. Enter Queue (ranked or casual)
+6. Match Found → Pre-Match Strategy Phase
 ```
 
 ---
@@ -141,20 +174,30 @@ The In-Game Leader (IGL) has strategic authority during designated phases:
 
 | Phase | IGL Authority |
 |-------|---------------|
-| Pre-Match (90s) | Scout opponent, assign slots, set strategy |
+| Pre-Match | Scout opponent, assign slots, assign Anchor, set strategy |
+| Round Breaks (10s) | Reassign slots for next round, quick adjustments |
 | Active Rounds | None (plays their slot like everyone) |
-| Tactical Breaks | View stats only, no changes |
-| Halftime (90s) | Reassign slots, adjust strategy |
-| Timeouts | Call timeout (between rounds only) |
+| Halftime (2 min) | Full reassignment, strategy review, Anchor decisions |
+| Final Round Break | Choose ANCHOR SOLO or NORMAL for Round 4 |
+| Timeouts | Call timeout (between rounds only, +1 min) |
 
 ### IGL Selection
 
 ```
 Methods:
 1. Party Leader Default - Creator is IGL
-2. Manual Assignment - Leader can delegate
+2. Manual Assignment - Leader can delegate before queue
 3. Vote System (optional) - Team votes for IGL
 ```
+
+### IGL Flexibility
+
+| When | What IGL Can Do |
+|------|-----------------|
+| Between any round | Reassign player slots |
+| At halftime | Full strategy overhaul, Anchor reassignment |
+| Before 2nd Half R4 | Decide Anchor Solo vs Normal |
+| Any break | Call timeout (2 total per match) |
 
 ### Pre-Match Scouting Dashboard
 
@@ -211,9 +254,10 @@ Available at Halftime (90s):
 ### Relay Flow
 
 ```
-START → Player 1 (Slot 1) → Player 2 (Slot 2) → ... → Player N (Slot N) → END
-         5 questions          5 questions              5 questions
-         
+START → Slot 1 (+) → Slot 2 (×) → Slot 3 (÷) → Slot 4 (−) → Slot 5 (?) → END
+        5 questions  5 questions  5 questions  5 questions  5 questions
+        
+Total: 25 questions per round
 Clock runs continuously - no pauses between handoffs
 ```
 
@@ -313,18 +357,22 @@ Legend:
 
 | Aspect | Rule |
 |--------|------|
-| When Available | Tactical breaks and halftime ONLY |
-| Duration | 30 seconds |
-| Limit | 2 per match (1 per half recommended) |
-| Cannot Be Called | During active rounds |
+| **Total per Match** | 2 |
+| **Duration Added** | +1 minute to current half |
+| **When Usable** | Between rounds or during halftime |
+| **Cannot Be Called** | During active rounds (relay clock running) |
+| **Effect on Clocks** | Game clock pauses, relay clock unaffected |
 
 ```
 UI for IGL:
 ┌─────────────────────────────────────────────────────────────┐
 │  [CALL TIMEOUT]  (grayed out during rounds)                │
 │  Timeouts remaining: ●● (2 of 2)                           │
+│  Effect: Adds +1 minute to half when called                │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+**Note:** Using a timeout extends the half from 6 minutes to 7 minutes (or 8 minutes if both timeouts used in one half).
 
 ### Disconnect Handling
 
@@ -361,26 +409,36 @@ Before Queue:
 | Action | Points |
 |--------|--------|
 | Correct answer | 100 pts |
-| Speed bonus (< 1s) | +20 pts |
-| Speed bonus (< 0.5s) | +50 pts |
-| Streak bonus (3+) | +10 pts per streak level |
-| Mixed slot multiplier | 1.2x |
+| Streak bonus | +5 pts per consecutive correct |
+
+**Maximum per question:** 100 base + 5 streak = 105 pts
 
 ### Team Score Calculation
 
 ```
-Team Round Score = Σ(Player Scores) × Accuracy Multiplier
+Round Score = Σ(Correct Answers × 100) + Σ(Streak Bonuses × 5)
 
-Accuracy Multiplier (applied at match end):
-100% accuracy = 1.00x
-90-99% accuracy = 0.95x
-80-89% accuracy = 0.85x
-<80% accuracy = 0.75x
+Example Round (Team with 5 players, 25 questions):
+- 22 correct answers = 2,200 pts
+- Cumulative streak bonuses = +85 pts
+- Round Total = 2,285 pts
 ```
+
+### APS (Arena Performance Score)
+
+Each player receives an APS calculated from:
+
+| Component | Description |
+|-----------|-------------|
+| **Accuracy** | Percentage of correct answers |
+| **Streak** | Longest consecutive correct streak |
+| **Speed** | Average response time |
+
+APS is calculated per player per match and aggregated for team statistics.
 
 ### Win Conditions
 
-1. **Primary:** Higher total score across all 4 rounds
+1. **Primary:** Higher total score across all 8 rounds
 2. **Tiebreaker 1:** Higher team accuracy
 3. **Tiebreaker 2:** Faster average relay completion time
 4. **Tiebreaker 3:** Longer max team streak
@@ -453,6 +511,161 @@ In **Best of 3/5** series:
 In **Single Match** tournaments:
 - Draw goes to sudden death overtime (future feature)
 - Or coin flip for bracket advancement (temporary)
+
+---
+
+## Anchor System
+
+The **Anchor** is a designated team member with special abilities that can dramatically impact match outcomes. The Anchor role is a "hovering title" - any player can be designated as Anchor.
+
+### Anchor Overview
+
+| Aspect | Description |
+|--------|-------------|
+| **Who** | Any player designated by IGL |
+| **Default Slot** | Plays their assigned operation slot normally |
+| **Special Abilities** | Double Call-In, Final Round Solo |
+| **Strategic Role** | Clutch player, comeback mechanic |
+
+### Anchor Abilities
+
+#### 1. Double Call-In
+
+The Anchor can be called in to play **two slots** in a single round, meaning they go twice while one teammate sits out.
+
+| Aspect | 1st Half | 2nd Half |
+|--------|----------|----------|
+| **Uses** | Once | Once |
+| **Available Rounds** | Round 1, 2, OR 3 (pick one) | Round 1 ONLY |
+| **Round 4** | ❌ Not available | N/A (see Final Round Solo) |
+| **Slot** | Any (1-5) | Any (1-5) |
+| **Effect** | Anchor plays that slot + their assigned slot | Same |
+| **Consequence** | Original slot player sits out that round | Same |
+
+**Visual Summary:**
+
+```
+1ST HALF
+─────────────────────────────────────────────────────────
+Round 1:  Double Call-In available (any slot)  ─┐
+Round 2:  Double Call-In available (any slot)  ─┼─ Pick ONE
+Round 3:  Double Call-In available (any slot)  ─┘
+Round 4:  Normal only (no Call-In)
+
+2ND HALF
+─────────────────────────────────────────────────────────
+Round 1:  Double Call-In available (any slot)  ← ONLY option
+Round 2:  Normal only
+Round 3:  Normal only
+Round 4:  FINAL ROUND DECISION (Solo or Normal)
+```
+
+**Example:**
+
+```
+Team Setup:
+- Player A: Slot 1 (Addition)
+- Player B: Slot 2 (Multiplication)
+- Player C: Slot 3 (Division) ← ANCHOR
+- Player D: Slot 4 (Subtraction)
+- Player E: Slot 5 (Mixed)
+
+Normal Round:
+Slot 1: Player A → Slot 2: Player B → Slot 3: ANCHOR (C) → 
+Slot 4: Player D → Slot 5: Player E
+
+Double Call-In (Anchor into Slot 1):
+Slot 1: ANCHOR (C) → Slot 2: Player B → Slot 3: ANCHOR (C) → 
+Slot 4: Player D → Slot 5: Player E
+
+Player A sits out this round. Anchor plays twice!
+```
+
+#### 2. Final Round Solo (2nd Half Round 4 Only)
+
+In the final round of the match, the IGL can choose to have the Anchor play **ALL 5 SLOTS** solo.
+
+| Aspect | Rule |
+|--------|------|
+| **When** | Between Round 3 and Round 4 of 2nd Half |
+| **Decision Window** | 10-second break before Round 4 |
+| **Options** | ANCHOR SOLO or NORMAL |
+| **Solo Effect** | Anchor plays all 5 slots (all 25 questions) |
+| **Normal Effect** | Standard relay with all 5 players |
+
+**Decision Phase UI:**
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  ROUND 4 - IGL DECISION                                   │
+│                                                            │
+│  Away Team decides FIRST (or simultaneously):             │
+│  ┌──────────────┐  ┌──────────────┐                       │
+│  │   NORMAL     │  │   ANCHOR     │                       │
+│  │   RELAY      │  │   SOLO ⚡     │                       │
+│  └──────────────┘  └──────────────┘                       │
+│                                                            │
+│  [5 second decision timer]                                │
+└────────────────────────────────────────────────────────────┘
+```
+
+**Reveal Type:**
+
+| Type | Description | Who Chooses |
+|------|-------------|-------------|
+| **Sequential** | Away team decides first, Home team reacts | Team with better record |
+| **Simultaneous** | Both teams reveal at same time | Default if records equal |
+
+### Final Round Scenarios
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  SCENARIO 1: NORMAL vs NORMAL                                          │
+│  ─────────────────────────────────────────────────────────────────────  │
+│  Team A: Slot 1 → Slot 2 → Slot 3 → Slot 4 → Slot 5                    │
+│  Team B: Slot 1 → Slot 2 → Slot 3 → Slot 4 → Slot 5                    │
+│                                                                         │
+│  Standard relay round. Conservative choice.                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│  SCENARIO 2: ANCHOR SOLO vs ANCHOR SOLO (The Showdown)                 │
+│  ─────────────────────────────────────────────────────────────────────  │
+│  Team A: ⚡ ANCHOR ─────────────────────────────────────────→          │
+│  Team B: ⚡ ANCHOR ─────────────────────────────────────────→          │
+│                                                                         │
+│  1v1 speed duel! Both anchors race through all 25 questions.          │
+│  Most points wins. MAXIMUM DRAMA.                                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│  SCENARIO 3: ANCHOR SOLO vs NORMAL (Asymmetric)                        │
+│  ─────────────────────────────────────────────────────────────────────  │
+│  Team A: ⚡ ANCHOR (solo, all 25 questions)                            │
+│  Team B: Slot 1 → Slot 2 → Slot 3 → Slot 4 → Slot 5                    │
+│                                                                         │
+│  Anchor races solo while opponents relay normally.                     │
+│  Anchor has NO handoff delays but carries all pressure.               │
+│  Relay team has 5 brains but loses time on handoffs.                  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### Strategic Implications
+
+| Strategy | When to Use |
+|----------|-------------|
+| **Double Call-In early (1st Half R1-3)** | Set pace, probe opponent, build lead |
+| **Double Call-In in 2nd Half R1** | Start strong, momentum for final rounds |
+| **Save Anchor Solo for behind** | Comeback mechanic, high risk/reward |
+| **Match opponent's Solo** | Counter their all-in with your own |
+| **Stay Normal against Solo** | Steady play, trust team execution |
+
+### Anchor-Specific Badges
+
+| Badge | Requirement | Icon |
+|-------|-------------|------|
+| 🎯 **The Closer** | 25 match-winning Anchor Solo rounds |
+| ⚡ **Speed Demon** | 20+ correct in single Anchor Solo round |
+| 🔥 **Comeback King** | Overcome 500+ point deficit with Anchor |
+| 🧊 **Ice Cold** | 95%+ accuracy in Anchor Solo showdowns |
+| 🎭 **Mind Reader** | Win 10 matches by counter-picking opponent's decision |
+| 👥 **Double Trouble** | Win 15 matches using Double Call-In |
 
 ---
 
