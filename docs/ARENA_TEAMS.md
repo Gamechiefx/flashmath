@@ -382,8 +382,77 @@ Accuracy Multiplier (applied at match end):
 
 1. **Primary:** Higher total score across all 4 rounds
 2. **Tiebreaker 1:** Higher team accuracy
-3. **Tiebreaker 2:** Faster average relay completion
+3. **Tiebreaker 2:** Faster average relay completion time
 4. **Tiebreaker 3:** Longer max team streak
+5. **Tiebreaker 4:** More correct answers total
+6. **Ultimate Tie:** If all above are equal → **Draw**
+
+### Tie/Draw Handling
+
+#### When Does a Draw Occur?
+
+A draw is declared when:
+- Both teams have equal total score AND
+- All tiebreakers are also equal (extremely rare)
+
+```
+Example (theoretical):
+Team A: 4,200 pts, 92% acc, 1.2s avg, 12 streak, 42 correct
+Team B: 4,200 pts, 92% acc, 1.2s avg, 12 streak, 42 correct
+Result: DRAW
+```
+
+#### ELO Impact for Ties
+
+| Match Type | Outcome | ELO Change |
+|------------|---------|------------|
+| Ranked | Win | +15 to +25 (based on opponent ELO) |
+| Ranked | Loss | -10 to -20 (based on opponent ELO) |
+| Ranked | **Draw** | **0 ELO change for both teams** |
+| Casual | Any | 0 (no ELO in casual) |
+
+#### Coin Rewards for Ties
+
+```
+Draw Coin Distribution:
+- Both teams receive "loser" coin amount (participation reward)
+- No winner bonus
+- Performance coins still apply (correct answers × 2)
+```
+
+#### Match History Display for Ties
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  🤝 DRAW vs [Opponent Team]  │  4v4 Ranked  │  [Date]                 │
+│  Final Score: 4,200 - 4,200  │  +0 ELO                                │
+├────────────────────────────────────────────────────────────────────────┤
+│  Result: DRAW - All tiebreakers equal                                 │
+│  • Accuracy: 92% vs 92%                                               │
+│  • Speed: 1.2s vs 1.2s                                                │
+│  • Streak: 12 vs 12                                                   │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+#### UI Representation
+
+| Element | Win | Loss | Draw |
+|---------|-----|------|------|
+| Border Color | Green | Red | Amber/Gold |
+| Icon | 🏆 Trophy | ❌ X | 🤝 Handshake |
+| ELO Badge | +N (green) | -N (red) | +0 (gray) |
+| Result Text | "VICTORY" | "DEFEAT" | "DRAW" |
+
+#### Tournament/Competitive Implications
+
+In **Best of 3/5** series:
+- Draws count as **0-0** (neither team gets a point)
+- Match must be replayed until decisive result
+- Maximum 2 draw replays before administrative decision
+
+In **Single Match** tournaments:
+- Draw goes to sudden death overtime (future feature)
+- Or coin flip for bracket advancement (temporary)
 
 ---
 
