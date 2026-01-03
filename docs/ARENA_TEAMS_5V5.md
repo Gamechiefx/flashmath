@@ -1,8 +1,14 @@
-# Arena Teams - Full Specification & Implementation Tracker
+# Arena Teams 5v5 - Full Specification & Implementation Tracker
 
 > **Version:** 1.0  
 > **Last Updated:** January 3, 2026  
-> **Status:** Design Complete - Ready for Implementation
+> **Status:** Design Complete - Ready for Implementation  
+> **Mode:** 5v5 (5 players per team)
+
+**Related Documents:**
+- [Arena Teams 4v4](./ARENA_TEAMS_4V4.md)
+- [Arena Teams 3v3](./ARENA_TEAMS_3V3.md)
+- [Arena Teams 2v2](./ARENA_TEAMS_2V2.md)
 
 ---
 
