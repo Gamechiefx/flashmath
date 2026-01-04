@@ -71,7 +71,7 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
     const [queueTime, setQueueTime] = useState(0);
     const [isSearching, setIsSearching] = useState(true);
     const [matchFound, setMatchFound] = useState(false);
-    const [opponent, setOpponent] = useState<{ name: string; tier: string; elo: number; banner: string; title: string; level: number } | null>(null);
+    const [opponent, setOpponent] = useState<{ name: string; tier: string; elo: number; banner: string; title: string; level: number; rank: string; division: string } | null>(null);
 
     // Quick Practice State
     const [problem, setProblem] = useState<PracticeProblem>({ question: '', answer: 0 });
@@ -210,6 +210,8 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                     equippedBanner,
                     equippedTitle,
                     level,
+                    rank,
+                    division,
                     confidence, // Pass confidence for eligibility check
                 });
 
@@ -254,6 +256,8 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                             banner: result.opponent.banner || 'default',
                             title: result.opponent.title || 'Competitor',
                             level: result.opponent.level || 1,
+                            rank: result.opponent.rank || 'Bronze',
+                            division: result.opponent.division || 'I',
                         });
                     }
 
@@ -449,8 +453,8 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                                             <PlayerBanner
                                                 name={opponent?.name || 'Player'}
                                                 level={opponent?.level || 1}
-                                                rank="Bronze"
-                                                division="I"
+                                                rank={opponent?.rank || 'Bronze'}
+                                                division={opponent?.division || 'I'}
                                                 styleId={opponent?.banner || 'default'}
                                                 title={opponent?.title || 'Competitor'}
                                             />

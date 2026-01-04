@@ -384,24 +384,24 @@ function PodiumCard({ entry, rank, timeFilter, isExpanded, onToggleExpand }: Pod
         <div className={`flex flex-col ${rank === 1 ? 'order-2' : rank === 2 ? 'order-1' : 'order-3'}`}>
             <motion.button
                 onClick={onToggleExpand}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: rank * 0.1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: rank * 0.1 }}
                 className={`relative flex flex-col items-center p-4 lg:p-6 rounded-2xl border transition-all cursor-pointer
                     ${isFirst ? 'lg:-mt-6 bg-gradient-to-b from-yellow-500/10 to-transparent border-yellow-500/30 shadow-lg shadow-yellow-500/10 hover:shadow-yellow-500/20' : 
                       rank === 2 ? 'mt-8 lg:mt-4 bg-white/5 border-white/10 hover:bg-white/10' : 
                       'mt-8 lg:mt-4 bg-white/5 border-white/10 hover:bg-white/10'}
-                    ${entry.odIsCurrentUser ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}
+                ${entry.odIsCurrentUser ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}
                     ${isExpanded ? 'ring-2 ring-white/20' : ''}
-                `}
-            >
-                {/* Medal Glow */}
-                <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full ${medal.bgGlow} blur-xl opacity-50`} />
-                
-                {/* Medal Badge */}
-                <div className={`relative z-10 w-10 h-10 lg:w-12 lg:h-12 rounded-full ${medal.bgGlow} ${medal.borderColor} border-2 flex items-center justify-center mb-3`}>
-                    <MedalIcon className={`${medal.color} ${isFirst ? 'w-6 h-6 lg:w-7 lg:h-7' : 'w-5 h-5 lg:w-6 lg:h-6'}`} />
-                </div>
+            `}
+        >
+            {/* Medal Glow */}
+            <div className={`absolute -top-3 left-1/2 -translate-x-1/2 w-16 h-16 rounded-full ${medal.bgGlow} blur-xl opacity-50`} />
+            
+            {/* Medal Badge */}
+            <div className={`relative z-10 w-10 h-10 lg:w-12 lg:h-12 rounded-full ${medal.bgGlow} ${medal.borderColor} border-2 flex items-center justify-center mb-3`}>
+                <MedalIcon className={`${medal.color} ${isFirst ? 'w-6 h-6 lg:w-7 lg:h-7' : 'w-5 h-5 lg:w-6 lg:h-6'}`} />
+            </div>
 
                 {/* Player Avatar with Frame */}
                 <div className={`mb-3 ${isFirst ? 'scale-110' : ''}`}>
@@ -413,36 +413,36 @@ function PodiumCard({ entry, rank, timeFilter, isExpanded, onToggleExpand }: Pod
                         size={isFirst ? "xl" : "lg"}
                         className={leagueStyle.glow}
                     />
-                </div>
+            </div>
 
-                {/* Player Name */}
-                <h3 className={`font-black text-center truncate max-w-full px-2 ${isFirst ? 'text-lg lg:text-xl' : 'text-sm lg:text-base'}`}>
-                    {entry.odName}
-                </h3>
+            {/* Player Name */}
+            <h3 className={`font-black text-center truncate max-w-full px-2 ${isFirst ? 'text-lg lg:text-xl' : 'text-sm lg:text-base'}`}>
+                {entry.odName}
+            </h3>
 
-                {/* League Badge */}
-                <div className={`mt-2 px-2 py-0.5 rounded-full text-[10px] lg:text-xs font-bold ${leagueStyle.bg} ${leagueStyle.text} border ${leagueStyle.border}`}>
-                    {entry.odLeague} {entry.odDivision}
-                </div>
+            {/* League Badge */}
+            <div className={`mt-2 px-2 py-0.5 rounded-full text-[10px] lg:text-xs font-bold ${leagueStyle.bg} ${leagueStyle.text} border ${leagueStyle.border}`}>
+                {entry.odLeague} {entry.odDivision}
+            </div>
 
-                {/* ELO */}
-                <div className="mt-3 flex items-center gap-1">
-                    <Zap size={14} className="text-amber-400" />
-                    <span className="font-black text-lg lg:text-xl">{entry.odElo}</span>
-                    {timeFilter === 'weekly' && entry.odEloChange !== undefined && entry.odEloChange !== 0 && (
-                        <span className={`text-xs font-bold flex items-center ${entry.odEloChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {entry.odEloChange > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                            {entry.odEloChange > 0 ? '+' : ''}{entry.odEloChange}
-                        </span>
-                    )}
-                </div>
+            {/* ELO */}
+            <div className="mt-3 flex items-center gap-1">
+                <Zap size={14} className="text-amber-400" />
+                <span className="font-black text-lg lg:text-xl">{entry.odElo}</span>
+                {timeFilter === 'weekly' && entry.odEloChange !== undefined && entry.odEloChange !== 0 && (
+                    <span className={`text-xs font-bold flex items-center ${entry.odEloChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {entry.odEloChange > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                        {entry.odEloChange > 0 ? '+' : ''}{entry.odEloChange}
+                    </span>
+                )}
+            </div>
 
-                {/* Stats */}
-                <div className="mt-2 flex items-center gap-3 text-xs text-white/60">
-                    <span className="text-green-400">{entry.odWins}W</span>
-                    <span className="text-red-400">{entry.odLosses}L</span>
-                    <span className="text-amber-400">{entry.odWinRate}%</span>
-                </div>
+            {/* Stats */}
+            <div className="mt-2 flex items-center gap-3 text-xs text-white/60">
+                <span className="text-green-400">{entry.odWins}W</span>
+                <span className="text-red-400">{entry.odLosses}L</span>
+                <span className="text-amber-400">{entry.odWinRate}%</span>
+            </div>
 
                 {/* Click hint */}
                 <div className="mt-3 flex items-center gap-1 text-[10px] text-white/40">
@@ -455,12 +455,12 @@ function PodiumCard({ entry, rank, timeFilter, isExpanded, onToggleExpand }: Pod
                     <span>{isExpanded ? 'Hide' : 'View'} Stats</span>
                 </div>
 
-                {/* "You" indicator */}
-                {entry.odIsCurrentUser && (
-                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-primary rounded-full text-[10px] font-bold">
-                        YOU
-                    </div>
-                )}
+            {/* "You" indicator */}
+            {entry.odIsCurrentUser && (
+                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-primary rounded-full text-[10px] font-bold">
+                    YOU
+                </div>
+            )}
             </motion.button>
             
             {/* Expandable Performance Panel */}
@@ -538,7 +538,7 @@ function PodiumCard({ entry, rank, timeFilter, isExpanded, onToggleExpand }: Pod
                                 </div>
                             )}
                         </div>
-                    </motion.div>
+        </motion.div>
                 )}
             </AnimatePresence>
         </div>

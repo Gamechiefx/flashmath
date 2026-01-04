@@ -52,6 +52,14 @@ export interface Party {
     inviteMode: 'open' | 'invite_only';
     members: PartyMember[];
     createdAt: string;
+    // Arena Teams 5v5 extensions
+    iglId: string | null;           // In-Game Leader for team matches
+    anchorId: string | null;        // Anchor player for team matches
+    targetMode: string | null;      // '5v5', '4v4', '3v3', '2v2' or null
+    teamId: string | null;          // Link to persistent team (null for temporary parties)
+    // Queue status
+    queueStatus: 'idle' | 'finding_teammates' | 'finding_opponents' | null;
+    queueStartedAt: string | null;  // ISO timestamp when queue started
 }
 
 export interface PartyMember {
@@ -66,6 +74,13 @@ export interface PartyMember {
     odDuelElo: number;
     odDuelRank: string;
     odDuelDivision: string;
+    // Arena Teams 5v5 extensions
+    isReady: boolean;               // Ready state for team queue
+    isIgl: boolean;                 // Is this member the IGL?
+    isAnchor: boolean;              // Is this member the Anchor?
+    preferredOperation: string | null;  // Player's preferred operation slot
+    // Team mode ELO
+    odElo5v5: number;
 }
 
 export interface PartyInvite {
@@ -580,16 +595,21 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
 
         if (membership) {
             const partyData = db.prepare(`
-                SELECT p.id, p.leader_id, p.max_size, p.invite_mode, p.created_at, u.name as leader_name
+                SELECT p.id, p.leader_id, p.max_size, p.invite_mode, p.created_at,
+                       p.igl_id, p.anchor_id, p.target_mode, p.team_id,
+                       p.queue_status, p.queue_started_at,
+                       u.name as leader_name
                 FROM parties p
                 JOIN users u ON p.leader_id = u.id
                 WHERE p.id = ?
             `).get(membership.party_id) as any;
 
             if (partyData) {
-                // Get all members
+                // Get all members with team mode extensions
                 const members = db.prepare(`
-                    SELECT pm.user_id, pm.joined_at, u.name, u.level, u.equipped_items, u.last_active, u.arena_elo_duel
+                    SELECT pm.user_id, pm.joined_at, pm.is_ready, pm.preferred_operation,
+                           u.name, u.level, u.equipped_items, u.last_active, 
+                           u.arena_elo_duel, u.arena_elo_5v5
                     FROM party_members pm
                     JOIN users u ON pm.user_id = u.id
                     WHERE pm.party_id = ?
@@ -603,6 +623,14 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                     maxSize: partyData.max_size,
                     inviteMode: partyData.invite_mode || 'open',
                     createdAt: partyData.created_at,
+                    // Arena Teams 5v5 extensions
+                    iglId: partyData.igl_id || null,
+                    anchorId: partyData.anchor_id || null,
+                    targetMode: partyData.target_mode || null,
+                    teamId: partyData.team_id || null,
+                    // Queue status
+                    queueStatus: partyData.queue_status || null,
+                    queueStartedAt: partyData.queue_started_at || null,
                     members: members.map(m => {
                         let equipped: any = {};
                         try {
@@ -624,6 +652,12 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                             odDuelDivision: leagueInfo.divisionRoman,
                             isLeader: m.user_id === partyData.leader_id,
                             joinedAt: m.joined_at,
+                            // Arena Teams 5v5 extensions
+                            isReady: !!m.is_ready,
+                            isIgl: m.user_id === partyData.igl_id,
+                            isAnchor: m.user_id === partyData.anchor_id,
+                            preferredOperation: m.preferred_operation || null,
+                            odElo5v5: m.arena_elo_5v5 || 300,
                         };
                     }),
                 };
@@ -641,7 +675,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
             ORDER BY pi.created_at DESC
         `).all(userId, now()) as any[];
 
-        return {
+        const result = {
             party,
             invites: invites.map(i => ({
                 id: i.id,
@@ -653,6 +687,24 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                 expiresAt: i.expires_at,
             })),
         };
+        
+        // #region agent log - Log what we're returning
+        console.log(`[Social] getPartyData returning: partyId=${party?.id}, queueStatus=${party?.queueStatus}`);
+        try {
+            const fs = require('fs');
+            const logEntry = JSON.stringify({
+                location: 'social.ts:getPartyData',
+                message: 'Returning party data',
+                data: { partyId: party?.id, queueStatus: party?.queueStatus, userId, hasParty: !!party },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                hypothesisId: 'SERVER_RETURN'
+            }) + '\n';
+            fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', logEntry);
+        } catch (e) { /* ignore logging errors */ }
+        // #endregion
+        
+        return result;
     } catch (error: any) {
         console.error('[Social] getPartyData error:', error);
         return { party: null, invites: [], error: error.message };
@@ -1006,6 +1058,81 @@ export async function leaveParty(): Promise<{
     }
 }
 
+/**
+ * Transfer party leadership to another member
+ * Only the current party leader can transfer leadership
+ */
+export async function transferPartyLeadership(newLeaderId: string): Promise<{
+    success: boolean;
+    error?: string;
+    partyMemberIds?: string[];
+    newLeaderName?: string;
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Check if current user is the party leader
+        const membership = db.prepare(`
+            SELECT pm.party_id, p.leader_id
+            FROM party_members pm
+            JOIN parties p ON pm.party_id = p.id
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { success: false, error: 'Not in a party' };
+        }
+
+        if (membership.leader_id !== userId) {
+            return { success: false, error: 'Only the party leader can transfer leadership' };
+        }
+
+        const partyId = membership.party_id;
+
+        // Verify new leader is in the party
+        const newLeaderMembership = db.prepare(`
+            SELECT pm.user_id, u.name 
+            FROM party_members pm
+            JOIN users u ON pm.user_id = u.id
+            WHERE pm.party_id = ? AND pm.user_id = ?
+        `).get(partyId, newLeaderId) as any;
+
+        if (!newLeaderMembership) {
+            return { success: false, error: 'User is not in your party' };
+        }
+
+        // Can't transfer to yourself
+        if (newLeaderId === userId) {
+            return { success: false, error: 'You are already the party leader' };
+        }
+
+        // Transfer leadership
+        db.prepare(`UPDATE parties SET leader_id = ? WHERE id = ?`).run(newLeaderId, partyId);
+
+        // Get all party member IDs for real-time notification
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(partyId) as any[];
+        const partyMemberIds = members.map(m => m.user_id);
+
+        console.log(`[Social] Party ${partyId} leadership transferred from ${userId} to ${newLeaderId}`);
+        return { 
+            success: true, 
+            partyMemberIds,
+            newLeaderName: newLeaderMembership.name,
+        };
+    } catch (error: any) {
+        console.error('[Social] transferPartyLeadership error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
 // =============================================================================
 // SOCIAL STATS (for badge/header display)
 // =============================================================================
@@ -1129,6 +1256,472 @@ export async function checkFriendshipStatus(targetUserId: string): Promise<{
     } catch (error: any) {
         console.error('[Social] checkFriendshipStatus error:', error);
         return { isFriend: false, requestPending: false };
+    }
+}
+
+// =============================================================================
+// ARENA TEAMS 5v5 PARTY EXTENSIONS
+// =============================================================================
+
+/**
+ * Set the In-Game Leader (IGL) for the party
+ * Only the party leader can set the IGL
+ */
+export async function setPartyIGL(iglUserId: string): Promise<{
+    success: boolean;
+    error?: string;
+    partyMemberIds?: string[];
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Get user's party and verify they're the leader
+        const membership = db.prepare(`
+            SELECT pm.party_id, p.leader_id
+            FROM party_members pm
+            JOIN parties p ON pm.party_id = p.id
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { success: false, error: 'Not in a party' };
+        }
+
+        if (membership.leader_id !== userId) {
+            return { success: false, error: 'Only the party leader can set the IGL' };
+        }
+
+        // Verify target user is in the party
+        const targetMember = db.prepare(`
+            SELECT id FROM party_members WHERE party_id = ? AND user_id = ?
+        `).get(membership.party_id, iglUserId);
+
+        if (!targetMember) {
+            return { success: false, error: 'User is not in your party' };
+        }
+
+        // Set IGL
+        db.prepare(`UPDATE parties SET igl_id = ? WHERE id = ?`).run(iglUserId, membership.party_id);
+
+        // Get all party member IDs for broadcasting
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(membership.party_id) as { user_id: string }[];
+
+        console.log(`[Social] Party ${membership.party_id} IGL set to ${iglUserId}`);
+        return { success: true, partyMemberIds: members.map(m => m.user_id) };
+    } catch (error: any) {
+        console.error('[Social] setPartyIGL error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Set the Anchor for the party
+ * Only the party leader can set the Anchor
+ */
+export async function setPartyAnchor(anchorUserId: string): Promise<{
+    success: boolean;
+    error?: string;
+    partyMemberIds?: string[];
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Get user's party and verify they're the leader
+        const membership = db.prepare(`
+            SELECT pm.party_id, p.leader_id
+            FROM party_members pm
+            JOIN parties p ON pm.party_id = p.id
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { success: false, error: 'Not in a party' };
+        }
+
+        if (membership.leader_id !== userId) {
+            return { success: false, error: 'Only the party leader can set the Anchor' };
+        }
+
+        // Verify target user is in the party
+        const targetMember = db.prepare(`
+            SELECT id FROM party_members WHERE party_id = ? AND user_id = ?
+        `).get(membership.party_id, anchorUserId);
+
+        if (!targetMember) {
+            return { success: false, error: 'User is not in your party' };
+        }
+
+        // Set Anchor
+        db.prepare(`UPDATE parties SET anchor_id = ? WHERE id = ?`).run(anchorUserId, membership.party_id);
+
+        // Get all party member IDs for broadcasting
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(membership.party_id) as { user_id: string }[];
+
+        console.log(`[Social] Party ${membership.party_id} Anchor set to ${anchorUserId}`);
+        return { success: true, partyMemberIds: members.map(m => m.user_id) };
+    } catch (error: any) {
+        console.error('[Social] setPartyAnchor error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Toggle the current user's ready state in the party
+ */
+export async function togglePartyReady(): Promise<{
+    success: boolean;
+    isReady?: boolean;
+    error?: string;
+    partyMemberIds?: string[];
+    queueCancelled?: boolean;
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Get user's party membership with party queue status
+        const membership = db.prepare(`
+            SELECT pm.id, pm.party_id, pm.is_ready,
+                   p.queue_status
+            FROM party_members pm
+            JOIN parties p ON p.id = pm.party_id
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { success: false, error: 'Not in a party' };
+        }
+
+        // Toggle ready state
+        const newReadyState = membership.is_ready ? 0 : 1;
+        db.prepare(`UPDATE party_members SET is_ready = ? WHERE id = ?`).run(newReadyState, membership.id);
+
+        // If player is un-readying AND the party is currently in queue, cancel the queue
+        let queueCancelled = false;
+        if (newReadyState === 0 && membership.queue_status) {
+            db.prepare(`
+                UPDATE parties SET queue_status = NULL, queue_started_at = NULL 
+                WHERE id = ?
+            `).run(membership.party_id);
+            queueCancelled = true;
+            console.log(`[Social] Queue cancelled for party ${membership.party_id} because user ${userId} un-readied`);
+        }
+
+        // Get all party member IDs for broadcasting
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(membership.party_id) as { user_id: string }[];
+
+        console.log(`[Social] User ${userId} ready state toggled to ${newReadyState} in party ${membership.party_id}`);
+        return { success: true, isReady: !!newReadyState, partyMemberIds: members.map(m => m.user_id), queueCancelled };
+    } catch (error: any) {
+        console.error('[Social] togglePartyReady error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Update the party's queue status
+ * Called when leader starts queue, or queue is cancelled
+ */
+export async function updatePartyQueueStatus(
+    partyId: string,
+    status: 'idle' | 'finding_teammates' | 'finding_opponents' | null
+): Promise<{ success: boolean; error?: string; partyMemberIds?: string[] }> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Verify user is the party leader
+        const party = db.prepare(`
+            SELECT id, leader_id FROM parties WHERE id = ?
+        `).get(partyId) as any;
+
+        if (!party) {
+            return { success: false, error: 'Party not found' };
+        }
+
+        if (party.leader_id !== userId) {
+            return { success: false, error: 'Only the party leader can update queue status' };
+        }
+
+        // Update queue status
+        const startedAt = status ? new Date().toISOString() : null;
+        db.prepare(`
+            UPDATE parties SET queue_status = ?, queue_started_at = ? WHERE id = ?
+        `).run(status, startedAt, partyId);
+
+        // Get all party member IDs for notification
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(partyId) as { user_id: string }[];
+
+        console.log(`[Social] Party ${partyId} queue status updated to: ${status}`);
+        console.log(`[Social] Party members to notify:`, members.map(m => m.user_id));
+        
+        // #region agent log - Server-side logging
+        try {
+            const fs = require('fs');
+            const logEntry = JSON.stringify({
+                location: 'social.ts:updatePartyQueueStatus',
+                message: 'Updated party queue status in DB - returning member IDs for notification',
+                data: { partyId, status, memberIds: members.map(m => m.user_id), memberCount: members.length, leaderId: userId },
+                timestamp: Date.now(),
+                sessionId: 'debug-session',
+                hypothesisId: 'C'
+            }) + '\n';
+            fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', logEntry);
+        } catch (e) { /* ignore logging errors */ }
+        // #endregion
+        
+        return { success: true, partyMemberIds: members.map(m => m.user_id) };
+    } catch (error: any) {
+        console.error('[Social] updatePartyQueueStatus error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Set the target mode for the party (5v5, 4v4, etc.)
+ * Only the party leader can set the target mode
+ */
+export async function setPartyTargetMode(mode: string | null): Promise<{
+    success: boolean;
+    error?: string;
+    partyMemberIds?: string[];
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    // Validate mode
+    const validModes = ['2v2', '3v3', '4v4', '5v5', null];
+    if (!validModes.includes(mode)) {
+        return { success: false, error: 'Invalid mode' };
+    }
+
+    try {
+        // Get user's party and verify they're the leader
+        const membership = db.prepare(`
+            SELECT pm.party_id, p.leader_id
+            FROM party_members pm
+            JOIN parties p ON pm.party_id = p.id
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { success: false, error: 'Not in a party' };
+        }
+
+        if (membership.leader_id !== userId) {
+            return { success: false, error: 'Only the party leader can set the target mode' };
+        }
+
+        // Set target mode
+        db.prepare(`UPDATE parties SET target_mode = ? WHERE id = ?`).run(mode, membership.party_id);
+
+        // Reset all member ready states when mode changes
+        db.prepare(`UPDATE party_members SET is_ready = 0 WHERE party_id = ?`).run(membership.party_id);
+
+        // Get all party member IDs for broadcasting
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(membership.party_id) as { user_id: string }[];
+
+        console.log(`[Social] Party ${membership.party_id} target mode set to ${mode}`);
+        return { success: true, partyMemberIds: members.map(m => m.user_id) };
+    } catch (error: any) {
+        console.error('[Social] setPartyTargetMode error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Link a party to a persistent team
+ * Only the party leader can link to a team they're a member of
+ */
+export async function linkPartyToTeam(teamId: string | null): Promise<{
+    success: boolean;
+    error?: string;
+    partyMemberIds?: string[];
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Get user's party and verify they're the leader
+        const membership = db.prepare(`
+            SELECT pm.party_id, p.leader_id
+            FROM party_members pm
+            JOIN parties p ON pm.party_id = p.id
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { success: false, error: 'Not in a party' };
+        }
+
+        if (membership.leader_id !== userId) {
+            return { success: false, error: 'Only the party leader can link to a team' };
+        }
+
+        // If linking to a team, verify the user is a member of that team
+        if (teamId) {
+            const teamMembership = db.prepare(`
+                SELECT id FROM team_members WHERE team_id = ? AND user_id = ?
+            `).get(teamId, userId);
+
+            if (!teamMembership) {
+                return { success: false, error: 'You are not a member of this team' };
+            }
+        }
+
+        // Link party to team
+        db.prepare(`UPDATE parties SET team_id = ? WHERE id = ?`).run(teamId, membership.party_id);
+
+        // Get all party member IDs for broadcasting
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(membership.party_id) as { user_id: string }[];
+
+        console.log(`[Social] Party ${membership.party_id} linked to team ${teamId || 'none'}`);
+        return { success: true, partyMemberIds: members.map(m => m.user_id) };
+    } catch (error: any) {
+        console.error('[Social] linkPartyToTeam error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Set preferred operation slot for the current user
+ */
+export async function setPreferredOperation(operation: string | null): Promise<{
+    success: boolean;
+    error?: string;
+    partyMemberIds?: string[];
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    // Validate operation
+    const validOperations = ['addition', 'subtraction', 'multiplication', 'division', 'mixed', null];
+    if (!validOperations.includes(operation)) {
+        return { success: false, error: 'Invalid operation' };
+    }
+
+    try {
+        // Get user's party membership
+        const membership = db.prepare(`
+            SELECT pm.id, pm.party_id
+            FROM party_members pm
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { success: false, error: 'Not in a party' };
+        }
+
+        // Set preferred operation
+        db.prepare(`UPDATE party_members SET preferred_operation = ? WHERE id = ?`).run(operation, membership.id);
+
+        // Get all party member IDs for broadcasting
+        const members = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(membership.party_id) as { user_id: string }[];
+
+        console.log(`[Social] User ${userId} preferred operation set to ${operation}`);
+        return { success: true, partyMemberIds: members.map(m => m.user_id) };
+    } catch (error: any) {
+        console.error('[Social] setPreferredOperation error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Check if all party members are ready for queue
+ */
+export async function checkPartyReady(): Promise<{
+    allReady: boolean;
+    readyCount: number;
+    totalCount: number;
+    error?: string;
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { allReady: false, readyCount: 0, totalCount: 0, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Get user's party
+        const membership = db.prepare(`
+            SELECT pm.party_id
+            FROM party_members pm
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!membership) {
+            return { allReady: false, readyCount: 0, totalCount: 0, error: 'Not in a party' };
+        }
+
+        // Get member ready states
+        const members = db.prepare(`
+            SELECT is_ready FROM party_members WHERE party_id = ?
+        `).all(membership.party_id) as { is_ready: number }[];
+
+        const readyCount = members.filter(m => m.is_ready).length;
+        const totalCount = members.length;
+
+        return {
+            allReady: readyCount === totalCount,
+            readyCount,
+            totalCount,
+        };
+    } catch (error: any) {
+        console.error('[Social] checkPartyReady error:', error);
+        return { allReady: false, readyCount: 0, totalCount: 0, error: error.message };
     }
 }
 

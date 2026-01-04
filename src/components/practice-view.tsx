@@ -1043,7 +1043,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                 })()}
 
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-                                    <div className="p-6 rounded-2xl bg-white/5 border border-white/10">
+                                    <div className="p-6 rounded-2xl bg-white/5 border border-white/10 text-center">
                                         <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Accuracy</div>
                                         <div className="text-4xl font-black text-primary">{score}/{totalAttempts}</div>
                                     </div>

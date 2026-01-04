@@ -64,6 +64,11 @@ interface UseArenaSocketOptions {
     userId: string;
     userName: string;
     operation: string;
+    userRank?: string;
+    userDivision?: string;
+    userLevel?: number;
+    userBanner?: string;
+    userTitle?: string;
     onMatchStart?: (data: { question: Question; timeLeft: number; players: Record<string, Player> }) => void;
     onAnswerResult?: (data: { odUserId: string; odIsCorrect: boolean; odPlayers: Record<string, Player> }) => void;
     onNewQuestion?: (data: { question: Question }) => void;
@@ -81,6 +86,11 @@ export function useArenaSocket({
     userId,
     userName,
     operation,
+    userRank,
+    userDivision,
+    userLevel,
+    userBanner,
+    userTitle,
     isAiMatch,
     onMatchStart,
     onAnswerResult,
@@ -125,6 +135,11 @@ export function useArenaSocket({
                 userName,
                 operation,
                 isAiMatch,
+                userRank: userRank || 'Bronze',
+                userDivision: userDivision || 'I',
+                userLevel: userLevel || 1,
+                userBanner: userBanner || 'default',
+                userTitle: userTitle || 'Challenger',
             });
         });
 

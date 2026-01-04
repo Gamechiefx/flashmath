@@ -196,6 +196,43 @@ function initializeSchema() {
         // Column might already exist, that's fine
     }
 
+    // Add party team mode columns (for 5v5 Arena Teams)
+    const partyTeamColumns = [
+        { name: 'igl_id', type: 'TEXT' },      // In-Game Leader
+        { name: 'anchor_id', type: 'TEXT' },   // Anchor player
+        { name: 'target_mode', type: 'TEXT' }, // '5v5', '2v2', etc.
+        { name: 'team_id', type: 'TEXT' },     // Link to persistent team
+        { name: 'queue_status', type: 'TEXT' }, // 'idle', 'finding_teammates', 'finding_opponents'
+        { name: 'queue_started_at', type: 'TEXT' }, // ISO timestamp when queue started
+    ];
+    for (const col of partyTeamColumns) {
+        try {
+            database.exec(`ALTER TABLE parties ADD COLUMN ${col.name} ${col.type}`);
+            console.log(`[SQLite] Added ${col.name} column to parties`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exists
+            }
+        }
+    }
+
+    // Add party_members team mode columns
+    const partyMemberTeamColumns = [
+        { name: 'is_ready', type: 'INTEGER', default: 0 },
+        { name: 'preferred_operation', type: 'TEXT' },
+    ];
+    for (const col of partyMemberTeamColumns) {
+        try {
+            const defaultClause = col.default !== undefined ? ` DEFAULT ${col.default}` : '';
+            database.exec(`ALTER TABLE party_members ADD COLUMN ${col.name} ${col.type}${defaultClause}`);
+            console.log(`[SQLite] Added ${col.name} column to party_members`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exist
+            }
+        }
+    }
+
     // Add arena_matches performance stats columns for speed/accuracy ELO integration
     const arenaMatchesColumns = [
         { name: 'winner_accuracy', type: 'REAL' },

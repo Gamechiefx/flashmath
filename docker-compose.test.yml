@@ -1,0 +1,138 @@
+# Docker Compose for Arena Tests
+# 
+# Usage:
+#   docker-compose -f docker-compose.test.yml up --build
+#   docker-compose -f docker-compose.test.yml run test --scenario=question-counter
+#   docker-compose -f docker-compose.test.yml run test --verbose
+#
+# Environment variables:
+#   TEST_SERVER_URL: Server to test against (default: http://flashmath:3000)
+
+version: '3.8'
+
+services:
+  # Main FlashMath application (for local testing)
+  flashmath:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=file:./data/flashmath.db
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - redis
+    networks:
+      - test-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Redis for matchmaking
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - test-network
+
+  # Test runner
+  test:
+    build:
+      context: .
+      dockerfile: tests/arena/Dockerfile
+    environment:
+      - TEST_SERVER_URL=${TEST_SERVER_URL:-http://flashmath:3000}
+    depends_on:
+      flashmath:
+        condition: service_healthy
+    networks:
+      - test-network
+
+  # Multiple synthetic clients for concurrent testing
+  test-client-1:
+    build:
+      context: .
+      dockerfile: tests/arena/Dockerfile
+    environment:
+      - TEST_SERVER_URL=${TEST_SERVER_URL:-http://flashmath:3000}
+      - CLIENT_ID=1
+    depends_on:
+      flashmath:
+        condition: service_healthy
+    networks:
+      - test-network
+    profiles:
+      - concurrent
+
+  test-client-2:
+    build:
+      context: .
+      dockerfile: tests/arena/Dockerfile
+    environment:
+      - TEST_SERVER_URL=${TEST_SERVER_URL:-http://flashmath:3000}
+      - CLIENT_ID=2
+    depends_on:
+      flashmath:
+        condition: service_healthy
+    networks:
+      - test-network
+    profiles:
+      - concurrent
+
+  test-client-3:
+    build:
+      context: .
+      dockerfile: tests/arena/Dockerfile
+    environment:
+      - TEST_SERVER_URL=${TEST_SERVER_URL:-http://flashmath:3000}
+      - CLIENT_ID=3
+    depends_on:
+      flashmath:
+        condition: service_healthy
+    networks:
+      - test-network
+    profiles:
+      - concurrent
+
+  test-client-4:
+    build:
+      context: .
+      dockerfile: tests/arena/Dockerfile
+    environment:
+      - TEST_SERVER_URL=${TEST_SERVER_URL:-http://flashmath:3000}
+      - CLIENT_ID=4
+    depends_on:
+      flashmath:
+        condition: service_healthy
+    networks:
+      - test-network
+    profiles:
+      - concurrent
+
+  test-client-5:
+    build:
+      context: .
+      dockerfile: tests/arena/Dockerfile
+    environment:
+      - TEST_SERVER_URL=${TEST_SERVER_URL:-http://flashmath:3000}
+      - CLIENT_ID=5
+    depends_on:
+      flashmath:
+        condition: service_healthy
+    networks:
+      - test-network
+    profiles:
+      - concurrent
+
+networks:
+  test-network:
+    driver: bridge
+

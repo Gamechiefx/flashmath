@@ -38,6 +38,8 @@ interface QueueEntry {
     odEquippedBanner: string;
     odEquippedTitle: string;
     odLevel: number;
+    odRank: string;             // Player's rank (Bronze, Silver, Gold, etc.)
+    odDivision: string;         // Player's division (I, II, III, IV)
     odJoinedAt: number;
     odConfidence: number;       // Player confidence score (0-1)
     odIsReturningPlayer: boolean; // Flagged as returning player
@@ -360,6 +362,8 @@ export async function joinQueue(params: {
     equippedBanner: string;
     equippedTitle: string;
     level: number;
+    rank: string;           // Player's rank (Bronze, Silver, Gold, etc.)
+    division: string;       // Player's division (I, II, III, IV)
     confidence?: number;  // Practice confidence score (0-1)
     isReturningPlayer?: boolean; // Flagged as returning player
 }): Promise<{ success: boolean; queuePosition?: number; error?: string; confidenceBracket?: string }> {
@@ -396,6 +400,8 @@ export async function joinQueue(params: {
         odEquippedBanner: params.equippedBanner,
         odEquippedTitle: params.equippedTitle,
         odLevel: params.level,
+        odRank: params.rank,
+        odDivision: params.division,
         odJoinedAt: Date.now(),
         odConfidence: confidence,
         odIsReturningPlayer: params.isReturningPlayer ?? false,
@@ -487,7 +493,7 @@ export async function checkForMatch(params: {
 }): Promise<{
     matched: boolean;
     matchId?: string;
-    opponent?: { name: string; elo: number; tier: string; banner: string; title: string; level: number; confidenceBracket?: string };
+    opponent?: { name: string; elo: number; tier: string; banner: string; title: string; level: number; rank: string; division: string; confidenceBracket?: string };
     isAiMatch?: boolean;
     matchReasoning?: MatchReasoning; // For FlashAuditor Match History
 }> {
@@ -525,6 +531,8 @@ export async function checkForMatch(params: {
                     banner: opponent.odEquippedBanner,
                     title: opponent.odEquippedTitle,
                     level: opponent.odLevel,
+                    rank: opponent.odRank || 'Bronze',
+                    division: opponent.odDivision || 'I',
                 } : undefined,
                 isAiMatch: match.odIsAiMatch,
             };
@@ -669,6 +677,8 @@ export async function checkForMatch(params: {
                     banner: candidate.odEquippedBanner,
                     title: candidate.odEquippedTitle,
                     level: candidate.odLevel,
+                    rank: candidate.odRank || 'Bronze',
+                    division: candidate.odDivision || 'I',
                     confidenceBracket: getConfidenceBracket(candidate.odConfidence ?? 0.5),
                 },
                 isAiMatch: false,
@@ -695,32 +705,58 @@ export async function checkForMatch(params: {
 /**
  * Create an AI match when no players are available
  */
-async function createAiMatch(userId: string, userName: string, params: { mode: string; operation: string; elo: number; tier: number; queueTime?: number; confidence?: number; isReturningPlayer?: boolean }) {
+async function createAiMatch(userId: string, userName: string, params: { mode: string; operation: string; elo: number; tier: number; rank?: string; division?: string; queueTime?: number; confidence?: number; isReturningPlayer?: boolean }) {
     const matchId = `match-${uuidv4()}`;
 
     // Generate AI opponent stats (slightly varied from player)
     const aiEloVariance = Math.floor(Math.random() * 100) - 50;
     const aiTierVariance = Math.floor(Math.random() * (TIER_RANGE * 2 + 1)) - TIER_RANGE;
     const aiTier = Math.max(1, Math.min(100, params.tier + aiTierVariance));
-    const aiNames = ['MathBot', 'CalcMaster', 'NumberNinja', 'AlgebraAce', 'QuickMath', 'BrainStorm'];
-    const aiName = aiNames[Math.floor(Math.random() * aiNames.length)] + Math.floor(Math.random() * 100);
+    // Use consistent bot name that matches server.js
+    const aiName = 'FlashBot 3000';
     const aiBanners = ['matrices', 'synthwave', 'plasma', 'legendary'];
     const aiTitles = ['AI Challenger', 'Math Bot', 'Practice Partner', 'Training Mode'];
 
     console.log(`[Matchmaking] AI match created: ${matchId} for user ${userId}`);
 
+    // Fetch user's actual equipped items and level from database
+    const { getDatabase } = await import("@/lib/db");
+    const db = getDatabase();
+    const userData = db.prepare(`
+        SELECT level, equipped_items
+        FROM users WHERE id = ?
+    `).get(userId) as { level?: number; equipped_items?: string } | undefined;
+
+    let userBanner = 'default';
+    let userTitle = 'Challenger';
+    const userLevel = userData?.level || 1;
+
+    if (userData?.equipped_items) {
+        try {
+            const equipped = JSON.parse(userData.equipped_items);
+            userBanner = equipped.banner || 'default';
+            userTitle = equipped.title || 'Challenger';
+        } catch { /* ignore parse errors */ }
+    }
+
+    // AI rank matches player's rank for fair matchup display
+    const aiRank = params.rank || 'Bronze';
+    const aiDivision = params.division || 'I';
+
     const match: MatchResult = {
         matchId,
         odPlayer1: {
             odUserId: userId,
-            odUserName: 'You', // This will be updated by getMatch/Queue but basic placeholder ok
+            odUserName: userName,
             odElo: params.elo,
             odTier: params.tier.toString(),
             odOperation: params.operation,
             odMode: params.mode,
-            odEquippedBanner: 'default',
-            odEquippedTitle: 'default',
-            odLevel: 1,
+            odEquippedBanner: userBanner,
+            odEquippedTitle: userTitle,
+            odLevel: userLevel,
+            odRank: params.rank || 'Bronze',
+            odDivision: params.division || 'I',
             odJoinedAt: Date.now(),
             odConfidence: params.confidence ?? 0.5,
             odIsReturningPlayer: params.isReturningPlayer ?? false,
@@ -735,6 +771,8 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             odEquippedBanner: aiBanners[Math.floor(Math.random() * aiBanners.length)],
             odEquippedTitle: aiTitles[Math.floor(Math.random() * aiTitles.length)],
             odLevel: Math.floor(Math.random() * 50) + 10,
+            odRank: aiRank,  // AI rank matches player's rank
+            odDivision: aiDivision,
             odJoinedAt: Date.now(),
             odConfidence: 0.7, // AI has established confidence
             odIsReturningPlayer: false,
@@ -773,6 +811,8 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             banner: match.odPlayer2?.odEquippedBanner || 'default',
             title: match.odPlayer2?.odEquippedTitle || 'default',
             level: match.odPlayer2?.odLevel || 1,
+            rank: match.odPlayer2?.odRank || aiRank,
+            division: match.odPlayer2?.odDivision || aiDivision,
         },
         isAiMatch: true,
         matchReasoning,
@@ -1132,6 +1172,7 @@ export async function saveMatchResult(params: {
     isVoid?: boolean;
     isDraw?: boolean;
     voidReason?: string;
+    connectionQuality?: string;
     error?: string
 }> {
     console.log(`[Match] saveMatchResult CALLED: matchId=${params.matchId}, winner=${params.winnerId}, loser=${params.loserId}, winnerScore=${params.winnerScore}, loserScore=${params.loserScore}, operation=${params.operation}, mode=${params.mode}, isDraw=${params.isDraw}, matchIntegrity=${params.matchIntegrity}`);
@@ -1192,7 +1233,7 @@ export async function saveMatchResult(params: {
         const loserCorrectAnswers = Math.floor(params.loserScore / 100);
         const winnerCoinsEarned = (winnerCorrectAnswers * 2) + 10;
         const loserCoinsEarned = loserCorrectAnswers * 2;
-        
+
         if (redis) {
             const lockAcquired = await redis.setnx(saveLockKey, userId);
             if (!lockAcquired) {
@@ -1519,16 +1560,16 @@ export async function saveMatchResult(params: {
 
         // Save match to history with performance stats (including AI matches for full history)
         const isAiMatch = !isWinnerHuman || !isLoserHuman;
-        try {
-            // Include performance stats if available
-            const winnerAcc = params.winnerPerformance?.accuracy ?? null;
-            const winnerSpeed = params.winnerPerformance?.avgSpeedMs ?? null;
-            const winnerStrk = params.winnerPerformance?.maxStreak ?? null;
-            const winnerAps = params.winnerPerformance?.aps ?? null;
-            const loserAcc = params.loserPerformance?.accuracy ?? null;
-            const loserSpeed = params.loserPerformance?.avgSpeedMs ?? null;
-            const loserStrk = params.loserPerformance?.maxStreak ?? null;
-            const loserAps = params.loserPerformance?.aps ?? null;
+            try {
+                // Include performance stats if available
+                const winnerAcc = params.winnerPerformance?.accuracy ?? null;
+                const winnerSpeed = params.winnerPerformance?.avgSpeedMs ?? null;
+                const winnerStrk = params.winnerPerformance?.maxStreak ?? null;
+                const winnerAps = params.winnerPerformance?.aps ?? null;
+                const loserAcc = params.loserPerformance?.accuracy ?? null;
+                const loserSpeed = params.loserPerformance?.avgSpeedMs ?? null;
+                const loserStrk = params.loserPerformance?.maxStreak ?? null;
+                const loserAps = params.loserPerformance?.aps ?? null;
             
             // Generate match reasoning if not provided
             let matchReasoning = params.matchReasoning;
@@ -1594,32 +1635,59 @@ export async function saveMatchResult(params: {
                     isAiMatch: isAiMatch,
                 });
             }
-            
-            // Serialize match reasoning to JSON
+                
+                // Serialize match reasoning to JSON
             const matchReasoningJson = matchReasoning 
                 ? JSON.stringify(matchReasoning) 
-                : null;
+                    : null;
 
-            db.prepare(`
-                INSERT OR IGNORE INTO arena_matches (
-                    id, winner_id, loser_id, winner_score, loser_score, 
-                    operation, mode, winner_elo_change, loser_elo_change,
-                    winner_accuracy, winner_avg_speed_ms, winner_max_streak, winner_aps,
-                    loser_accuracy, loser_avg_speed_ms, loser_max_streak, loser_aps,
-                    match_reasoning, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            `).run(
-                params.matchId, params.winnerId, params.loserId, 
-                params.winnerScore, params.loserScore, 
-                params.operation, params.mode, 
-                winnerEloChange, loserEloChange,
-                winnerAcc, winnerSpeed, winnerStrk, winnerAps,
-                loserAcc, loserSpeed, loserStrk, loserAps,
-                matchReasoningJson
-            );
-        } catch (e: any) {
-            if (!e.message?.includes('UNIQUE constraint')) throw e;
-        }
+            // Connection quality and void status (use outer scope variables)
+            const integrityForInsert = params.matchIntegrity || 'GREEN';
+            const isVoidForInsert = integrityForInsert === 'RED';
+            const voidReasonForInsert = isVoidForInsert ? `Match voided due to ${integrityForInsert} connection quality` : null;
+
+                // Disable foreign key checks for AI matches (AI bot IDs don't exist in users table)
+                if (isAiMatch) {
+                    db.pragma('foreign_keys = OFF');
+                }
+
+                db.prepare(`
+                    INSERT OR IGNORE INTO arena_matches (
+                        id, winner_id, loser_id, winner_score, loser_score,
+                        operation, mode, winner_elo_change, loser_elo_change,
+                        winner_accuracy, winner_avg_speed_ms, winner_max_streak, winner_aps,
+                        loser_accuracy, loser_avg_speed_ms, loser_max_streak, loser_aps,
+                    match_reasoning, connection_quality, is_void, void_reason,
+                    winner_coins, loser_coins, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                `).run(
+                    params.matchId, params.winnerId, params.loserId, 
+                    params.winnerScore, params.loserScore, 
+                    params.operation, params.mode, 
+                    winnerEloChange, loserEloChange,
+                    winnerAcc, winnerSpeed, winnerStrk, winnerAps,
+                    loserAcc, loserSpeed, loserStrk, loserAps,
+                matchReasoningJson, integrityForInsert, isVoidForInsert ? 1 : 0, voidReasonForInsert,
+                winnerCoinsEarned, loserCoinsEarned
+                );
+
+                // Re-enable foreign key checks
+                if (isAiMatch) {
+                    db.pragma('foreign_keys = ON');
+                }
+            } catch (e: any) {
+                // Re-enable foreign key checks even on error
+                if (isAiMatch) {
+                    try { db.pragma('foreign_keys = ON'); } catch {}
+                }
+                if (!e.message?.includes('UNIQUE constraint')) throw e;
+            }
+
+        // Connection quality and void status (defined here for return scope)
+        const integrity = params.matchIntegrity || 'GREEN';
+        // Only RED voids the match - YELLOW is just a warning, match still counts
+        const isVoid = integrity === 'RED';
+        const voidReason = isVoid ? `Match voided due to ${integrity} connection quality` : null;
 
         // Revalidate
         const { revalidatePath } = await import("next/cache");
@@ -1628,10 +1696,6 @@ export async function saveMatchResult(params: {
         revalidatePath("/stats");
         revalidatePath("/dashboard");
 
-        const integrity = params.matchIntegrity || 'GREEN';
-        // Only RED voids the match - YELLOW is just a warning, match still counts
-        const isVoid = integrity === 'RED';
-        
         return {
             success: true,
             winnerEloChange,
@@ -1641,7 +1705,8 @@ export async function saveMatchResult(params: {
             isRanked,
             isVoid,
             isDraw: params.isDraw || false,
-            voidReason: isVoid ? `Match voided due to ${integrity} connection quality` : undefined
+            voidReason: voidReason || undefined,
+            connectionQuality: integrity
         };
     } catch (error: any) {
         console.error('[Match] Save result error:', error);
@@ -1913,6 +1978,12 @@ export interface MatchHistoryEntry {
     createdAt: string;
     // Relative time for display
     timeAgo: string;
+    // Connection quality and match integrity
+    connectionQuality?: string;  // GREEN, YELLOW, RED
+    isVoid?: boolean;
+    voidReason?: string;
+    // Coin rewards
+    coinsEarned?: number;
 }
 
 /**
@@ -1972,6 +2043,11 @@ export async function getMatchHistory(limit: number = 10): Promise<{
                 am.mode,
                 am.match_reasoning,
                 am.created_at,
+                am.connection_quality,
+                am.is_void,
+                am.void_reason,
+                am.winner_coins,
+                am.loser_coins,
                 CASE 
                     WHEN am.winner_id = ? THEN am.loser_id 
                     ELSE am.winner_id 
@@ -2014,6 +2090,11 @@ export async function getMatchHistory(limit: number = 10): Promise<{
                 ? match.loser_score 
                 : (match.winner_id === userId ? match.loser_score : match.winner_score);
 
+            // Determine coins earned based on win/loss
+            const coinsEarned = isWin 
+                ? (match.winner_coins || 0) 
+                : (match.loser_coins || 0);
+
             return {
                 id: match.id,
                 opponentName: match.opponent_name || (isAiMatch ? 'AI Opponent' : 'Unknown'),
@@ -2029,6 +2110,11 @@ export async function getMatchHistory(limit: number = 10): Promise<{
                 matchReasoning,
                 createdAt: match.created_at,
                 timeAgo: getTimeAgo(match.created_at),
+                // Connection quality and match integrity
+                connectionQuality: match.connection_quality || 'GREEN',
+                isVoid: match.is_void === 1,
+                voidReason: match.void_reason || undefined,
+                coinsEarned,
             };
         });
 

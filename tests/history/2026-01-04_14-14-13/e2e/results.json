@@ -1,0 +1,224 @@
+{
+  "config": {
+    "configFile": "/home/evan.hill/FlashMath/tests/e2e/playwright.config.ts",
+    "rootDir": "/home/evan.hill/FlashMath/tests/e2e/specs",
+    "forbidOnly": true,
+    "fullyParallel": true,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        {
+          "outputFolder": "playwright-report",
+          "open": "never"
+        }
+      ],
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "playwright-report/results.json"
+        }
+      ],
+      [
+        "github",
+        null
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "/home/evan.hill/FlashMath/test-results",
+        "repeatEach": 1,
+        "retries": 2,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "/home/evan.hill/FlashMath/tests/e2e/specs",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.57.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "console-capture-verify.spec.ts",
+      "file": "console-capture-verify.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Console Capture Verification",
+          "file": "console-capture-verify.spec.ts",
+          "line": 11,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should capture console logs from dashboard page",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 5798,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "\n📋 Captured 6 console messages\n"
+                        },
+                        {
+                          "text": "  [0] info: %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devt\n"
+                        },
+                        {
+                          "text": "  [1] log: [HMR] connected\n"
+                        },
+                        {
+                          "text": "  [2] network-error: Request failed: http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33 - net::ERR_ABORTED\n"
+                        },
+                        {
+                          "text": "  [3] info: %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devt\n"
+                        },
+                        {
+                          "text": "  [4] log: [HMR] connected\n"
+                        },
+                        {
+                          "text": "  [5] network-error: Request failed: http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33 - net::ERR_ABORTED\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-04T14:13:54.805Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "browser-console-logs",
+                          "contentType": "text/plain",
+                          "body": "WzIwMjYtMDEtMDRUMTQ6MTM6NTUuMTUzWl0g4oS577iPIElORk8gJWNEb3dubG9hZCB0aGUgUmVhY3QgRGV2VG9vbHMgZm9yIGEgYmV0dGVyIGRldmVsb3BtZW50IGV4cGVyaWVuY2U6IGh0dHBzOi8vcmVhY3QuZGV2L2xpbmsvcmVhY3QtZGV2dG9vbHMgZm9udC13ZWlnaHQ6Ym9sZApbMjAyNi0wMS0wNFQxNDoxMzo1NS4yNjJaXSDwn5OdIExPRyBbSE1SXSBjb25uZWN0ZWQKWzIwMjYtMDEtMDRUMTQ6MTM6NTUuNDA2Wl0g8J+MkCBORVQtRVJSIFJlcXVlc3QgZmFpbGVkOiBodHRwOi8vMTI3LjAuMC4xOjcyNDQvaW5nZXN0LzRhNGRlN2Q1LTRkMjMtNDQ1Yi1hNGNmLTViNjNlOTQ2OWIzMyAtIG5ldDo6RVJSX0FCT1JURUQKWzIwMjYtMDEtMDRUMTQ6MTM6NTguNDI1Wl0g4oS577iPIElORk8gJWNEb3dubG9hZCB0aGUgUmVhY3QgRGV2VG9vbHMgZm9yIGEgYmV0dGVyIGRldmVsb3BtZW50IGV4cGVyaWVuY2U6IGh0dHBzOi8vcmVhY3QuZGV2L2xpbmsvcmVhY3QtZGV2dG9vbHMgZm9udC13ZWlnaHQ6Ym9sZApbMjAyNi0wMS0wNFQxNDoxMzo1OC40NjlaXSDwn5OdIExPRyBbSE1SXSBjb25uZWN0ZWQKWzIwMjYtMDEtMDRUMTQ6MTM6NTguNTc2Wl0g8J+MkCBORVQtRVJSIFJlcXVlc3QgZmFpbGVkOiBodHRwOi8vMTI3LjAuMC4xOjcyNDQvaW5nZXN0LzRhNGRlN2Q1LTRkMjMtNDQ1Yi1hNGNmLTViNjNlOTQ2OWIzMyAtIG5ldDo6RVJSX0FCT1JURUQ="
+                        },
+                        {
+                          "name": "browser-console-logs.json",
+                          "contentType": "application/json",
+                          "body": "WwogIHsKICAgICJ0eXBlIjogImluZm8iLAogICAgInRleHQiOiAiJWNEb3dubG9hZCB0aGUgUmVhY3QgRGV2VG9vbHMgZm9yIGEgYmV0dGVyIGRldmVsb3BtZW50IGV4cGVyaWVuY2U6IGh0dHBzOi8vcmVhY3QuZGV2L2xpbmsvcmVhY3QtZGV2dG9vbHMgZm9udC13ZWlnaHQ6Ym9sZCIsCiAgICAibG9jYXRpb24iOiAiaHR0cDovL2xvY2FsaG9zdDozMDAxL19uZXh0L3N0YXRpYy9jaHVua3Mvbm9kZV9tb2R1bGVzX25leHRfZGlzdF9mMzUzMGNhYy5fLmpzIiwKICAgICJ0aW1lc3RhbXAiOiAiMjAyNi0wMS0wNFQxNDoxMzo1NS4xNTNaIgogIH0sCiAgewogICAgInR5cGUiOiAibG9nIiwKICAgICJ0ZXh0IjogIltITVJdIGNvbm5lY3RlZCIsCiAgICAibG9jYXRpb24iOiAiaHR0cDovL2xvY2FsaG9zdDozMDAxL19uZXh0L3N0YXRpYy9jaHVua3Mvbm9kZV9tb2R1bGVzX25leHRfZGlzdF9mMzUzMGNhYy5fLmpzIiwKICAgICJ0aW1lc3RhbXAiOiAiMjAyNi0wMS0wNFQxNDoxMzo1NS4yNjJaIgogIH0sCiAgewogICAgInR5cGUiOiAibmV0d29yay1lcnJvciIsCiAgICAidGV4dCI6ICJSZXF1ZXN0IGZhaWxlZDogaHR0cDovLzEyNy4wLjAuMTo3MjQ0L2luZ2VzdC80YTRkZTdkNS00ZDIzLTQ0NWItYTRjZi01YjYzZTk0NjliMzMgLSBuZXQ6OkVSUl9BQk9SVEVEIiwKICAgICJsb2NhdGlvbiI6ICJodHRwOi8vMTI3LjAuMC4xOjcyNDQvaW5nZXN0LzRhNGRlN2Q1LTRkMjMtNDQ1Yi1hNGNmLTViNjNlOTQ2OWIzMyIsCiAgICAidGltZXN0YW1wIjogIjIwMjYtMDEtMDRUMTQ6MTM6NTUuNDA2WiIKICB9LAogIHsKICAgICJ0eXBlIjogImluZm8iLAogICAgInRleHQiOiAiJWNEb3dubG9hZCB0aGUgUmVhY3QgRGV2VG9vbHMgZm9yIGEgYmV0dGVyIGRldmVsb3BtZW50IGV4cGVyaWVuY2U6IGh0dHBzOi8vcmVhY3QuZGV2L2xpbmsvcmVhY3QtZGV2dG9vbHMgZm9udC13ZWlnaHQ6Ym9sZCIsCiAgICAibG9jYXRpb24iOiAiaHR0cDovL2xvY2FsaG9zdDozMDAxL19uZXh0L3N0YXRpYy9jaHVua3Mvbm9kZV9tb2R1bGVzX25leHRfZGlzdF9mMzUzMGNhYy5fLmpzIiwKICAgICJ0aW1lc3RhbXAiOiAiMjAyNi0wMS0wNFQxNDoxMzo1OC40MjVaIgogIH0sCiAgewogICAgInR5cGUiOiAibG9nIiwKICAgICJ0ZXh0IjogIltITVJdIGNvbm5lY3RlZCIsCiAgICAibG9jYXRpb24iOiAiaHR0cDovL2xvY2FsaG9zdDozMDAxL19uZXh0L3N0YXRpYy9jaHVua3Mvbm9kZV9tb2R1bGVzX25leHRfZGlzdF9mMzUzMGNhYy5fLmpzIiwKICAgICJ0aW1lc3RhbXAiOiAiMjAyNi0wMS0wNFQxNDoxMzo1OC40NjlaIgogIH0sCiAgewogICAgInR5cGUiOiAibmV0d29yay1lcnJvciIsCiAgICAidGV4dCI6ICJSZXF1ZXN0IGZhaWxlZDogaHR0cDovLzEyNy4wLjAuMTo3MjQ0L2luZ2VzdC80YTRkZTdkNS00ZDIzLTQ0NWItYTRjZi01YjYzZTk0NjliMzMgLSBuZXQ6OkVSUl9BQk9SVEVEIiwKICAgICJsb2NhdGlvbiI6ICJodHRwOi8vMTI3LjAuMC4xOjcyNDQvaW5nZXN0LzRhNGRlN2Q1LTRkMjMtNDQ1Yi1hNGNmLTViNjNlOTQ2OWIzMyIsCiAgICAidGltZXN0YW1wIjogIjIwMjYtMDEtMDRUMTQ6MTM6NTguNTc2WiIKICB9Cl0="
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d0bb015183183d58d974-931dbe161af92e277e61",
+              "file": "console-capture-verify.spec.ts",
+              "line": 13,
+              "column": 9
+            },
+            {
+              "title": "should capture logs from arena setup attempt",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 60000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 3491,
+                      "errors": [],
+                      "stdout": [
+                        {
+                          "text": "\n📋 Captured 3 console messages from arena attempt\n"
+                        },
+                        {
+                          "text": "  [0] info: %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bol\n"
+                        },
+                        {
+                          "text": "  [1] log: [HMR] connected\n"
+                        },
+                        {
+                          "text": "  [2] network-error: Request failed: http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33 - net::ERR_ABORTED\n"
+                        }
+                      ],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-01-04T14:14:00.666Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "browser-console-logs",
+                          "contentType": "text/plain",
+                          "body": "WzIwMjYtMDEtMDRUMTQ6MTQ6MDEuMDA1Wl0g4oS577iPIElORk8gJWNEb3dubG9hZCB0aGUgUmVhY3QgRGV2VG9vbHMgZm9yIGEgYmV0dGVyIGRldmVsb3BtZW50IGV4cGVyaWVuY2U6IGh0dHBzOi8vcmVhY3QuZGV2L2xpbmsvcmVhY3QtZGV2dG9vbHMgZm9udC13ZWlnaHQ6Ym9sZApbMjAyNi0wMS0wNFQxNDoxNDowMS4wNzRaXSDwn5OdIExPRyBbSE1SXSBjb25uZWN0ZWQKWzIwMjYtMDEtMDRUMTQ6MTQ6MDEuMTY5Wl0g8J+MkCBORVQtRVJSIFJlcXVlc3QgZmFpbGVkOiBodHRwOi8vMTI3LjAuMC4xOjcyNDQvaW5nZXN0LzRhNGRlN2Q1LTRkMjMtNDQ1Yi1hNGNmLTViNjNlOTQ2OWIzMyAtIG5ldDo6RVJSX0FCT1JURUQ="
+                        },
+                        {
+                          "name": "browser-console-logs.json",
+                          "contentType": "application/json",
+                          "body": "WwogIHsKICAgICJ0eXBlIjogImluZm8iLAogICAgInRleHQiOiAiJWNEb3dubG9hZCB0aGUgUmVhY3QgRGV2VG9vbHMgZm9yIGEgYmV0dGVyIGRldmVsb3BtZW50IGV4cGVyaWVuY2U6IGh0dHBzOi8vcmVhY3QuZGV2L2xpbmsvcmVhY3QtZGV2dG9vbHMgZm9udC13ZWlnaHQ6Ym9sZCIsCiAgICAibG9jYXRpb24iOiAiaHR0cDovL2xvY2FsaG9zdDozMDAxL19uZXh0L3N0YXRpYy9jaHVua3Mvbm9kZV9tb2R1bGVzX25leHRfZGlzdF9mMzUzMGNhYy5fLmpzIiwKICAgICJ0aW1lc3RhbXAiOiAiMjAyNi0wMS0wNFQxNDoxNDowMS4wMDVaIgogIH0sCiAgewogICAgInR5cGUiOiAibG9nIiwKICAgICJ0ZXh0IjogIltITVJdIGNvbm5lY3RlZCIsCiAgICAibG9jYXRpb24iOiAiaHR0cDovL2xvY2FsaG9zdDozMDAxL19uZXh0L3N0YXRpYy9jaHVua3Mvbm9kZV9tb2R1bGVzX25leHRfZGlzdF9mMzUzMGNhYy5fLmpzIiwKICAgICJ0aW1lc3RhbXAiOiAiMjAyNi0wMS0wNFQxNDoxNDowMS4wNzRaIgogIH0sCiAgewogICAgInR5cGUiOiAibmV0d29yay1lcnJvciIsCiAgICAidGV4dCI6ICJSZXF1ZXN0IGZhaWxlZDogaHR0cDovLzEyNy4wLjAuMTo3MjQ0L2luZ2VzdC80YTRkZTdkNS00ZDIzLTQ0NWItYTRjZi01YjYzZTk0NjliMzMgLSBuZXQ6OkVSUl9BQk9SVEVEIiwKICAgICJsb2NhdGlvbiI6ICJodHRwOi8vMTI3LjAuMC4xOjcyNDQvaW5nZXN0LzRhNGRlN2Q1LTRkMjMtNDQ1Yi1hNGNmLTViNjNlOTQ2OWIzMyIsCiAgICAidGltZXN0YW1wIjogIjIwMjYtMDEtMDRUMTQ6MTQ6MDEuMTY5WiIKICB9Cl0="
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "d0bb015183183d58d974-8515b2328862959be952",
+              "file": "console-capture-verify.spec.ts",
+              "line": 36,
+              "column": 9
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-01-04T14:13:54.368Z",
+    "duration": 9879.307999999999,
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

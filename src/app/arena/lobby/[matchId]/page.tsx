@@ -76,8 +76,8 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
             {
                 id: opponent?.odUserId || 'ai-opponent',
                 name: opponent?.odUserName || 'AI Challenger',
-                rank: 'Bronze',
-                division: 'I',
+                rank: opponent?.odRank || 'Bronze',
+                division: opponent?.odDivision || 'I',
                 elo: opponent?.odElo || 300,
                 ready: true,
                 banner: opponent?.odEquippedBanner || 'default',

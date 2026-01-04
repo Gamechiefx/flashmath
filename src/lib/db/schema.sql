@@ -345,6 +345,12 @@ CREATE TABLE IF NOT EXISTS arena_matches (
     loser_avg_speed_ms INTEGER,
     loser_max_streak INTEGER,
     loser_aps INTEGER,
+    -- Connection quality and match integrity
+    connection_quality TEXT DEFAULT 'GREEN',  -- GREEN, YELLOW, RED
+    is_void INTEGER DEFAULT 0,                -- 1 if match was voided
+    void_reason TEXT,                         -- Reason for void
+    winner_coins INTEGER DEFAULT 0,           -- Coins earned by winner
+    loser_coins INTEGER DEFAULT 0,            -- Coins earned by loser
     created_at TEXT NOT NULL,
     FOREIGN KEY (winner_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (loser_id) REFERENCES users(id) ON DELETE CASCADE
@@ -398,8 +404,16 @@ CREATE TABLE IF NOT EXISTS parties (
     leader_id TEXT NOT NULL,
     max_size INTEGER DEFAULT 5,
     invite_mode TEXT DEFAULT 'open' CHECK(invite_mode IN ('open', 'invite_only')),
+    -- Arena Teams 5v5 extensions
+    igl_id TEXT,                        -- In-Game Leader for team matches
+    anchor_id TEXT,                     -- Anchor player for team matches
+    target_mode TEXT,                   -- '5v5', '4v4', '3v3', '2v2' or NULL
+    team_id TEXT,                       -- Link to persistent team (NULL for temporary parties)
     created_at TEXT NOT NULL,
-    FOREIGN KEY (leader_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (leader_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (igl_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (anchor_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
 );
 
 -- Party Members
@@ -408,6 +422,9 @@ CREATE TABLE IF NOT EXISTS party_members (
     party_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     joined_at TEXT NOT NULL,
+    -- Arena Teams 5v5 extensions
+    is_ready INTEGER DEFAULT 0,         -- Ready state for queue
+    preferred_operation TEXT,           -- Player's preferred operation slot
     FOREIGN KEY (party_id) REFERENCES parties(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     UNIQUE(party_id, user_id)
@@ -436,3 +453,160 @@ CREATE INDEX IF NOT EXISTS idx_parties_leader ON parties(leader_id);
 CREATE INDEX IF NOT EXISTS idx_party_members_party ON party_members(party_id);
 CREATE INDEX IF NOT EXISTS idx_party_members_user ON party_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_party_invites_invitee ON party_invites(invitee_id, status);
+
+-- ==============================================
+-- ARENA TEAMS 5v5 SYSTEM TABLES
+-- ==============================================
+
+-- Persistent Teams (registered team entities with ELO)
+CREATE TABLE IF NOT EXISTS teams (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    tag TEXT,                           -- 3-4 char tag (e.g., "FM")
+    created_by TEXT NOT NULL,           -- Captain user_id
+    created_at TEXT NOT NULL,
+    -- Team aggregate stats
+    team_wins INTEGER DEFAULT 0,
+    team_losses INTEGER DEFAULT 0,
+    team_win_streak INTEGER DEFAULT 0,
+    team_best_win_streak INTEGER DEFAULT 0,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_teams_name ON teams(name);
+CREATE INDEX IF NOT EXISTS idx_teams_wins ON teams(team_wins DESC);
+CREATE INDEX IF NOT EXISTS idx_teams_created_by ON teams(created_by);
+
+-- Team ELO (per-team ELO ratings, mirrors user arena_elo_5v5_* columns)
+CREATE TABLE IF NOT EXISTS team_elo (
+    team_id TEXT PRIMARY KEY,
+    -- Overall 5v5 ELO (calculated as avg of operations)
+    elo_5v5 INTEGER DEFAULT 300,
+    -- Per-operation ELO
+    elo_5v5_addition INTEGER DEFAULT 300,
+    elo_5v5_subtraction INTEGER DEFAULT 300,
+    elo_5v5_multiplication INTEGER DEFAULT 300,
+    elo_5v5_division INTEGER DEFAULT 300,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_elo_5v5 ON team_elo(elo_5v5 DESC);
+CREATE INDEX IF NOT EXISTS idx_team_elo_5v5_addition ON team_elo(elo_5v5_addition DESC);
+CREATE INDEX IF NOT EXISTS idx_team_elo_5v5_subtraction ON team_elo(elo_5v5_subtraction DESC);
+CREATE INDEX IF NOT EXISTS idx_team_elo_5v5_multiplication ON team_elo(elo_5v5_multiplication DESC);
+CREATE INDEX IF NOT EXISTS idx_team_elo_5v5_division ON team_elo(elo_5v5_division DESC);
+
+-- Team Members (membership with roles)
+CREATE TABLE IF NOT EXISTS team_members (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    role TEXT DEFAULT 'member',         -- 'captain', 'igl', 'member'
+    primary_operation TEXT,             -- Player's specialty operation
+    joined_at TEXT NOT NULL,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(team_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_members_team ON team_members(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_user ON team_members(user_id);
+
+-- Team Invites (for joining persistent teams)
+CREATE TABLE IF NOT EXISTS team_invites (
+    id TEXT PRIMARY KEY,
+    team_id TEXT NOT NULL,
+    inviter_id TEXT NOT NULL,
+    invitee_id TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',      -- 'pending', 'accepted', 'declined', 'expired'
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (inviter_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (invitee_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_invites_invitee ON team_invites(invitee_id, status);
+CREATE INDEX IF NOT EXISTS idx_team_invites_team ON team_invites(team_id);
+
+-- Team Matches (5v5 match history, distinct from arena_matches)
+CREATE TABLE IF NOT EXISTS team_matches (
+    id TEXT PRIMARY KEY,
+    team1_id TEXT NOT NULL,
+    team2_id TEXT NOT NULL,
+    team1_score INTEGER NOT NULL,
+    team2_score INTEGER NOT NULL,
+    winner_team_id TEXT,                -- NULL for draw
+    mode TEXT NOT NULL,                 -- '5v5'
+    match_type TEXT NOT NULL,           -- 'ranked', 'casual'
+    operation TEXT NOT NULL,            -- 'addition', 'subtraction', etc.
+    -- TEAM ELO changes (primary - 100%)
+    team1_elo_before INTEGER,
+    team2_elo_before INTEGER,
+    team1_elo_change INTEGER DEFAULT 0,
+    team2_elo_change INTEGER DEFAULT 0,
+    -- Individual ELO multiplier
+    individual_elo_multiplier REAL DEFAULT 0.5,
+    -- Match metadata
+    connection_quality TEXT DEFAULT 'GREEN',
+    is_void INTEGER DEFAULT 0,
+    void_reason TEXT,
+    round_scores TEXT,                  -- JSON: [{round: 1, team1: 450, team2: 380}, ...]
+    match_duration_ms INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (team1_id) REFERENCES teams(id),
+    FOREIGN KEY (team2_id) REFERENCES teams(id),
+    FOREIGN KEY (winner_team_id) REFERENCES teams(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_matches_team1 ON team_matches(team1_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_team_matches_team2 ON team_matches(team2_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_team_matches_created ON team_matches(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_team_matches_operation ON team_matches(operation, created_at DESC);
+
+-- Team Match Players (per-player stats in team matches)
+CREATE TABLE IF NOT EXISTS team_match_players (
+    id TEXT PRIMARY KEY,
+    match_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    operation_slot TEXT NOT NULL,       -- 'addition', 'subtraction', etc.
+    -- Performance metrics
+    questions_attempted INTEGER DEFAULT 0,
+    questions_correct INTEGER DEFAULT 0,
+    accuracy REAL DEFAULT 0,
+    avg_speed_ms INTEGER DEFAULT 0,
+    max_streak INTEGER DEFAULT 0,
+    contribution_percent REAL DEFAULT 0,
+    -- Individual ELO change (50% of team change)
+    individual_elo_change INTEGER DEFAULT 0,
+    -- Role flags
+    was_igl INTEGER DEFAULT 0,
+    was_anchor INTEGER DEFAULT 0,
+    used_double_callin INTEGER DEFAULT 0,
+    used_anchor_solo INTEGER DEFAULT 0,
+    FOREIGN KEY (match_id) REFERENCES team_matches(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_match_players_match ON team_match_players(match_id);
+CREATE INDEX IF NOT EXISTS idx_team_match_players_user ON team_match_players(user_id);
+CREATE INDEX IF NOT EXISTS idx_team_match_players_team ON team_match_players(team_id);
+
+-- Team Match Roles (IGL decisions log per match)
+CREATE TABLE IF NOT EXISTS team_match_roles (
+    id TEXT PRIMARY KEY,
+    match_id TEXT NOT NULL,
+    team_id TEXT NOT NULL,
+    igl_user_id TEXT NOT NULL,
+    anchor_user_id TEXT NOT NULL,
+    slot_assignments TEXT NOT NULL,     -- JSON: {"addition": "user1", "subtraction": "user2", ...}
+    decisions TEXT,                     -- JSON: IGLDecision[] for halftime/timeout decisions
+    FOREIGN KEY (match_id) REFERENCES team_matches(id) ON DELETE CASCADE,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (igl_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (anchor_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_team_match_roles_match ON team_match_roles(match_id);

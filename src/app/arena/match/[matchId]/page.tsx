@@ -42,7 +42,9 @@ export default async function ArenaMatchPage({ params, searchParams }: PageProps
             tier: p1.odTier,
             banner: p1.odEquippedBanner,
             title: p1.odEquippedTitle,
-            level: p1.odLevel
+            level: p1.odLevel,
+            rank: p1.odRank || 'Bronze',
+            division: p1.odDivision || 'I'
         };
 
         const p2 = matchResult.match.odPlayer2;
@@ -53,7 +55,9 @@ export default async function ArenaMatchPage({ params, searchParams }: PageProps
                 tier: p2.odTier,
                 banner: p2.odEquippedBanner,
                 title: p2.odEquippedTitle,
-                level: p2.odLevel
+                level: p2.odLevel,
+                rank: p2.odRank || 'Bronze',
+                division: p2.odDivision || 'I'
             };
         }
     }

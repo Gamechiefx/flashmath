@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Crown, Plus, LogOut, UserPlus, Bell, Settings, Lock, Globe } from 'lucide-react';
+import { Users, Crown, Plus, LogOut, UserPlus, Bell, Settings, Lock, Globe, ArrowUpCircle } from 'lucide-react';
 import { UserAvatar } from '@/components/user-avatar';
 import { cn } from '@/lib/utils';
 import type { Party, PartyInvite, Friend } from '@/lib/actions/social';
@@ -32,6 +32,7 @@ interface PartySectionProps {
     onDeclineInvite: (inviteId: string) => void;
     onUpdateSettings?: (settings: { inviteMode: 'open' | 'invite_only' }) => void;
     onAddFriend?: (userId: string) => void;
+    onTransferLeadership?: (userId: string) => void;
     isLoading?: boolean;
 }
 
@@ -50,6 +51,7 @@ export function PartySection({
     onDeclineInvite,
     onUpdateSettings,
     onAddFriend,
+    onTransferLeadership,
     isLoading,
 }: PartySectionProps) {
     const [showInviteList, setShowInviteList] = useState(false);
@@ -302,6 +304,18 @@ export function PartySection({
                                             <span>{member.odDuelElo || 300} ELO</span>
                                         </div>
                                     </div>
+                                    
+                                    {/* Promote to Leader button (only for party leader, on other members) */}
+                                    {isLeader && !isCurrentUser && onTransferLeadership && (
+                                        <button
+                                            onClick={() => onTransferLeadership(member.odUserId)}
+                                            disabled={isLoading}
+                                            className="p-1.5 rounded-lg hover:bg-accent/20 text-accent transition-colors"
+                                            title={`Make ${member.odName} party leader`}
+                                        >
+                                            <ArrowUpCircle size={14} />
+                                        </button>
+                                    )}
                                     
                                     {/* Add Friend button for non-friends */}
                                     {canAddFriend && (

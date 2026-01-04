@@ -8,7 +8,29 @@
     "build": "next build",
     "start": "next start",
     "start:server": "NODE_ENV=production node server.js",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:arena": "npx ts-node --project tests/tsconfig.json tests/arena/runner.ts",
+    "test:arena:list": "npx ts-node --project tests/tsconfig.json tests/arena/runner.ts --list",
+    "test:arena:all": "npx ts-node --project tests/tsconfig.json tests/arena/runner.ts --all",
+    "test:arena:quick": "npx ts-node --project tests/tsconfig.json tests/arena/runner.ts --scenarios=connection,party-to-match,roles",
+    "test:arena:docker": "docker-compose -f docker-compose.test.yml run test",
+    "test:e2e": "CI=1 playwright test --config=tests/e2e/playwright.config.ts",
+    "test:e2e:headed": "playwright test --config=tests/e2e/playwright.config.ts --headed",
+    "test:e2e:debug": "playwright test --config=tests/e2e/playwright.config.ts --debug",
+    "test:e2e:report": "playwright show-report tests/e2e/playwright-report",
+    "test:e2e:interactive": "playwright test --config=tests/e2e/playwright.config.ts",
+    "test:e2e:codegen": "playwright codegen",
+    "test:e2e:diagnose": "node tests/scripts/generate-diagnostic.js",
+    "test:all": "npm run test:arena:all && npm run test:e2e",
+    "test:ci": "CI=1 npm run test:arena:all -- --json && CI=1 npm run test:e2e",
+    "reports:start": "docker-compose -f docker-compose.reports.yml up -d",
+    "reports:stop": "docker-compose -f docker-compose.reports.yml down",
+    "reports:build": "docker-compose -f docker-compose.reports.yml build",
+    "reports:logs": "docker-compose -f docker-compose.reports.yml logs -f",
+    "test:history": "node tests/scripts/run-with-history.js --type=all",
+    "test:history:e2e": "node tests/scripts/run-with-history.js --type=e2e",
+    "test:history:socket": "node tests/scripts/run-with-history.js --type=socket",
+    "test:archive": "node tests/scripts/archive-results.js --type=all"
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -38,6 +60,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
@@ -49,6 +72,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.0",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

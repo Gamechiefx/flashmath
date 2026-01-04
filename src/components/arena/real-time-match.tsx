@@ -29,6 +29,8 @@ interface RealTimeMatchProps {
         banner: string;
         title: string;
         level: number;
+        rank: string;
+        division: string;
     }>;
 }
 
@@ -63,11 +65,15 @@ export function RealTimeMatch({
         yourBanner: string;
         yourTitle: string;
         yourLevel: number;
+        yourRank: string;
+        yourDivision: string;
         opponentScore: number;
         opponentName: string;
         opponentBanner: string;
         opponentTitle: string;
         opponentLevel: number;
+        opponentRank: string;
+        opponentDivision: string;
     } | null>(null);
     
     // Friend request state
@@ -99,6 +105,11 @@ export function RealTimeMatch({
         userName,
         operation,
         isAiMatch,
+        userRank: initialPlayers?.[currentUserId]?.rank,
+        userDivision: initialPlayers?.[currentUserId]?.division,
+        userLevel: initialPlayers?.[currentUserId]?.level,
+        userBanner: initialPlayers?.[currentUserId]?.banner,
+        userTitle: initialPlayers?.[currentUserId]?.title,
     });
     
     // Get my connection state
@@ -158,11 +169,15 @@ export function RealTimeMatch({
                 yourBanner: you.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default',
                 yourTitle: you.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'Challenger',
                 yourLevel: you.odLevel || initialPlayers?.[currentUserId]?.level || 1,
+                yourRank: you.odRank || initialPlayers?.[currentUserId]?.rank || 'Bronze',
+                yourDivision: you.odDivision || initialPlayers?.[currentUserId]?.division || 'I',
                 opponentScore: opponent.odScore || 0,
                 opponentName: opponent.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent') || 'Opponent',
                 opponentBanner: opponent.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default') || 'default',
                 opponentTitle: opponent.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Contender') || 'Contender',
                 opponentLevel: opponent.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1) || 1,
+                opponentRank: opponent.odRank || (opponentId ? initialPlayers?.[opponentId]?.rank : 'Bronze') || 'Bronze',
+                opponentDivision: opponent.odDivision || (opponentId ? initialPlayers?.[opponentId]?.division : 'I') || 'I',
             });
         }
     }, [matchEnded, you, opponent, finalStats, userName, currentUserId, opponentId, initialPlayers]);
@@ -266,12 +281,12 @@ export function RealTimeMatch({
 
         if (isCorrect) {
             // Correct: Clear after brief feedback
-            setTimeout(() => {
-                setShowResult(null);
-                setAnswer('');
+        setTimeout(() => {
+            setShowResult(null);
+            setAnswer('');
                 setLastCorrectAnswer(null);
                 isProcessingRef.current = false;
-            }, 200);
+        }, 200);
         } else {
             // Wrong: Show correct answer briefly, then auto-continue
             // Brief flash so they see the mistake but don't lose time
@@ -513,12 +528,19 @@ export function RealTimeMatch({
             ? (finalStats?.opponentLevel || opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 1))
             : (finalStats?.yourLevel || you?.odLevel || initialPlayers?.[currentUserId]?.level || 1);
 
-        // Rank info - use fresh stats if available, default to Bronze
-        const winnerRank = winnerStats?.rank || 'Bronze';
-        const winnerDivision = winnerStats?.division || "I";
-        const loserRank = loserStats?.rank || 'Bronze';
-
-        const loserDivision = loserStats?.division || "I";
+        // Rank info - use finalStats with fallbacks
+        const winnerRank = isWinner
+            ? (finalStats?.yourRank || winnerStats?.rank || initialPlayers?.[currentUserId]?.rank || 'Bronze')
+            : (finalStats?.opponentRank || winnerStats?.rank || (opponentId ? initialPlayers?.[opponentId]?.rank : 'Bronze'));
+        const winnerDivision = isWinner
+            ? (finalStats?.yourDivision || winnerStats?.division || initialPlayers?.[currentUserId]?.division || 'I')
+            : (finalStats?.opponentDivision || winnerStats?.division || (opponentId ? initialPlayers?.[opponentId]?.division : 'I'));
+        const loserRank = isWinner
+            ? (finalStats?.opponentRank || loserStats?.rank || (opponentId ? initialPlayers?.[opponentId]?.rank : 'Bronze'))
+            : (finalStats?.yourRank || loserStats?.rank || initialPlayers?.[currentUserId]?.rank || 'Bronze');
+        const loserDivision = isWinner
+            ? (finalStats?.opponentDivision || loserStats?.division || (opponentId ? initialPlayers?.[opponentId]?.division : 'I'))
+            : (finalStats?.yourDivision || loserStats?.division || initialPlayers?.[currentUserId]?.division || 'I');
 
         return (
             <motion.div
@@ -954,9 +976,9 @@ export function RealTimeMatch({
                                                 <span className="text-green-400 ml-2">{lastCorrectAnswer}</span>
                                             </>
                                         ) : (
-                                            <span className={answer ? 'text-cyan-400' : 'text-white/20 animate-pulse'}>
-                                                {answer || '?'}
-                                            </span>
+                                        <span className={answer ? 'text-cyan-400' : 'text-white/20 animate-pulse'}>
+                                            {answer || '?'}
+                                        </span>
                                         )}
                                     </div>
                                 </motion.div>
@@ -988,8 +1010,8 @@ export function RealTimeMatch({
                         <PlayerBanner
                             name={you?.odName || initialPlayers?.[currentUserId]?.name || userName}
                             level={you?.odLevel || initialPlayers?.[currentUserId]?.level || 1}
-                            rank="Bronze"
-                            division=""
+                            rank={you?.odRank || initialPlayers?.[currentUserId]?.rank || 'Bronze'}
+                            division={you?.odDivision || initialPlayers?.[currentUserId]?.division || 'I'}
                             styleId={you?.odEquippedBanner || initialPlayers?.[currentUserId]?.banner || 'default'}
                             title={you?.odEquippedTitle || initialPlayers?.[currentUserId]?.title || 'FlashMath Competitor'}
                             className="w-full h-24 shadow-2xl shadow-cyan-900/20 border-cyan-500/30"
@@ -1046,8 +1068,8 @@ export function RealTimeMatch({
                         <PlayerBanner
                             name={opponent?.odName || (opponentId ? initialPlayers?.[opponentId]?.name : 'Opponent') || 'Opponent'}
                             level={opponent?.odLevel || (opponentId ? initialPlayers?.[opponentId]?.level : 0) || 0}
-                            rank="Bronze"
-                            division=""
+                            rank={opponent?.odRank || (opponentId ? initialPlayers?.[opponentId]?.rank : 'Bronze') || 'Bronze'}
+                            division={opponent?.odDivision || (opponentId ? initialPlayers?.[opponentId]?.division : 'I') || 'I'}
                             styleId={opponent?.odEquippedBanner || (opponentId ? initialPlayers?.[opponentId]?.banner : 'default') || 'default'}
                             title={opponent?.odEquippedTitle || (opponentId ? initialPlayers?.[opponentId]?.title : 'Contender') || 'Contender'}
                             className="w-full h-24 shadow-2xl shadow-amber-900/20 border-amber-500/30"

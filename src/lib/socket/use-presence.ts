@@ -19,10 +19,21 @@ interface FriendPresence {
 
 interface UsePresenceOptions {
     autoConnect?: boolean;
+    // User info - pass these to avoid useSession dependency during navigation transitions
+    // When provided, useSession is not called, preventing SessionProvider errors
+    userId?: string;
+    userName?: string;
 }
 
 interface PartySettingsUpdate {
     inviteMode: 'open' | 'invite_only';
+    updaterId: string;
+    timestamp: number;
+}
+
+interface PartyQueueStatusUpdate {
+    queueStatus: 'finding_teammates' | 'finding_opponents' | null;
+    partyId: string;
     updaterId: string;
     timestamp: number;
 }
@@ -42,13 +53,28 @@ interface UsePresenceReturn {
     // Party settings real-time update
     latestPartySettingsUpdate: PartySettingsUpdate | null;
     clearPartySettingsUpdate: () => void;
+    // Party queue status real-time update
+    latestQueueStatusUpdate: PartyQueueStatusUpdate | null;
+    clearQueueStatusUpdate: () => void;
+    notifyQueueStatusChange: (partyMemberIds: string[], queueStatus: string | null, partyId: string) => void;
 }
 
 let presenceSocket: Socket | null = null;
+let socketConnectionCount = 0;
+let handlerRegistrationCount = 0;
 
 export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn {
-    const { autoConnect = true } = options;
-    const { data: session } = useSession();
+    const { autoConnect = true, userId: propsUserId, userName: propsUserName } = options;
+    
+    // Always call useSession to maintain hook ordering (React rules)
+    // Use required: false to prevent throwing when SessionProvider is unavailable during navigation
+    // But prefer props when available to avoid SessionProvider timing issues
+    const sessionResult = useSession({ required: false });
+    const session = sessionResult?.data;
+    
+    // Prefer props over session (avoids SessionProvider dependency during navigation)
+    const effectiveUserId = propsUserId || session?.user?.id;
+    const effectiveUserName = propsUserName || (session?.user as any)?.name || 'Unknown';
     
     const [isConnected, setIsConnected] = useState(false);
     const [myStatus, setMyStatusState] = useState<PresenceStatus>('online');
@@ -69,6 +95,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     // Direct party settings update for immediate UI update
     const [latestPartySettingsUpdate, setLatestPartySettingsUpdate] = useState<PartySettingsUpdate | null>(null);
     
+    // Queue status update for real-time sync when leader changes queue
+    const [latestQueueStatusUpdate, setLatestQueueStatusUpdate] = useState<PartyQueueStatusUpdate | null>(null);
+    
     const userIdRef = useRef<string | null>(null);
     const statusRef = useRef<PresenceStatus>('online');
     
@@ -79,13 +108,18 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     
     // Connect to presence socket
     useEffect(() => {
-        if (!autoConnect || !session?.user) {
+        // #region agent log - H2: Track effect trigger count
+        socketConnectionCount++;
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:SOCKET_EFFECT_TRIGGER',message:'Socket useEffect triggered',data:{socketConnectionCount,autoConnect,effectiveUserId:effectiveUserId?.slice(-8),effectiveUserName},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+        // #endregion
+        
+        // Use effective user info (props take precedence over session)
+        if (!autoConnect || !effectiveUserId) {
             return;
         }
         
-        const user = session.user as any;
-        const userId = user.id;
-        const userName = user.name || 'Unknown';
+        const userId = effectiveUserId;
+        const userName = effectiveUserName;
         userIdRef.current = userId;
         
         // Singleton socket connection
@@ -171,7 +205,23 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             setPartyChanged(prev => prev + 1);
         };
         
+        const handlePartyQueueStatusChanged = (data: PartyQueueStatusUpdate) => {
+            console.log('[Presence] 🔔 SOCKET RECEIVED: party:queue_status_changed');
+            console.log('[Presence] partyId:', data.partyId);
+            console.log('[Presence] queueStatus:', data.queueStatus);
+            console.log('[Presence] updaterId:', data.updaterId);
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:SOCKET_RECEIVED',message:'Received queue status change via socket',data:{partyId:data.partyId,queueStatus:data.queueStatus,updaterId:data.updaterId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SOCKET'})}).catch(()=>{});
+            // #endregion
+            setLatestQueueStatusUpdate(data);
+            setPartyChanged(prev => prev + 1);
+        };
+        
         // Register handlers
+        // #region agent log - H5: Track handler registration
+        handlerRegistrationCount++;
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:HANDLER_REGISTER',message:'Registering socket handlers',data:{handlerRegistrationCount,userId:userId.slice(-8),socketConnected:socket.connected},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+        // #endregion
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
         socket.on('presence:update', handlePresenceUpdate);
@@ -183,6 +233,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         socket.on('party:member_joined', handlePartyMemberJoined);
         socket.on('party:member_left', handlePartyMemberLeft);
         socket.on('party:settings_updated', handlePartySettingsUpdated);
+        socket.on('party:queue_status_changed', handlePartyQueueStatusChanged);
         
         // Connect if not already
         if (!socket.connected) {
@@ -195,6 +246,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         
         // Cleanup
         return () => {
+            // #region agent log - H5: Track handler cleanup
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:HANDLER_CLEANUP',message:'Cleaning up socket handlers',data:{handlerRegistrationCount,userId:userId.slice(-8)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+            // #endregion
             socket.off('connect', handleConnect);
             socket.off('disconnect', handleDisconnect);
             socket.off('presence:update', handlePresenceUpdate);
@@ -206,8 +260,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             socket.off('party:member_joined', handlePartyMemberJoined);
             socket.off('party:member_left', handlePartyMemberLeft);
             socket.off('party:settings_updated', handlePartySettingsUpdated);
+            socket.off('party:queue_status_changed', handlePartyQueueStatusChanged);
         };
-    }, [autoConnect, session]);
+    }, [autoConnect, effectiveUserId, effectiveUserName]);
     
     // Set my status
     const setMyStatus = useCallback((status: PresenceStatus) => {
@@ -242,6 +297,38 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         setLatestPartySettingsUpdate(null);
     }, []);
     
+    const clearQueueStatusUpdate = useCallback(() => {
+        setLatestQueueStatusUpdate(null);
+    }, []);
+    
+    // Notify all party members of queue status change (called by leader)
+    const notifyQueueStatusChange = useCallback((
+        partyMemberIds: string[], 
+        queueStatus: string | null, 
+        partyId: string
+    ) => {
+        console.log('[Presence] 📤 SOCKET EMIT: presence:notify_party_queue_status');
+        console.log('[Presence] partyId:', partyId);
+        console.log('[Presence] queueStatus:', queueStatus);
+        console.log('[Presence] targets:', partyMemberIds);
+        console.log('[Presence] socket connected:', presenceSocket?.connected);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:SOCKET_EMIT',message:'Emitting queue status change notification',data:{partyId,queueStatus,targetIds:partyMemberIds,socketConnected:presenceSocket?.connected},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SOCKET'})}).catch(()=>{});
+        // #endregion
+        
+        if (presenceSocket?.connected && userIdRef.current) {
+            presenceSocket.emit('presence:notify_party_queue_status', {
+                partyMemberIds,
+                queueStatus,
+                partyId,
+                updaterId: userIdRef.current,
+            });
+        } else {
+            console.log('[Presence] ⚠️ Socket not connected, cannot emit');
+        }
+    }, []);
+    
     return {
         isConnected,
         myStatus,
@@ -259,6 +346,10 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         // Direct party settings update
         latestPartySettingsUpdate,
         clearPartySettingsUpdate,
+        // Queue status real-time update
+        latestQueueStatusUpdate,
+        clearQueueStatusUpdate,
+        notifyQueueStatusChange,
     };
 }
 

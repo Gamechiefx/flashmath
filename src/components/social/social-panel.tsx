@@ -41,6 +41,7 @@ import {
     acceptPartyInvite,
     declinePartyInvite,
     sendFriendRequestToUser,
+    transferPartyLeadership,
     type Friend,
     type FriendRequest,
     type Party,
@@ -77,7 +78,11 @@ export function SocialPanel() {
         partyChanged,
         latestPartySettingsUpdate,
         clearPartySettingsUpdate,
-    } = usePresence();
+    } = usePresence({
+        // Pass user info to avoid useSession dependency issues during navigation
+        userId: session?.user?.id as string | undefined,
+        userName: session?.user?.name || undefined,
+    });
 
     // Data state
     const [friends, setFriends] = useState<Friend[]>([]);
@@ -444,6 +449,22 @@ export function SocialPanel() {
         setProcessingId(null);
     };
 
+    const handleTransferLeadership = async (newLeaderId: string) => {
+        setProcessingId(`transfer-${newLeaderId}`);
+        const result = await transferPartyLeadership(newLeaderId);
+        if (result.success) {
+            toast.success(`${result.newLeaderName || 'Player'} is now the party leader!`);
+            // Notify all party members via socket for real-time update
+            if (result.partyMemberIds) {
+                notifyPartySettingsUpdated(result.partyMemberIds);
+            }
+            loadData();
+        } else if (result.error) {
+            toast.error(result.error);
+        }
+        setProcessingId(null);
+    };
+
     // Don't render if not logged in
     if (!session?.user) return null;
 
@@ -596,6 +617,7 @@ export function SocialPanel() {
                                                         onDeclineInvite={handleDeclinePartyInvite}
                                                         onUpdateSettings={handleUpdatePartySettings}
                                                         onAddFriend={handleAddFriendFromParty}
+                                                        onTransferLeadership={handleTransferLeadership}
                                                         isLoading={processingId !== null}
                                                     />
                                                 </motion.div>

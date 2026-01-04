@@ -1,0 +1,37 @@
+# FlashMath Test Report Viewer
+# 
+# Usage:
+#   docker-compose -f docker-compose.reports.yml up -d
+#
+# Access at: http://localhost:9400
+
+version: '3.8'
+
+services:
+  report-viewer:
+    build:
+      context: ./tests/report-viewer
+      dockerfile: Dockerfile
+    container_name: flashmath-test-reports
+    ports:
+      - "9400:9400"
+    volumes:
+      # Mount Playwright HTML reports (includes results.json)
+      - ./tests/e2e/playwright-report:/reports/e2e:ro
+      # Mount socket test results (if generated with --json)
+      - ./tests/arena/results:/reports/socket:ro
+      # Mount test history
+      - ./tests/history:/reports/history:ro
+    environment:
+      - PORT=9400
+      - E2E_REPORT_PATH=/reports/e2e
+      - SOCKET_RESULTS_PATH=/reports/socket
+      - HISTORY_PATH=/reports/history
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9400/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+

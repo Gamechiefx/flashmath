@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { soundEngine } from '@/lib/sound-engine';
+import { Trophy, ChevronRight } from 'lucide-react';
 
 interface GameMode {
     id: string;
@@ -97,6 +98,8 @@ interface ModeCardProps {
 }
 
 function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSelect, index, className }: ModeCardProps) {
+    const isTeamMode = mode.id === '5v5';
+    
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -116,14 +119,59 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                     ? "ring-4 ring-primary/50 z-20 shadow-[0_0_40px_var(--accent-glow)]"
                     : "border-2 border-white/5 hover:border-white/10 z-10",
                 !mode.available && "opacity-40 grayscale hover:grayscale-0",
+                // Special 5v5 team mode styling
+                isTeamMode && mode.available && !isSelected && "border-purple-500/30 hover:border-purple-500/50",
+                isTeamMode && isSelected && "ring-purple-500/60 shadow-[0_0_60px_rgba(139,92,246,0.4)]",
                 className
             )}
             style={{
                 background: isSelected
                     ? mode.gradient
-                    : 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)'
+                    : isTeamMode && mode.available
+                        ? 'linear-gradient(180deg, rgba(139,92,246,0.15) 0%, rgba(139,92,246,0.05) 100%)'
+                        : 'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)'
             }}
         >
+            {/* 5v5 Special: Animated pulse border */}
+            {isTeamMode && mode.available && !isSelected && (
+                <motion.div 
+                    className="absolute inset-0 rounded-[2rem] pointer-events-none"
+                    animate={{ opacity: [0.3, 0.6, 0.3] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                >
+                    <div className="absolute inset-0 rounded-[2rem] bg-gradient-to-r from-purple-500/30 via-violet-500/30 to-purple-500/30 blur-sm" />
+                </motion.div>
+            )}
+
+            {/* 5v5 Special: Floating team icons */}
+            {isTeamMode && mode.available && (
+                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                    {/* Player silhouettes floating */}
+                    {[...Array(5)].map((_, i) => (
+                        <motion.div
+                            key={i}
+                            className="absolute text-2xl opacity-20"
+                            initial={{ y: 100, opacity: 0 }}
+                            animate={{ 
+                                y: [-10, 10, -10],
+                                opacity: [0.1, 0.25, 0.1],
+                            }}
+                            transition={{
+                                duration: 3 + i * 0.5,
+                                repeat: Infinity,
+                                delay: i * 0.3,
+                            }}
+                            style={{
+                                left: `${10 + i * 18}%`,
+                                top: `${20 + (i % 2) * 15}%`,
+                            }}
+                        >
+                            👤
+                        </motion.div>
+                    ))}
+                </div>
+            )}
+
             {/* Background Animated Stripes (Only if selected) */}
             {isSelected && (
                 <div
@@ -135,18 +183,77 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                 />
             )}
 
+            {/* 5v5 Special: Lightning bolt effects when selected */}
+            {isTeamMode && isSelected && (
+                <>
+                    <motion.div
+                        className="absolute top-2 right-2 text-3xl"
+                        animate={{ 
+                            rotate: [0, 10, -10, 0],
+                            scale: [1, 1.1, 1],
+                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                    >
+                        ⚡
+                    </motion.div>
+                    <motion.div
+                        className="absolute bottom-2 left-2 text-2xl"
+                        animate={{ 
+                            rotate: [0, -10, 10, 0],
+                            scale: [1, 1.2, 1],
+                        }}
+                        transition={{ duration: 2.5, repeat: Infinity, delay: 0.5 }}
+                    >
+                        🔥
+                    </motion.div>
+                </>
+            )}
+
             {/* Shine on hover */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />
 
             {/* Top: Mode Name & Badges */}
             <div className="relative flex items-start justify-between">
-                <h3 className={cn(
-                    "text-4xl font-black tracking-tighter drop-shadow-2xl transition-all duration-300",
-                    isSelected ? "text-white" : "text-white/60 group-hover:text-white"
-                )}>
-                    {mode.name}
-                </h3>
-                <div className="flex gap-2">
+                <div className="flex flex-col">
+                    <h3 className={cn(
+                        "text-4xl font-black tracking-tighter drop-shadow-2xl transition-all duration-300",
+                        isSelected ? "text-white" : "text-white/60 group-hover:text-white",
+                        isTeamMode && !isSelected && "text-purple-300/80 group-hover:text-purple-200"
+                    )}>
+                        {mode.name}
+                    </h3>
+                    {/* 5v5 Special subtitle */}
+                    {isTeamMode && mode.available && (
+                        <motion.span 
+                            className={cn(
+                                "text-[10px] font-black uppercase tracking-[0.2em] mt-1",
+                                isSelected ? "text-white/80" : "text-purple-400/80"
+                            )}
+                            animate={!isSelected ? { opacity: [0.5, 1, 0.5] } : {}}
+                            transition={{ duration: 2, repeat: Infinity }}
+                        >
+                            ⚔️ Team Battle ⚔️
+                        </motion.span>
+                    )}
+                </div>
+                <div className="flex flex-col gap-2 items-end">
+                    {/* NEW badge for 5v5 */}
+                    {isTeamMode && mode.available && (
+                        <motion.span 
+                            className="px-3 py-1 bg-gradient-to-r from-purple-500 to-violet-500 text-white text-[10px] font-black uppercase rounded-full shadow-lg shadow-purple-500/30"
+                            animate={{ 
+                                scale: [1, 1.05, 1],
+                                boxShadow: [
+                                    '0 0 10px rgba(139, 92, 246, 0.3)',
+                                    '0 0 20px rgba(139, 92, 246, 0.5)',
+                                    '0 0 10px rgba(139, 92, 246, 0.3)',
+                                ]
+                            }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                        >
+                            🎮 NEW
+                        </motion.span>
+                    )}
                     {!mode.available && (
                         <span className="px-3 py-1 bg-amber-400 text-black text-[10px] font-black uppercase rounded-full shadow-lg">
                             Soon
@@ -157,16 +264,55 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                             "px-3 py-1 rounded-full text-[10px] font-black shadow-lg flex items-center gap-1 backdrop-blur-sm border transition-colors",
                             isSelected
                                 ? "bg-white/20 border-white/30 text-white"
-                                : "bg-primary/20 border-primary/30 text-primary"
+                                : isTeamMode 
+                                    ? "bg-purple-500/20 border-purple-500/30 text-purple-300"
+                                    : "bg-primary/20 border-primary/30 text-primary"
                         )}>
-                            <span className={cn(isSelected ? "text-white" : "text-amber-400")}>ELO</span> {mode.rating}
+                            <span className={cn(
+                                isSelected ? "text-white" : isTeamMode ? "text-violet-400" : "text-amber-400"
+                            )}>
+                                {isTeamMode ? "TEAM" : "ELO"}
+                            </span> {mode.rating}
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Bottom: Operation Selection (Only for available modes) */}
-            {mode.available && isSelected && (
+            {/* 5v5 Special: Team formation indicator */}
+            {isTeamMode && mode.available && !isSelected && (
+                <div className="relative mt-2 flex justify-center items-center gap-1">
+                    <div className="flex -space-x-2">
+                        {[...Array(5)].map((_, i) => (
+                            <motion.div
+                                key={i}
+                                className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-violet-600 border-2 border-purple-900 flex items-center justify-center text-[8px] font-bold text-white shadow-lg"
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ delay: 0.1 * i }}
+                            >
+                                {i + 1}
+                            </motion.div>
+                        ))}
+                    </div>
+                    <span className="ml-2 text-xs font-bold text-purple-400/80">vs</span>
+                    <div className="flex -space-x-2">
+                        {[...Array(5)].map((_, i) => (
+                            <motion.div
+                                key={i}
+                                className="w-6 h-6 rounded-full bg-gradient-to-br from-rose-400 to-red-600 border-2 border-rose-900 flex items-center justify-center text-[8px] font-bold text-white shadow-lg"
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ delay: 0.1 * i + 0.3 }}
+                            >
+                                {i + 1}
+                            </motion.div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Bottom: Operation Selection (Only for available non-team modes) */}
+            {mode.available && isSelected && !isTeamMode && (
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -204,8 +350,26 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                 </motion.div>
             )}
 
-            {/* Placeholder for non-selected cards */}
-            {mode.available && !isSelected && (
+            {/* Team Mode: Show "All Operations" indicator when selected */}
+            {mode.available && isSelected && isTeamMode && (
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-4 flex justify-center"
+                >
+                    <div className="px-4 py-2 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-300 text-sm font-bold flex items-center gap-2">
+                        <span className="flex gap-1">
+                            {(Object.keys(OPERATION_ICONS) as Operation[]).map((op) => (
+                                <span key={op} className="text-base">{OPERATION_ICONS[op].symbol}</span>
+                            ))}
+                        </span>
+                        <span>All Operations</span>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Placeholder for non-selected cards (not for 5v5 which shows team formation) */}
+            {mode.available && !isSelected && !isTeamMode && (
                 <div className="mt-4 flex gap-2 justify-center opacity-30">
                     {(Object.keys(OPERATION_ICONS) as Operation[]).slice(0, 5).map((op) => (
                         <div key={op} className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-white/50 text-lg font-black">
@@ -285,6 +449,7 @@ function getEloForModeAndOperation(stats: ArenaStats, mode: string, operation: O
 export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps) {
     const [selectedMode, setSelectedMode] = useState<string>('1v1');
     const [selectedOperation, setSelectedOperation] = useState<Operation>('mixed');
+    const [isRankFabExpanded, setIsRankFabExpanded] = useState(false);
 
     // Determine if duel or team mode is selected (for operation-specific ELO display on mode cards)
     const isDuel = selectedMode === '1v1';
@@ -295,7 +460,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
         { id: '2v2', name: '2v2', available: false, gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', rating: getEloForModeAndOperation(arenaStats, '2v2', selectedOperation) },
         { id: '3v3', name: '3v3', available: false, gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', rating: getEloForModeAndOperation(arenaStats, '3v3', selectedOperation) },
         { id: '4v4', name: '4v4', available: false, gradient: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)', rating: getEloForModeAndOperation(arenaStats, '4v4', selectedOperation) },
-        { id: '5v5', name: '5v5', available: false, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', rating: getEloForModeAndOperation(arenaStats, '5v5', selectedOperation) },
+        { id: '5v5', name: '5v5', available: true, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', rating: getEloForModeAndOperation(arenaStats, '5v5', selectedOperation) },
     ];
 
     const extraModes: GameMode[] = [
@@ -308,81 +473,150 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     const selectedModeData = allModes.find(m => m.id === selectedMode);
 
     // Build queue URL with mode and operation
+    // Team modes (5v5) go to the team queue flow
+    const isTeamMode = selectedMode === '5v5' || selectedMode === '4v4' || selectedMode === '3v3' || selectedMode === '2v2';
     const queueHref = selectedModeData?.available
-        ? `/arena/queue?mode=${selectedMode}&operation=${selectedOperation}`
+        ? isTeamMode
+            ? `/arena/teams/setup?mode=${selectedMode}`
+            : `/arena/queue?mode=${selectedMode}&operation=${selectedOperation}`
         : '#';
 
     return (
         <div className="h-full flex flex-col max-w-[1400px] mx-auto px-6 py-4 overflow-hidden relative">
             <ParticleBackground />
 
-            {/* Competitive Rank Card - Fixed to far left of viewport, clickable to leaderboard */}
-            <Link href="/arena/leaderboard" className="fixed left-4 top-24 z-50">
-                <motion.div 
-                    initial={{ x: -100, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    whileHover={{ scale: 1.02, x: 4 }}
-                    whileTap={{ scale: 0.98 }}
-                    transition={{ type: 'spring', damping: 20, stiffness: 150 }}
-                    className="flex flex-col rounded-2xl bg-gradient-to-br from-white/10 via-white/5 to-transparent border border-white/20 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-xl overflow-hidden cursor-pointer hover:border-primary/40 hover:shadow-primary/20 transition-all group"
-                >
-                    {/* Decorative glow */}
-                    <div className="absolute -top-10 -left-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl pointer-events-none group-hover:bg-primary/30 transition-colors" />
-                    <div className="absolute -bottom-10 -right-10 w-24 h-24 bg-amber-500/15 rounded-full blur-2xl pointer-events-none" />
-                    
-                    {/* Header Label */}
-                    <div className="relative px-4 py-2 bg-gradient-to-r from-primary/20 via-amber-500/10 to-transparent border-b border-white/10">
-                        <div className="flex items-center gap-2">
-                            <span className="text-lg">🏆</span>
-                            <span className="text-[10px] font-black bg-gradient-to-r from-primary via-amber-400 to-primary bg-clip-text text-transparent uppercase tracking-[0.25em]">
-                                Competitive Rank
-                            </span>
-                            <span className="ml-auto text-[9px] text-white/40 group-hover:text-primary/70 transition-colors">
-                                View Leaderboards →
-                            </span>
-                        </div>
-                    </div>
-                    
-                    {/* Rank Content */}
-                    <div className="flex items-center gap-4 p-3">
-                        {/* Duel Rank */}
-                        <div className="flex items-center gap-2.5">
-                        <RankBadge rank={arenaStats.duel.rank} division={arenaStats.duel.rankDivision} elo={arenaStats.duel.elo} />
-                        <div className="flex flex-col">
-                            <span className="text-[8px] font-black text-orange-400/60 uppercase tracking-[0.15em]">Duel</span>
-                            <span className="text-sm font-black text-white">{arenaStats.duel.rank} {arenaStats.duel.rankDivision}</span>
-                            <span className="text-[10px] font-bold text-white/50">{arenaStats.duel.elo} ELO</span>
-                        </div>
-                    </div>
-                    
-                    {/* Separator */}
-                    <div className="w-px h-10 bg-white/10" />
-                    
-                    {/* Team Rank - Show full rank if played, otherwise show teaser */}
-                    {arenaStats.team.elo !== 300 ? (
-                        <div className="flex items-center gap-2.5">
-                            <RankBadge rank={arenaStats.team.rank} division={arenaStats.team.rankDivision} elo={arenaStats.team.elo} />
-                            <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-blue-400/60 uppercase tracking-[0.15em]">Team</span>
-                                <span className="text-sm font-black text-white">{arenaStats.team.rank} {arenaStats.team.rankDivision}</span>
-                                <span className="text-[10px] font-bold text-white/50">{arenaStats.team.elo} ELO</span>
+            {/* League Rank FAB - Right edge, well above Social FAB */}
+            <div className="fixed right-0 top-24 z-50">
+                <AnimatePresence mode="wait">
+                    {!isRankFabExpanded ? (
+                        /* Collapsed FAB Button */
+                        <motion.button
+                            key="fab-collapsed"
+                            initial={{ x: 100, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: 100, opacity: 0 }}
+                            whileHover={{ x: -4, boxShadow: '0 0 30px rgba(251, 191, 36, 0.3)' }}
+                            whileTap={{ scale: 0.95 }}
+                            transition={{ type: 'spring', damping: 20, stiffness: 150 }}
+                            onClick={() => {
+                                soundEngine.playClick();
+                                setIsRankFabExpanded(true);
+                            }}
+                            onMouseEnter={() => soundEngine.playHover()}
+                            className={cn(
+                                "flex items-center justify-center",
+                                "w-12 h-14 rounded-l-xl",
+                                "bg-black/90 backdrop-blur-xl border border-white/10 border-r-0",
+                                "shadow-[0_0_20px_rgba(0,0,0,0.5)]",
+                                "group cursor-pointer",
+                                "hover:bg-amber-500/10 hover:border-amber-500/30 transition-colors"
+                            )}
+                            aria-label="View competitive rank"
+                        >
+                            {/* Trophy Icon with Rank Letter */}
+                            <div className="relative">
+                                <Trophy size={20} className="text-amber-400 group-hover:scale-110 transition-transform" />
+                                {/* Rank Letter Badge */}
+                                <div className={cn(
+                                    "absolute -bottom-1 -left-2 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black",
+                                    arenaStats.duel.rank === 'Diamond' && "bg-blue-500 text-white",
+                                    arenaStats.duel.rank === 'Platinum' && "bg-cyan-400 text-black",
+                                    arenaStats.duel.rank === 'Gold' && "bg-yellow-400 text-black",
+                                    arenaStats.duel.rank === 'Silver' && "bg-slate-400 text-black",
+                                    arenaStats.duel.rank === 'Bronze' && "bg-amber-600 text-white",
+                                )}>
+                                    {arenaStats.duel.rank.charAt(0)}
+                                </div>
                             </div>
-                        </div>
+                            
+                            {/* Glow effect */}
+                            <div className="absolute inset-0 rounded-l-xl opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-r from-amber-500/10 to-transparent pointer-events-none" />
+                        </motion.button>
                     ) : (
-                        <div className="flex items-center gap-2.5 opacity-70">
-                            <div className="w-14 h-14 rounded-lg bg-white/10 border border-dashed border-white/30 flex items-center justify-center">
-                                <span className="text-xl text-white/60">👥</span>
+                        /* Expanded Rank Card */
+                        <motion.div
+                            key="fab-expanded"
+                            initial={{ x: 300, opacity: 0 }}
+                            animate={{ x: 0, opacity: 1 }}
+                            exit={{ x: 300, opacity: 0 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="mr-4 flex flex-col rounded-2xl bg-gradient-to-bl from-white/10 via-white/5 to-transparent border border-white/20 shadow-[0_0_40px_rgba(0,0,0,0.5)] backdrop-blur-xl overflow-hidden"
+                        >
+                            {/* Decorative glow */}
+                            <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/20 rounded-full blur-3xl pointer-events-none" />
+                            <div className="absolute -bottom-10 -left-10 w-24 h-24 bg-amber-500/15 rounded-full blur-2xl pointer-events-none" />
+                            
+                            {/* Header with close button */}
+                            <div className="relative px-4 py-2 bg-gradient-to-l from-primary/20 via-amber-500/10 to-transparent border-b border-white/10">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            soundEngine.playClick();
+                                            setIsRankFabExpanded(false);
+                                        }}
+                                        className="p-1 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+                                    >
+                                        <ChevronRight size={14} />
+                                    </button>
+                                    <span className="text-lg">🏆</span>
+                                    <span className="text-[10px] font-black bg-gradient-to-r from-primary via-amber-400 to-primary bg-clip-text text-transparent uppercase tracking-[0.25em]">
+                                        Competitive Rank
+                                    </span>
+                                </div>
                             </div>
-                            <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-blue-400/60 uppercase tracking-[0.15em]">Team</span>
-                                <span className="text-xs font-bold text-white/70">Play team modes</span>
-                                <span className="text-[10px] font-bold text-white/50">to unlock rank</span>
+                            
+                            {/* Rank Content */}
+                            <div className="flex items-center gap-4 p-3">
+                                {/* Duel Rank */}
+                                <div className="flex items-center gap-2.5">
+                                    <RankBadge rank={arenaStats.duel.rank} division={arenaStats.duel.rankDivision} elo={arenaStats.duel.elo} />
+                                    <div className="flex flex-col">
+                                        <span className="text-[8px] font-black text-orange-400/60 uppercase tracking-[0.15em]">Duel</span>
+                                        <span className="text-sm font-black text-white">{arenaStats.duel.rank} {arenaStats.duel.rankDivision}</span>
+                                        <span className="text-[10px] font-bold text-white/50">{arenaStats.duel.elo} ELO</span>
+                                    </div>
+                                </div>
+                                
+                                {/* Separator */}
+                                <div className="w-px h-10 bg-white/10" />
+                                
+                                {/* Team Rank */}
+                                {arenaStats.team.elo !== 300 ? (
+                                    <div className="flex items-center gap-2.5">
+                                        <RankBadge rank={arenaStats.team.rank} division={arenaStats.team.rankDivision} elo={arenaStats.team.elo} />
+                                        <div className="flex flex-col">
+                                            <span className="text-[8px] font-black text-blue-400/60 uppercase tracking-[0.15em]">Team</span>
+                                            <span className="text-sm font-black text-white">{arenaStats.team.rank} {arenaStats.team.rankDivision}</span>
+                                            <span className="text-[10px] font-bold text-white/50">{arenaStats.team.elo} ELO</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2.5 opacity-70">
+                                        <div className="w-14 h-14 rounded-lg bg-white/10 border border-dashed border-white/30 flex items-center justify-center">
+                                            <span className="text-xl text-white/60">👥</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-[8px] font-black text-blue-400/60 uppercase tracking-[0.15em]">Team</span>
+                                            <span className="text-xs font-bold text-white/70">Play team modes</span>
+                                            <span className="text-[10px] font-bold text-white/50">to unlock rank</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
+                            
+                            {/* Leaderboard Link */}
+                            <Link 
+                                href="/arena/leaderboard"
+                                onClick={() => soundEngine.playClick()}
+                                className="relative px-4 py-2 bg-gradient-to-l from-primary/10 to-transparent border-t border-white/10 flex items-center justify-center gap-2 text-[10px] font-bold text-white/50 hover:text-primary hover:bg-primary/10 transition-colors group"
+                            >
+                                View Leaderboards
+                                <ChevronRight size={12} className="group-hover:translate-x-1 transition-transform" />
+                            </Link>
+                        </motion.div>
                     )}
-                    </div>
-                </motion.div>
-            </Link>
+                </AnimatePresence>
+            </div>
 
             {/* Header Bar */}
             <div className="relative flex items-center justify-center mb-10 shrink-0 min-h-[90px] w-full z-10">
@@ -452,7 +686,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                                 className="group relative px-28 py-5 rounded-[1.5rem] font-[1000] text-xl uppercase tracking-[0.2em] bg-gradient-to-r from-amber-400 via-yellow-300 to-orange-500 text-black shadow-[0_20px_40px_rgba(0,0,0,0.3),0_0_60px_rgba(251,191,36,0.3)] transition-all animate-shimmer"
                             >
                                 <span className="relative z-10 transition-transform group-hover:scale-110 inline-block drop-shadow-sm">
-                                    Find Match ({OPERATION_ICONS[selectedOperation].label})
+                                    {isTeamMode ? `Setup Team ${selectedMode}` : `Find Match (${OPERATION_ICONS[selectedOperation].label})`}
                                 </span>
                                 <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 rounded-[1.5rem] transition-opacity" />
                             </motion.button>

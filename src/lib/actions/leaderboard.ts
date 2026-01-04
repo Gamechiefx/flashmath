@@ -926,3 +926,192 @@ export async function getArenaLeaderboard(
     return getDuelLeaderboard(operation, timeFilter, limit);
 }
 
+// =============================================================================
+// PERSISTENT TEAM LEADERBOARD (Ranks TEAMS, not individuals)
+// =============================================================================
+
+/**
+ * Team leaderboard entry for persistent teams
+ */
+export interface PersistentTeamLeaderboardEntry {
+    rank: number;
+    odTeamId: string;
+    odTeamName: string;
+    odTeamTag: string | null;
+    odElo: number;
+    odWins: number;
+    odLosses: number;
+    odWinRate: number;
+    odStreak: number;
+    odBestStreak: number;
+    odMemberCount: number;
+    odCaptainName: string;
+    odIsCurrentUserTeam: boolean;
+}
+
+export interface PersistentTeamLeaderboardResult {
+    entries: PersistentTeamLeaderboardEntry[];
+    currentUserTeamRank: number | null;
+    currentUserTeamEntry: PersistentTeamLeaderboardEntry | null;
+    totalTeams: number;
+    sortBy: 'elo' | 'wins';
+}
+
+/**
+ * Get persistent TEAM leaderboard (ranks teams by their team ELO, not individual players)
+ * Distinct from getTeamLeaderboard which ranks individual player performance in team modes
+ * Team mode uses overall ELO only (no operation-specific ELO)
+ */
+export async function getPersistentTeamLeaderboard(
+    mode: '5v5' = '5v5',
+    sortBy: 'elo' | 'wins' = 'elo',
+    limit: number = 100
+): Promise<PersistentTeamLeaderboardResult> {
+    const session = await auth();
+    const currentUserId = session?.user?.id || null;
+    const db = getDatabase();
+
+    // Team mode uses overall ELO only
+    const eloColumn = 'e.elo_5v5';
+
+    // Determine sort order
+    const orderBy = sortBy === 'wins' 
+        ? 't.team_wins DESC, ' + eloColumn + ' DESC'
+        : eloColumn + ' DESC, t.team_wins DESC';
+
+    // Get total teams count
+    const countResult = db.prepare(`
+        SELECT COUNT(*) as count FROM teams t
+        JOIN team_elo e ON e.team_id = t.id
+        WHERE t.team_wins > 0 OR t.team_losses > 0
+    `).get() as { count: number };
+    const totalTeams = countResult.count;
+
+    // Get team leaderboard
+    const teams = db.prepare(`
+        SELECT 
+            t.id,
+            t.name,
+            t.tag,
+            t.created_by,
+            t.team_wins,
+            t.team_losses,
+            t.team_win_streak,
+            t.team_best_win_streak,
+            ${eloColumn} as elo,
+            u.name as captain_name,
+            (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
+        FROM teams t
+        JOIN team_elo e ON e.team_id = t.id
+        JOIN users u ON u.id = t.created_by
+        WHERE t.team_wins > 0 OR t.team_losses > 0
+        ORDER BY ${orderBy}
+        LIMIT ?
+    `).all(limit) as any[];
+
+    // Get current user's team membership to determine if they're on any team
+    let currentUserTeamIds: string[] = [];
+    if (currentUserId) {
+        const userTeams = db.prepare(`
+            SELECT team_id FROM team_members WHERE user_id = ?
+        `).all(currentUserId) as { team_id: string }[];
+        currentUserTeamIds = userTeams.map(t => t.team_id);
+    }
+
+    const entries: PersistentTeamLeaderboardEntry[] = teams.map((team, index) => {
+        const winRate = team.team_wins + team.team_losses > 0
+            ? Math.round((team.team_wins / (team.team_wins + team.team_losses)) * 100)
+            : 0;
+
+        return {
+            rank: index + 1,
+            odTeamId: team.id,
+            odTeamName: team.name,
+            odTeamTag: team.tag,
+            odElo: team.elo || 300,
+            odWins: team.team_wins || 0,
+            odLosses: team.team_losses || 0,
+            odWinRate: winRate,
+            odStreak: team.team_win_streak || 0,
+            odBestStreak: team.team_best_win_streak || 0,
+            odMemberCount: team.member_count || 0,
+            odCaptainName: team.captain_name,
+            odIsCurrentUserTeam: currentUserTeamIds.includes(team.id),
+        };
+    });
+
+    // Find current user's team rank (use their primary/first team)
+    let currentUserTeamRank: number | null = null;
+    let currentUserTeamEntry: PersistentTeamLeaderboardEntry | null = null;
+
+    const existingUserTeamEntry = entries.find(e => e.odIsCurrentUserTeam);
+    if (existingUserTeamEntry) {
+        currentUserTeamRank = existingUserTeamEntry.rank;
+        currentUserTeamEntry = existingUserTeamEntry;
+    } else if (currentUserTeamIds.length > 0) {
+        // User's team is not in top results, find their rank
+        const userTeam = db.prepare(`
+            SELECT 
+                t.id,
+                t.name,
+                t.tag,
+                t.team_wins,
+                t.team_losses,
+                t.team_win_streak,
+                t.team_best_win_streak,
+                ${eloColumn} as elo,
+                u.name as captain_name,
+                (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
+            FROM teams t
+            JOIN team_elo e ON e.team_id = t.id
+            JOIN users u ON u.id = t.created_by
+            WHERE t.id = ?
+        `).get(currentUserTeamIds[0]) as any;
+
+        if (userTeam) {
+            // Calculate rank
+            const rankQuery = sortBy === 'wins'
+                ? `SELECT COUNT(*) + 1 as rank FROM teams t2 
+                   JOIN team_elo e2 ON e2.team_id = t2.id 
+                   WHERE t2.team_wins > ? OR (t2.team_wins = ? AND ${eloColumn.replace('e.', 'e2.')} > ?)`
+                : `SELECT COUNT(*) + 1 as rank FROM teams t2 
+                   JOIN team_elo e2 ON e2.team_id = t2.id 
+                   WHERE ${eloColumn.replace('e.', 'e2.')} > ?`;
+
+            const rankResult = sortBy === 'wins'
+                ? db.prepare(rankQuery).get(userTeam.team_wins, userTeam.team_wins, userTeam.elo) as { rank: number }
+                : db.prepare(rankQuery).get(userTeam.elo) as { rank: number };
+
+            currentUserTeamRank = rankResult?.rank || null;
+
+            const winRate = userTeam.team_wins + userTeam.team_losses > 0
+                ? Math.round((userTeam.team_wins / (userTeam.team_wins + userTeam.team_losses)) * 100)
+                : 0;
+
+            currentUserTeamEntry = {
+                rank: currentUserTeamRank || 0,
+                odTeamId: userTeam.id,
+                odTeamName: userTeam.name,
+                odTeamTag: userTeam.tag,
+                odElo: userTeam.elo || 300,
+                odWins: userTeam.team_wins || 0,
+                odLosses: userTeam.team_losses || 0,
+                odWinRate: winRate,
+                odStreak: userTeam.team_win_streak || 0,
+                odBestStreak: userTeam.team_best_win_streak || 0,
+                odMemberCount: userTeam.member_count || 0,
+                odCaptainName: userTeam.captain_name,
+                odIsCurrentUserTeam: true,
+            };
+        }
+    }
+
+    return {
+        entries,
+        currentUserTeamRank,
+        currentUserTeamEntry,
+        totalTeams,
+        sortBy,
+    };
+}
+

@@ -56,7 +56,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`} suppressHydrationWarning>
         <AuthProvider session={session}>
           <AudioSettingsProvider>
             <ItemPreviewProvider>
