@@ -30,6 +30,13 @@ export async function resetUserData() {
         // Delete all achievements for this user
         db.prepare('DELETE FROM user_achievements WHERE user_id = ?').run(userId);
 
+        // Restore email verification achievement if email is verified
+        const user = db.prepare('SELECT email_verified FROM users WHERE id = ?').get(userId) as { email_verified: number } | undefined;
+        if (user?.email_verified) {
+            const { unlockEmailVerifiedAchievement } = await import("@/lib/actions/achievements");
+            await unlockEmailVerifiedAchievement(userId);
+        }
+
         // Delete all arena match history for this user (as winner or loser)
         db.prepare('DELETE FROM arena_matches WHERE winner_id = ? OR loser_id = ?').run(userId, userId);
 
