@@ -71,7 +71,7 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
     const [queueTime, setQueueTime] = useState(0);
     const [isSearching, setIsSearching] = useState(true);
     const [matchFound, setMatchFound] = useState(false);
-    const [opponent, setOpponent] = useState<{ name: string; tier: string; elo: number; banner: string; title: string; level: number; rank: string; division: string } | null>(null);
+    const [opponent, setOpponent] = useState<{ name: string; tier: number | string; elo: number; banner: string; title: string; level: number; rank: string; division: string } | null>(null);
 
     // Quick Practice State
     const [problem, setProblem] = useState<PracticeProblem>({ question: '', answer: 0 });
@@ -206,7 +206,7 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                     mode,
                     operation,
                     elo,
-                    tier: practiceTier.toString(),
+                    tier: practiceTier,  // Now a number (1-100)
                     equippedBanner,
                     equippedTitle,
                     level,

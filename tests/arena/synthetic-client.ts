@@ -290,14 +290,30 @@ export class SyntheticPlayer extends EventEmitter {
     
     /**
      * Submit an answer
+     * Note: answer_result is broadcast to ALL players when ANY player answers,
+     * so we must filter by userId and use 'on' instead of 'once' to handle
+     * other players' results that may arrive first.
      */
     async submitAnswer(answer: string | number): Promise<AnswerResult> {
         if (!this.socket || !this.matchId) throw new Error('Not in a match');
         
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
+                this.removeListener('answer_result', handler);
                 reject(new Error('Submit answer timeout'));
             }, 5000);
+            
+            const handler = (result: AnswerResult) => {
+                // Only process results for THIS player
+                if (result.userId === this.config.userId) {
+                    clearTimeout(timeout);
+                    this.removeListener('answer_result', handler);
+                    resolve(result);
+                }
+                // Ignore results for other players - keep listening
+            };
+            
+            this.on('answer_result', handler);
             
             this.socket!.emit('submit_answer', {
                 matchId: this.matchId,
@@ -306,13 +322,6 @@ export class SyntheticPlayer extends EventEmitter {
             });
             
             this.answersSubmitted++;
-            
-            this.once('answer_result', (result: AnswerResult) => {
-                if (result.userId === this.config.userId) {
-                    clearTimeout(timeout);
-                    resolve(result);
-                }
-            });
         });
     }
     

@@ -139,6 +139,17 @@ export const queryOne = (text: string, params: any[] = []): any | null => {
         return row ? parseUser(row) : null;
     }
 
+    // Support for email verification checks
+    if (lowerText.includes('select email_verified from users where id = ?')) {
+        const row = database.prepare('SELECT email_verified FROM users WHERE id = ?').get(params[0]) as any;
+        return row || null;
+    }
+
+    if (lowerText.includes('select email, email_verified, email_verified_at from users where id = ?')) {
+        const row = database.prepare('SELECT email, email_verified, email_verified_at FROM users WHERE id = ?').get(params[0]) as any;
+        return row || null;
+    }
+
     if (lowerText.includes('select * from leagues where id = ?')) {
         return database.prepare('SELECT * FROM leagues WHERE id = ?').get(params[0]) || null;
     }
@@ -329,6 +340,124 @@ export const initSchema = () => {
 
 // Initialize on module load
 initSchema();
+
+// =============================================================================
+// BATCH QUERY HELPERS (N→1 query optimization)
+// =============================================================================
+
+/**
+ * Batch get multiple users by ID in a single query
+ * Much more efficient than N separate queries
+ * 
+ * @param userIds - Array of user IDs
+ * @returns Array of parsed user objects
+ */
+export const getUsersBatch = (userIds: string[]): any[] => {
+    if (!userIds || userIds.length === 0) return [];
+    
+    const database = ensureDb();
+    const placeholders = userIds.map(() => '?').join(',');
+    const rows = database.prepare(`SELECT * FROM users WHERE id IN (${placeholders})`).all(...userIds);
+    return rows.map(parseUser);
+};
+
+/**
+ * Batch get user IDs by email in a single query
+ * 
+ * @param emails - Array of email addresses
+ * @returns Array of { id, email } objects
+ */
+export const getUserIdsByEmailBatch = (emails: string[]): { id: string; email: string }[] => {
+    if (!emails || emails.length === 0) return [];
+    
+    const database = ensureDb();
+    const placeholders = emails.map(() => '?').join(',');
+    return database.prepare(`SELECT id, email FROM users WHERE email IN (${placeholders})`).all(...emails) as any[];
+};
+
+/**
+ * Batch get friendships for multiple users
+ * 
+ * @param userIds - Array of user IDs
+ * @returns Array of friendship records
+ */
+export const getFriendshipsBatch = (userIds: string[]): any[] => {
+    if (!userIds || userIds.length === 0) return [];
+    
+    const database = ensureDb();
+    const placeholders = userIds.map(() => '?').join(',');
+    return database.prepare(`
+        SELECT f.*, u.name as friend_name, u.level as friend_level
+        FROM friendships f
+        JOIN users u ON f.friend_id = u.id
+        WHERE f.user_id IN (${placeholders})
+    `).all(...userIds) as any[];
+};
+
+/**
+ * Batch get practice sessions for multiple users
+ * 
+ * @param userIds - Array of user IDs
+ * @param limit - Max sessions per user (default 10)
+ * @returns Array of session records
+ */
+export const getPracticeSessionsBatch = (userIds: string[], limit: number = 10): any[] => {
+    if (!userIds || userIds.length === 0) return [];
+    
+    const database = ensureDb();
+    const placeholders = userIds.map(() => '?').join(',');
+    // Get most recent sessions per user using ROW_NUMBER
+    return database.prepare(`
+        SELECT * FROM (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) as rn
+            FROM practice_sessions
+            WHERE user_id IN (${placeholders})
+        ) WHERE rn <= ?
+    `).all(...userIds, limit) as any[];
+};
+
+/**
+ * Batch get inventory for multiple users
+ * 
+ * @param userIds - Array of user IDs
+ * @returns Array of inventory records
+ */
+export const getInventoryBatch = (userIds: string[]): any[] => {
+    if (!userIds || userIds.length === 0) return [];
+    
+    const database = ensureDb();
+    const placeholders = userIds.map(() => '?').join(',');
+    return database.prepare(`
+        SELECT i.*, s.name as item_name, s.type as item_type, s.rarity as item_rarity
+        FROM inventory i
+        JOIN shop_items s ON i.item_id = s.id
+        WHERE i.user_id IN (${placeholders})
+    `).all(...userIds) as any[];
+};
+
+/**
+ * Batch update user coins (e.g., after match rewards)
+ * 
+ * @param updates - Array of { userId, coinsToAdd }
+ * @returns Number of rows updated
+ */
+export const updateCoinsBatch = (updates: { userId: string; coinsToAdd: number }[]): number => {
+    if (!updates || updates.length === 0) return 0;
+    
+    const database = ensureDb();
+    const stmt = database.prepare('UPDATE users SET coins = coins + ?, updated_at = ? WHERE id = ?');
+    const timestamp = now();
+    
+    let totalChanges = 0;
+    database.transaction(() => {
+        for (const { userId, coinsToAdd } of updates) {
+            const result = stmt.run(coinsToAdd, timestamp, userId);
+            totalChanges += result.changes;
+        }
+    })();
+    
+    return totalChanges;
+};
 
 // Export database getter for direct access when needed
 export { getDatabase, generateId, now };

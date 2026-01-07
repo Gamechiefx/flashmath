@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { soundEngine } from '@/lib/sound-engine';
-import { Trophy, ChevronRight } from 'lucide-react';
+import { Trophy, ChevronRight, Users, AlertCircle } from 'lucide-react';
+import { getPartyData } from '@/lib/actions/social';
 
 interface GameMode {
     id: string;
@@ -95,33 +96,40 @@ interface ModeCardProps {
     onOperationSelect: (op: Operation) => void;
     index: number;
     className?: string;
+    isInParty?: boolean;
+    isDisabledByParty?: boolean;
 }
 
-function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSelect, index, className }: ModeCardProps) {
+function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSelect, index, className, isInParty, isDisabledByParty }: ModeCardProps) {
     const isTeamMode = mode.id === '5v5';
+    const isClickable = mode.available && !isDisabledByParty;
     
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
-            whileHover={mode.available ? { scale: 1.02, y: -4 } : {}}
+            whileHover={isClickable ? { scale: 1.02, y: -4 } : {}}
             onClick={() => {
-                if (mode.available) {
+                if (isClickable) {
                     soundEngine.playClick();
                     onSelect();
                 }
             }}
-            onMouseEnter={() => mode.available && soundEngine.playHover()}
+            onMouseEnter={() => isClickable && soundEngine.playHover()}
             className={cn(
                 "relative group flex flex-col justify-between p-5 rounded-[2rem] cursor-pointer overflow-hidden h-full transform-gpu will-change-transform",
                 isSelected
                     ? "ring-4 ring-primary/50 z-20 shadow-[0_0_40px_var(--accent-glow)]"
                     : "border-2 border-white/5 hover:border-white/10 z-10",
                 !mode.available && "opacity-40 grayscale hover:grayscale-0",
-                // Special 5v5 team mode styling
-                isTeamMode && mode.available && !isSelected && "border-purple-500/30 hover:border-purple-500/50",
+                // Disabled by party - show muted lock state
+                isDisabledByParty && "opacity-50 grayscale cursor-not-allowed",
+                // Special 5v5 team mode styling (keeps purple for team mode identity)
+                isTeamMode && mode.available && !isSelected && !isDisabledByParty && "border-purple-500/30 hover:border-purple-500/50",
                 isTeamMode && isSelected && "ring-purple-500/60 shadow-[0_0_60px_rgba(139,92,246,0.4)]",
+                // Highlight 5v5 when in party - uses accent color for theme awareness
+                isTeamMode && isInParty && !isSelected && "animate-pulse",
                 className
             )}
             style={{
@@ -212,13 +220,29 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
             {/* Shine on hover */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:animate-shine pointer-events-none" />
 
+            {/* Party Lock Overlay - Theme-aware styling */}
+            {isDisabledByParty && (
+                <div className="absolute inset-0 z-30 flex items-center justify-center rounded-[2rem]" style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}>
+                    <div className="text-center px-4">
+                        <Users className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--accent)' }} />
+                        <p className="text-xs font-bold" style={{ color: 'var(--accent)' }}>In Party</p>
+                        <p className="text-[10px] text-muted-foreground">
+                            {mode.id === '1v1' 
+                                ? "Leave party to play solo"
+                                : "Party queue is 5v5 only"}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Top: Mode Name & Badges */}
             <div className="relative flex items-start justify-between">
                 <div className="flex flex-col">
                     <h3 className={cn(
                         "text-4xl font-black tracking-tighter drop-shadow-2xl transition-all duration-300",
                         isSelected ? "text-white" : "text-white/60 group-hover:text-white",
-                        isTeamMode && !isSelected && "text-purple-300/80 group-hover:text-purple-200"
+                        isTeamMode && !isSelected && "text-purple-300/80 group-hover:text-purple-200",
+                        isDisabledByParty && "text-white/30"
                     )}>
                         {mode.name}
                     </h3>
@@ -327,6 +351,7 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                             <button
                                 key={op}
                                 type="button"
+                                data-testid={`operation-button-${op}`}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
@@ -450,6 +475,34 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     const [selectedMode, setSelectedMode] = useState<string>('1v1');
     const [selectedOperation, setSelectedOperation] = useState<Operation>('mixed');
     const [isRankFabExpanded, setIsRankFabExpanded] = useState(false);
+    const [isInParty, setIsInParty] = useState(false);
+    const [partyId, setPartyId] = useState<string | null>(null);
+
+    // Check if user is in a party on mount
+    useEffect(() => {
+        const checkParty = async () => {
+            try {
+                const result = await getPartyData();
+                if (result.party) {
+                    setIsInParty(true);
+                    setPartyId(result.party.id);
+                    // Auto-select 5v5 mode when in party
+                    setSelectedMode('5v5');
+                } else {
+                    setIsInParty(false);
+                    setPartyId(null);
+                }
+            } catch (error) {
+                console.error('[ModeSelection] Error checking party:', error);
+            }
+        };
+        
+        checkParty();
+        
+        // Poll for party changes
+        const interval = setInterval(checkParty, 5000);
+        return () => clearInterval(interval);
+    }, []);
 
     // Determine if duel or team mode is selected (for operation-specific ELO display on mode cards)
     const isDuel = selectedMode === '1v1';
@@ -484,6 +537,47 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     return (
         <div className="h-full flex flex-col max-w-[1400px] mx-auto px-6 py-4 overflow-hidden relative">
             <ParticleBackground />
+
+            {/* Party Mode Banner - Shows when user is in a party (Theme-aware, Responsive) */}
+            <AnimatePresence>
+                {isInParty && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-[95%] sm:w-auto"
+                    >
+                        <div 
+                            className="flex flex-col sm:flex-row items-center gap-2 sm:gap-3 px-4 sm:px-5 py-2 sm:py-2.5 rounded-2xl sm:rounded-full glass border backdrop-blur-xl"
+                            style={{ 
+                                borderColor: 'var(--accent)',
+                                boxShadow: '0 0 20px var(--accent-glow)'
+                            }}
+                        >
+                            <div className="flex items-center gap-2">
+                                <Users className="w-5 h-5" style={{ color: 'var(--accent)' }} />
+                                <span className="text-sm font-bold" style={{ color: 'var(--accent)' }}>
+                                    You're in a party
+                                </span>
+                                <span className="hidden sm:inline text-xs text-muted-foreground">
+                                    • Party queue is 5v5 only
+                                </span>
+                            </div>
+                            <Link
+                                href="/arena/teams/setup?mode=5v5"
+                                onClick={() => soundEngine.playClick()}
+                                className="px-3 py-1 rounded-full text-xs font-bold transition-all hover:opacity-80"
+                                style={{ 
+                                    backgroundColor: 'var(--accent)',
+                                    color: 'var(--primary-foreground)'
+                                }}
+                            >
+                                Go to Setup →
+                            </Link>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* League Rank FAB - Right edge, well above Social FAB */}
             <div className="fixed right-0 top-24 z-50">
@@ -643,23 +737,11 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
             <div className="flex-1 flex flex-col gap-8 min-h-0">
                 {/* Top Row: Full Width VS Modes */}
                 <div className="flex-1 grid grid-cols-5 gap-5 w-full">
-                    {vsModes.map((mode, i) => (
-                        <ModeCard
-                            key={mode.id}
-                            mode={mode}
-                            isSelected={selectedMode === mode.id}
-                            selectedOperation={selectedOperation}
-                            onSelect={() => setSelectedMode(mode.id)}
-                            onOperationSelect={setSelectedOperation}
-                            index={i}
-                        />
-                    ))}
-                </div>
-
-                {/* Bottom Row: Centered & Slightly Narrower Extra Modes */}
-                <div className="flex-1 w-full flex justify-center">
-                    <div className="grid grid-cols-3 gap-5 w-[80%] h-full">
-                        {extraModes.map((mode, i) => (
+                    {vsModes.map((mode, i) => {
+                        // When in party, disable all non-5v5 modes
+                        const isDisabledByParty = isInParty && mode.id !== '5v5';
+                        
+                        return (
                             <ModeCard
                                 key={mode.id}
                                 mode={mode}
@@ -667,9 +749,35 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                                 selectedOperation={selectedOperation}
                                 onSelect={() => setSelectedMode(mode.id)}
                                 onOperationSelect={setSelectedOperation}
-                                index={i + 5}
+                                index={i}
+                                isInParty={isInParty}
+                                isDisabledByParty={isDisabledByParty}
                             />
-                        ))}
+                        );
+                    })}
+                </div>
+
+                {/* Bottom Row: Centered & Slightly Narrower Extra Modes */}
+                <div className="flex-1 w-full flex justify-center">
+                    <div className="grid grid-cols-3 gap-5 w-[80%] h-full">
+                        {extraModes.map((mode, i) => {
+                            // Extra modes are also disabled when in party
+                            const isDisabledByParty = isInParty;
+                            
+                            return (
+                                <ModeCard
+                                    key={mode.id}
+                                    mode={mode}
+                                    isSelected={selectedMode === mode.id}
+                                    selectedOperation={selectedOperation}
+                                    onSelect={() => setSelectedMode(mode.id)}
+                                    onOperationSelect={setSelectedOperation}
+                                    index={i + 5}
+                                    isInParty={isInParty}
+                                    isDisabledByParty={isDisabledByParty}
+                                />
+                            );
+                        })}
                     </div>
                 </div>
             </div>

@@ -180,6 +180,12 @@ export async function seedGhostPlayers(targetTierId?: string) {
 }
 
 export async function ensureLeagueParticipation(userId: string, userName: string) {
+    // Guard: userId must be valid
+    if (!userId) {
+        console.error('[LEAGUE] ensureLeagueParticipation called with null/undefined userId');
+        return;
+    }
+    
     // 1. Check if user is already in a league
     const existing = queryOne('SELECT * FROM league_participants WHERE user_id = ?', [userId]) as any;
 

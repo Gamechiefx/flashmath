@@ -7,13 +7,58 @@ import { PasswordStrength } from "@/components/ui/password-strength";
 import { Zap, Mail, Lock, User, ArrowLeft, Eye, EyeOff, Calendar } from "lucide-react";
 import Link from "next/link";
 import { registerUser, signInWithGoogle } from "@/lib/actions/auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+
+    // Redirect authenticated users to dashboard
+    useEffect(() => {
+        if (status === 'authenticated' && session?.user) {
+            router.replace('/dashboard');
+        }
+    }, [status, session, router]);
+
+    // Show loading state while checking session (theme-aware)
+    if (status === 'loading') {
+        return (
+            <main className="min-h-screen flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <div 
+                        className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent' }}
+                    />
+                    <span className="text-muted-foreground text-sm font-medium animate-pulse">
+                        Checking authentication...
+                    </span>
+                </div>
+            </main>
+        );
+    }
+
+    // If authenticated, show redirect message (theme-aware)
+    if (status === 'authenticated') {
+        return (
+            <main className="min-h-screen flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <div 
+                        className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+                    />
+                    <span style={{ color: 'var(--primary)' }} className="text-sm font-medium animate-pulse">
+                        Redirecting to dashboard...
+                    </span>
+                </div>
+            </main>
+        );
+    }
 
     async function handleSubmit(formData: FormData) {
         setLoading(true);

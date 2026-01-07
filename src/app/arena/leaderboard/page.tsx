@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { AuthHeader } from "@/components/auth-header";
 import { ArenaLeaderboard } from "@/components/arena/arena-leaderboard";
 import { getArenaLeaderboard } from "@/lib/actions/leaderboard";
+import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,12 @@ export default async function ArenaLeaderboardPage() {
 
     if (!session?.user) {
         redirect("/auth/login");
+    }
+
+    // Check email verification - required for Arena access
+    const verified = await isEmailVerified();
+    if (!verified) {
+        redirect("/arena/verify-email");
     }
 
     // Fetch initial leaderboard data (duel, overall, alltime)

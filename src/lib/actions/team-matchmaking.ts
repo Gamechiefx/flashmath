@@ -4,12 +4,30 @@
  * Arena Team Matchmaking Server Actions
  * Real-time team matchmaking using Redis for queue management
  * Supports 5v5 mode with team ELO-based matching
+ * 
+ * Database usage:
+ * - PostgreSQL: Team ELO, match history (via arena-db)
+ * - Redis: Party data, queue state (via party-redis)
+ * - SQLite: User profiles only (for tier data lookup)
  */
 
 import { auth } from "@/auth";
 import { v4 as uuidv4 } from 'uuid';
 import { getDatabase, generateId, now } from "@/lib/db/sqlite";
-import { getTeamElo } from "./teams";
+import { 
+    getTeamElo as getTeamEloFromPostgres,
+    getPlayerElo,
+    getOrCreateArenaPlayer,
+    getOrCreateArenaTeam
+} from "@/lib/arena/arena-db";
+import {
+    getParty,
+    updateQueueState,
+    setMatchFound,
+    toggleReady as togglePartyReady,
+    type PartyState,
+    type PartyMember,
+} from "@/lib/party/party-redis";
 
 // Redis client for matchmaking
 let redisClient: any = null;
@@ -43,6 +61,7 @@ export interface TeamQueueEntry {
     odLeaderId: string;             // Party leader who can initiate quit votes
     odLeaderName: string;
     odElo: number;                  // Team ELO or avg member ELO
+    odAvgTier: number;              // Average tier of all members (1-100, 100-tier system)
     odMode: '5v5';
     odMatchType: 'ranked' | 'casual';
     odIglId: string;
@@ -57,6 +76,7 @@ export interface TeamQueueMember {
     odUserId: string;
     odUserName: string;
     odElo: number;                  // Individual 5v5 ELO
+    odTier: number;                 // Individual tier (1-100, 100-tier system)
     odLevel: number;
     odEquippedFrame: string | null;
     odEquippedTitle: string | null;
@@ -88,6 +108,7 @@ export interface TeammateQueueEntry {
     odLeaderName: string;
     odTeamId: string | null;
     odElo: number;
+    odAvgTier: number;              // Average tier of current members (1-100)
     odMode: '5v5';
     odMembers: TeamQueueMember[];
     odJoinedAt: number;
@@ -100,6 +121,7 @@ export interface AssembledTeam {
     odPartyIds: string[];           // Original party IDs that were merged
     odMembers: TeamQueueMember[];   // All 5 members
     odElo: number;                  // Average ELO of all members
+    odAvgTier: number;              // Average tier of all members (1-100)
     odMode: '5v5';
     odIglId: string | null;
     odAnchorId: string | null;
@@ -134,26 +156,72 @@ const MAX_ELO_RANGE = 400;          // ±400 ELO max
 const QUEUE_TIMEOUT_MS = 180000;    // 3 minutes max queue time
 const IGL_SELECTION_TIMEOUT = 25;   // 25 seconds for IGL/Anchor selection
 
+// Tier matchmaking settings (100-tier system)
+const TEAM_TIER_RANGE = 25;         // ±25 tiers for team matching (slightly wider than 1v1)
+const DEFAULT_TIER = 50;            // Default tier if not available
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
 
 /**
  * Calculate the ELO to use for matchmaking
- * Uses team ELO if persistent team, otherwise avg of party members
+ * Uses team ELO from PostgreSQL if persistent team, otherwise avg of party members
  */
 async function getMatchmakingElo(
     teamId: string | null,
     members: { odUserId: string; odElo: number }[]
 ): Promise<number> {
     if (teamId) {
-        // Use persistent team ELO (overall)
-        return await getTeamElo(teamId, 'overall');
+        // Use persistent team ELO from PostgreSQL
+        try {
+            const teamData = await getTeamEloFromPostgres(teamId);
+            return teamData.elo;
+        } catch (error) {
+            console.error('[TeamMatchmaking] Failed to get team ELO from PostgreSQL:', error);
+            // Fallback to member average
+        }
     }
 
     // Use average of party member ELOs
     if (members.length === 0) return 300;
     const total = members.reduce((sum, m) => sum + m.odElo, 0);
+    return Math.round(total / members.length);
+}
+
+/**
+ * Get user's lowest operation tier from math_tiers (100-tier system)
+ * Uses the lowest tier across all operations for fair matchmaking
+ */
+function getUserTier(mathTiersJson: string | null): number {
+    if (!mathTiersJson) return DEFAULT_TIER;
+    
+    try {
+        const tiers = JSON.parse(mathTiersJson);
+        const operations = ['addition', 'subtraction', 'multiplication', 'division'];
+        let lowestTier = 100;
+        
+        for (const op of operations) {
+            const tier = typeof tiers[op] === 'number' ? tiers[op] : DEFAULT_TIER;
+            // Handle legacy 0-4 values
+            const normalizedTier = tier <= 4 ? ((tier + 1) * 20) - 10 : tier;
+            if (normalizedTier < lowestTier) {
+                lowestTier = normalizedTier;
+            }
+        }
+        
+        return Math.max(1, Math.min(100, lowestTier));
+    } catch {
+        return DEFAULT_TIER;
+    }
+}
+
+/**
+ * Calculate average tier for a team
+ */
+function calculateTeamAvgTier(members: { odTier: number }[]): number {
+    if (members.length === 0) return DEFAULT_TIER;
+    const total = members.reduce((sum, m) => sum + m.odTier, 0);
     return Math.round(total / members.length);
 }
 
@@ -186,94 +254,130 @@ export async function joinTeamQueue(params: {
     const userId = session.user.id;
 
     try {
-        // Get party data
-        const party = db.prepare(`
-            SELECT p.id, p.leader_id, p.igl_id, p.anchor_id, p.team_id,
-                   t.name as team_name, t.tag as team_tag
-            FROM parties p
-            LEFT JOIN teams t ON t.id = p.team_id
-            WHERE p.id = ?
-        `).get(params.partyId) as any;
-
-        if (!party) {
+        // Get party data from Redis
+        const partyData = await getParty(params.partyId);
+        if (!partyData) {
             return { success: false, error: 'Party not found' };
         }
 
+        const party = partyData.party;
+        const redisMembers = partyData.members;
+
         // Verify user is party leader
-        if (party.leader_id !== userId) {
+        if (party.leaderId !== userId) {
             return { success: false, error: 'Only the party leader can start the queue' };
         }
 
-        // Get party members
-        const members = db.prepare(`
-            SELECT pm.user_id, pm.is_ready,
-                   u.name, u.level, u.equipped_items,
-                   u.arena_elo_5v5
-            FROM party_members pm
-            JOIN users u ON u.id = pm.user_id
-            WHERE pm.party_id = ?
-        `).all(params.partyId) as any[];
-
         // Check party size for ranked
-        if (params.matchType === 'ranked' && members.length < 5) {
+        if (params.matchType === 'ranked' && redisMembers.length < 5) {
             return { success: false, error: 'Ranked 5v5 requires a full party of 5 players' };
         }
 
-        // Check all members are ready
-        const notReady = members.filter(m => !m.is_ready && m.user_id !== party.leader_id);
+        // Auto-ready the leader when they start the queue
+        const leaderMember = redisMembers.find(m => m.odUserId === party.leaderId);
+        if (leaderMember && !leaderMember.isReady) {
+            await togglePartyReady(params.partyId, party.leaderId);
+            leaderMember.isReady = true;
+            console.log(`[TeamMatchmaking] Auto-readied leader ${party.leaderId} for party ${params.partyId}`);
+        }
+
+        // Check all other members are ready (leader is now always ready)
+        const notReady = redisMembers.filter(m => !m.isReady && m.odUserId !== party.leaderId);
         if (notReady.length > 0) {
             return { success: false, error: 'Not all party members are ready' };
         }
 
-        // Validate IGL and Anchor are set for ranked
+        // Validate IGL and Anchor are set and are actual party members for ranked
         if (params.matchType === 'ranked') {
-            if (!party.igl_id) {
+            if (!party.iglId) {
                 return { success: false, error: 'IGL must be assigned before queuing' };
             }
-            if (!party.anchor_id) {
+            if (!party.anchorId) {
                 return { success: false, error: 'Anchor must be assigned before queuing' };
+            }
+            
+            // Verify IGL is still a party member
+            const iglMember = redisMembers.find(m => m.odUserId === party.iglId);
+            if (!iglMember) {
+                return { success: false, error: 'Assigned IGL is no longer in the party. Please reassign.' };
+            }
+            
+            // Verify Anchor is still a party member
+            const anchorMember = redisMembers.find(m => m.odUserId === party.anchorId);
+            if (!anchorMember) {
+                return { success: false, error: 'Assigned Anchor is no longer in the party. Please reassign.' };
             }
         }
 
-        // Get Leader, IGL and Anchor names
-        const leader = members.find(m => m.user_id === party.leader_id);
-        const igl = members.find(m => m.user_id === party.igl_id);
-        const anchor = members.find(m => m.user_id === party.anchor_id);
+        // Get Leader, IGL and Anchor from Redis members
+        const leader = redisMembers.find(m => m.odUserId === party.leaderId);
+        const igl = redisMembers.find(m => m.odUserId === party.iglId);
+        const anchor = redisMembers.find(m => m.odUserId === party.anchorId);
 
-        // Build queue members with 5v5 ELO
-        const queueMembers: TeamQueueMember[] = members.map(m => {
-            const equipped = m.equipped_items ? JSON.parse(m.equipped_items) : {};
-            return {
-                odUserId: m.user_id,
-                odUserName: m.name,
-                odElo: m.arena_elo_5v5 || 300,
-                odLevel: m.level || 1,
-                odEquippedFrame: equipped.frame || null,
-                odEquippedTitle: equipped.title || null,
-            };
-        });
+        // Get user tier data from SQLite (this is the only SQLite read)
+        const userTierData: Record<string, string | null> = {};
+        for (const member of redisMembers) {
+            const userData = db.prepare(`SELECT math_tiers FROM users WHERE id = ?`).get(member.odUserId) as any;
+            userTierData[member.odUserId] = userData?.math_tiers || null;
+        }
+
+        // Build queue members with 5v5 ELO from PostgreSQL and tier from SQLite
+        const queueMembers: TeamQueueMember[] = await Promise.all(
+            redisMembers.map(async (m) => {
+                const tier = getUserTier(userTierData[m.odUserId]);
+                
+                // Fetch 5v5 ELO from PostgreSQL
+                let elo5v5 = 300;
+                try {
+                    const playerElo = await getPlayerElo(m.odUserId, '5v5');
+                    elo5v5 = playerElo.elo;
+                    
+                    // Ensure player exists in PostgreSQL arena_players
+                    await getOrCreateArenaPlayer(m.odUserId, m.odUserName);
+                } catch (error) {
+                    console.warn(`[TeamMatchmaking] Failed to get PostgreSQL ELO for ${m.odUserId}, using default`);
+                }
+                
+                return {
+                    odUserId: m.odUserId,
+                    odUserName: m.odUserName,
+                    odElo: elo5v5,
+                    odTier: tier,
+                    odLevel: m.odLevel || 1,
+                    odEquippedFrame: m.odEquippedFrame || null,
+                    odEquippedTitle: m.odEquippedTitle || null,
+                };
+            })
+        );
 
         // Calculate matchmaking ELO
         const matchElo = await getMatchmakingElo(
-            party.team_id,
+            party.teamId,
             queueMembers.map(m => ({ odUserId: m.odUserId, odElo: m.odElo }))
         );
+
+        // Calculate average team tier
+        const avgTier = calculateTeamAvgTier(queueMembers);
+
+        // Update party queue state in Redis
+        await updateQueueState(params.partyId, party.leaderId, 'finding_opponents', params.matchType);
 
         // Create queue entry
         const queueEntry: TeamQueueEntry = {
             odPartyId: params.partyId,
-            odTeamId: party.team_id || null,
-            odTeamName: party.team_name || null,
-            odTeamTag: party.team_tag || null,
-            odLeaderId: party.leader_id,
-            odLeaderName: leader?.name || 'Unknown',
+            odTeamId: party.teamId || null,
+            odTeamName: party.teamName || null,
+            odTeamTag: party.teamTag || null,
+            odLeaderId: party.leaderId,
+            odLeaderName: leader?.odUserName || 'Unknown',
             odElo: matchElo,
+            odAvgTier: avgTier,
             odMode: '5v5',
             odMatchType: params.matchType,
-            odIglId: party.igl_id || party.leader_id,
-            odIglName: igl?.name || 'Unknown',
-            odAnchorId: party.anchor_id || members[0]?.user_id,
-            odAnchorName: anchor?.name || 'Unknown',
+            odIglId: party.iglId || party.leaderId,
+            odIglName: igl?.odUserName || 'Unknown',
+            odAnchorId: party.anchorId || redisMembers[0]?.odUserId,
+            odAnchorName: anchor?.odUserName || 'Unknown',
             odMembers: queueMembers,
             odJoinedAt: Date.now(),
         };
@@ -296,7 +400,7 @@ export async function joinTeamQueue(params: {
             'EX', QUEUE_TIMEOUT_MS / 1000
         );
 
-        console.log(`[TeamMatchmaking] Party ${params.partyId} joined queue: ELO=${matchElo}`);
+        console.log(`[TeamMatchmaking] Party ${params.partyId} joined queue: ELO=${matchElo}, AvgTier=${avgTier}`);
         return { success: true };
 
     } catch (error: any) {
@@ -447,7 +551,16 @@ export async function checkTeamMatch(partyId: string): Promise<{
             const candidateQueueTime = Date.now() - candidate.odJoinedAt;
             const candidateEloRange = calculateEloRange(candidateQueueTime);
             
-            if (Math.abs(candidate.odElo - entry.odElo) <= Math.max(currentEloRange, candidateEloRange)) {
+            // Check ELO compatibility
+            const eloCompatible = Math.abs(candidate.odElo - entry.odElo) <= Math.max(currentEloRange, candidateEloRange);
+            
+            // Check tier compatibility (use default if not set for backwards compatibility)
+            const entryTier = entry.odAvgTier ?? DEFAULT_TIER;
+            const candidateTier = candidate.odAvgTier ?? DEFAULT_TIER;
+            const tierDiff = Math.abs(candidateTier - entryTier);
+            const tierCompatible = tierDiff <= TEAM_TIER_RANGE;
+            
+            if (eloCompatible && tierCompatible) {
                 // Match found!
                 const matchId = uuidv4();
 
@@ -474,7 +587,7 @@ export async function checkTeamMatch(partyId: string): Promise<{
                 await redis.del(`${TEAM_QUEUE_PREFIX}entry:${partyId}`);
                 await redis.del(`${TEAM_QUEUE_PREFIX}entry:${candidatePartyId}`);
 
-                console.log(`[TeamMatchmaking] Match found: ${partyId} vs ${candidatePartyId}, matchId=${matchId}`);
+                console.log(`[TeamMatchmaking] Match found: ${partyId} vs ${candidatePartyId}, matchId=${matchId}, ELO: ${entry.odElo} vs ${candidate.odElo}, Tier: ${entryTier} vs ${candidateTier}`);
 
                 return {
                     status: {
@@ -652,11 +765,11 @@ export async function joinTeammateQueue(params: {
             return { success: false, error: 'Only the party leader can start teammate search' };
         }
 
-        // Get party members
+        // Get party members (including math_tiers for tier calculation)
         const members = db.prepare(`
             SELECT pm.user_id,
                    u.name, u.level, u.equipped_items,
-                   u.arena_elo_5v5
+                   u.arena_elo_5v5, u.math_tiers
             FROM party_members pm
             JOIN users u ON u.id = pm.user_id
             WHERE pm.party_id = ?
@@ -670,25 +783,50 @@ export async function joinTeammateQueue(params: {
             return { success: false, error: 'Party has no members' };
         }
 
+        // Auto-ready the leader when they start teammate search
+        db.prepare(`
+            UPDATE party_members SET is_ready = 1 
+            WHERE party_id = ? AND user_id = ?
+        `).run(params.partyId, party.leader_id);
+        console.log(`[TeamMatchmaking] Auto-readied leader ${party.leader_id} for teammate search`);
+
         const slotsNeeded = 5 - members.length;
 
-        // Build queue members
-        const queueMembers: TeamQueueMember[] = members.map(m => {
-            const equipped = m.equipped_items ? JSON.parse(m.equipped_items) : {};
-            return {
-                odUserId: m.user_id,
-                odUserName: m.name,
-                odElo: m.arena_elo_5v5 || 300,
-                odLevel: m.level || 1,
-                odEquippedFrame: equipped.frame || null,
-                odEquippedTitle: equipped.title || null,
-            };
-        });
+        // Build queue members with tier data and PostgreSQL ELO
+        const queueMembers: TeamQueueMember[] = await Promise.all(
+            members.map(async (m) => {
+                const equipped = m.equipped_items ? JSON.parse(m.equipped_items) : {};
+                const tier = getUserTier(m.math_tiers);
+                
+                // Fetch 5v5 ELO from PostgreSQL (with SQLite fallback)
+                let elo5v5 = 300;
+                try {
+                    const playerElo = await getPlayerElo(m.user_id, '5v5');
+                    elo5v5 = playerElo.elo;
+                    await getOrCreateArenaPlayer(m.user_id, m.name);
+                } catch (error) {
+                    elo5v5 = m.arena_elo_5v5 || 300;
+                }
+                
+                return {
+                    odUserId: m.user_id,
+                    odUserName: m.name,
+                    odElo: elo5v5,
+                    odTier: tier,
+                    odLevel: m.level || 1,
+                    odEquippedFrame: equipped.frame || null,
+                    odEquippedTitle: equipped.title || null,
+                };
+            })
+        );
 
         // Calculate average ELO
         const avgElo = Math.round(
             queueMembers.reduce((sum, m) => sum + m.odElo, 0) / queueMembers.length
         );
+
+        // Calculate average tier
+        const avgTier = calculateTeamAvgTier(queueMembers);
 
         const leader = members.find(m => m.user_id === party.leader_id);
 
@@ -698,6 +836,7 @@ export async function joinTeammateQueue(params: {
             odLeaderName: leader?.name || 'Unknown',
             odTeamId: party.team_id || null,
             odElo: avgElo,
+            odAvgTier: avgTier,
             odMode: '5v5',
             odMembers: queueMembers,
             odJoinedAt: Date.now(),
@@ -938,7 +1077,14 @@ export async function checkForTeammates(partyId: string): Promise<{
                 const candidateQueueTime = Date.now() - candidate.odJoinedAt;
                 const candidateEloRange = calculateEloRange(candidateQueueTime);
                 
-                if (Math.abs(candidate.odElo - entry.odElo) <= Math.max(currentEloRange, candidateEloRange)) {
+                const eloCompatible = Math.abs(candidate.odElo - entry.odElo) <= Math.max(currentEloRange, candidateEloRange);
+                
+                // Check tier compatibility
+                const entryTier = entry.odAvgTier ?? DEFAULT_TIER;
+                const candidateTier = candidate.odAvgTier ?? DEFAULT_TIER;
+                const tierCompatible = Math.abs(candidateTier - entryTier) <= TEAM_TIER_RANGE;
+                
+                if (eloCompatible && tierCompatible) {
                     partiesToMerge.push(candidate);
                     totalPlayers += candidate.odMembers.length;
                 }
@@ -951,6 +1097,7 @@ export async function checkForTeammates(partyId: string): Promise<{
             const assembledId = uuidv4();
             const allMembers = partiesToMerge.flatMap(p => p.odMembers);
             const avgElo = Math.round(allMembers.reduce((sum, m) => sum + m.odElo, 0) / allMembers.length);
+            const avgTier = calculateTeamAvgTier(allMembers);
 
             // Determine largest party leader (for decision-making priority)
             const largestParty = partiesToMerge.reduce((a, b) => 
@@ -962,6 +1109,7 @@ export async function checkForTeammates(partyId: string): Promise<{
                 odPartyIds: partiesToMerge.map(p => p.odPartyId),
                 odMembers: allMembers,
                 odElo: avgElo,
+                odAvgTier: avgTier,
                 odMode: '5v5',
                 odIglId: null,
                 odAnchorId: null,
@@ -1431,6 +1579,7 @@ export async function createAITeamMatch(params: {
                 odUserId: m.user_id,
                 odUserName: m.name,
                 odElo: m.arena_elo_5v5 || 300,
+                odTier: DEFAULT_TIER, // Default tier for AI matches
                 odLevel: m.level || 1,
                 odEquippedFrame: equipped.frame || null,
                 odEquippedTitle: equipped.title || null,
@@ -1443,6 +1592,9 @@ export async function createAITeamMatch(params: {
             queueMembers.reduce((sum, m) => sum + m.odElo, 0) / queueMembers.length
         );
 
+        // Calculate average tier
+        const avgTier = calculateTeamAvgTier(queueMembers);
+
         const humanTeam: TeamQueueEntry = {
             odPartyId: params.partyId,
             odTeamId: party.team_id || null,
@@ -1451,6 +1603,7 @@ export async function createAITeamMatch(params: {
             odLeaderId: party.leader_id,
             odLeaderName: leader?.name || 'Unknown',
             odElo: avgElo,
+            odAvgTier: avgTier,
             odMode: '5v5',
             odMatchType: 'casual', // AI matches are casual
             odIglId: party.igl_id || party.leader_id,
@@ -1548,6 +1701,154 @@ export async function getAIMatchSetup(matchId: string): Promise<{
     } catch (error) {
         console.error('[TeamMatchmaking] getAIMatchSetup error:', error);
         return null;
+    }
+}
+
+// =============================================================================
+// QUEUE STATE RECONCILIATION
+// =============================================================================
+
+/**
+ * Reconcile queue state between SQLite and Redis
+ * Call this periodically or on server startup to clean up stale entries
+ */
+export async function reconcileQueueState(): Promise<{
+    success: boolean;
+    fixed: number;
+    errors: string[];
+}> {
+    const db = getDatabase();
+    const errors: string[] = [];
+    let fixed = 0;
+
+    try {
+        const redis = await getRedis();
+        if (!redis) {
+            return { success: false, fixed: 0, errors: ['Redis unavailable'] };
+        }
+
+        // 1. Find parties with queue_status set in SQLite
+        const partiesInQueue = db.prepare(`
+            SELECT id, queue_status, queue_started_at
+            FROM parties
+            WHERE queue_status IS NOT NULL
+        `).all() as { id: string; queue_status: string; queue_started_at: string }[];
+
+        for (const party of partiesInQueue) {
+            // Check if party exists in Redis queue
+            const teamEntry = await redis.get(`${TEAM_QUEUE_PREFIX}entry:${party.id}`);
+            const teammateEntry = await redis.get(`${TEAMMATE_QUEUE_PREFIX}entry:${party.id}`);
+
+            if (!teamEntry && !teammateEntry) {
+                // Party thinks it's in queue (SQLite) but not in Redis
+                // Clear SQLite queue status
+                db.prepare(`
+                    UPDATE parties 
+                    SET queue_status = NULL, queue_started_at = NULL 
+                    WHERE id = ?
+                `).run(party.id);
+                fixed++;
+                console.log(`[TeamMatchmaking] Reconcile: Cleared stale SQLite queue status for party ${party.id}`);
+            }
+        }
+
+        // 2. Find stale Redis entries (older than queue timeout)
+        const queueKeys = [
+            `${TEAM_QUEUE_PREFIX}ranked:5v5`,
+            `${TEAM_QUEUE_PREFIX}casual:5v5`,
+            `${TEAMMATE_QUEUE_PREFIX}5v5`
+        ];
+
+        for (const queueKey of queueKeys) {
+            const allParties = await redis.zrange(queueKey, 0, -1) as string[];
+            
+            for (const partyId of allParties) {
+                // Check if party still exists and has members
+                const partyExists = db.prepare(`
+                    SELECT COUNT(*) as count FROM party_members WHERE party_id = ?
+                `).get(partyId) as { count: number };
+
+                if (!partyExists || partyExists.count === 0) {
+                    // Party no longer exists or has no members - remove from Redis
+                    await redis.zrem(queueKey, partyId);
+                    await redis.del(`${TEAM_QUEUE_PREFIX}entry:${partyId}`);
+                    await redis.del(`${TEAMMATE_QUEUE_PREFIX}entry:${partyId}`);
+                    fixed++;
+                    console.log(`[TeamMatchmaking] Reconcile: Removed orphaned Redis entry for party ${partyId}`);
+                }
+            }
+        }
+
+        console.log(`[TeamMatchmaking] Queue reconciliation complete: ${fixed} entries fixed`);
+        return { success: true, fixed, errors };
+
+    } catch (error: any) {
+        console.error('[TeamMatchmaking] reconcileQueueState error:', error);
+        errors.push(error.message);
+        return { success: false, fixed, errors };
+    }
+}
+
+/**
+ * Validate party queue state before operations
+ * Returns true if state is consistent, false if needs reconciliation
+ */
+export async function validatePartyQueueState(partyId: string): Promise<{
+    isValid: boolean;
+    sqliteStatus: string | null;
+    redisStatus: 'team_queue' | 'teammate_queue' | 'match_found' | null;
+    needsReconciliation: boolean;
+}> {
+    const db = getDatabase();
+
+    try {
+        const redis = await getRedis();
+        
+        // Get SQLite state
+        const party = db.prepare(`
+            SELECT queue_status FROM parties WHERE id = ?
+        `).get(partyId) as { queue_status: string | null } | undefined;
+
+        const sqliteStatus = party?.queue_status || null;
+
+        if (!redis) {
+            return {
+                isValid: !sqliteStatus, // Valid only if not in queue
+                sqliteStatus,
+                redisStatus: null,
+                needsReconciliation: !!sqliteStatus
+            };
+        }
+
+        // Check Redis state
+        const TEAM_MATCH_PREFIX_LOCAL = 'team:match:';
+        const matchData = await redis.get(`${TEAM_MATCH_PREFIX_LOCAL}${partyId}`);
+        const teamEntry = await redis.get(`${TEAM_QUEUE_PREFIX}entry:${partyId}`);
+        const teammateEntry = await redis.get(`${TEAMMATE_QUEUE_PREFIX}entry:${partyId}`);
+
+        let redisStatus: 'team_queue' | 'teammate_queue' | 'match_found' | null = null;
+        if (matchData) redisStatus = 'match_found';
+        else if (teamEntry) redisStatus = 'team_queue';
+        else if (teammateEntry) redisStatus = 'teammate_queue';
+
+        // Determine if states are consistent
+        const needsReconciliation = (!!sqliteStatus !== !!redisStatus);
+
+        return {
+            isValid: !needsReconciliation,
+            sqliteStatus,
+            redisStatus,
+            needsReconciliation
+        };
+
+    } catch (error: any) {
+        console.error('[TeamMatchmaking] validatePartyQueueState error:', error);
+        return {
+            isValid: false,
+            sqliteStatus: null,
+            redisStatus: null,
+            needsReconciliation: true
+        };
     }
 }
 

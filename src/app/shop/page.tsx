@@ -39,7 +39,7 @@ export default async function ShopPage() {
                 <div className="text-center space-y-4">
                     <h1 className="text-2xl font-bold">Account Not Found</h1>
                     <p className="text-muted-foreground">Your user record seems to be missing.</p>
-                    <Link href="/api/auth/signout">
+                    <Link href="/auth/signout">
                         <NeonButton variant="primary">Sign Out</NeonButton>
                     </Link>
                 </div>

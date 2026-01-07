@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { TeamQueueClient } from './team-queue-client';
 import { getPartyData } from '@/lib/actions/social';
+import { isEmailVerified } from '@/lib/actions/verification';
 
 // Disable Next.js router cache to prevent stale queueStatus during navigation
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,12 @@ export default async function TeamQueuePage({
     
     if (!session?.user) {
         redirect('/auth/login?callbackUrl=/arena/teams/queue');
+    }
+
+    // Check email verification - required for Arena access
+    const verified = await isEmailVerified();
+    if (!verified) {
+        redirect('/arena/verify-email');
     }
 
     // Await searchParams (Next.js 16+ requirement)

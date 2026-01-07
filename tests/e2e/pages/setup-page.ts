@@ -3,13 +3,15 @@ import { BasePage } from './base-page';
 
 /**
  * Page Object for Team Setup Page (/arena/teams/setup)
+ * 
+ * Uses data-testid attributes added to team-setup-client.tsx for reliable element selection.
  */
 export class SetupPage extends BasePage {
     // Page URL
     readonly url = '/arena/teams/setup';
     
-    // Mode selection
-    readonly mode5v5Button: Locator;
+    // Party creation
+    readonly createPartyButton: Locator;
     
     // VS AI section
     readonly vsAiButton: Locator;
@@ -18,46 +20,32 @@ export class SetupPage extends BasePage {
     readonly difficultyHardButton: Locator;
     readonly startAiMatchButton: Locator;
     
-    // Party section
-    readonly partyMembersList: Locator;
-    readonly inviteButton: Locator;
-    readonly leavePartyButton: Locator;
+    // Ready system
+    readonly readyButton: Locator;
+    readonly readyCount: Locator;
     
     // Queue section
     readonly findMatchButton: Locator;
-    readonly cancelQueueButton: Locator;
-    readonly queueStatus: Locator;
-    
-    // Role assignment
-    readonly iglSelector: Locator;
-    readonly anchorSelector: Locator;
     
     constructor(page: Page) {
         super(page);
         
-        // Mode buttons
-        this.mode5v5Button = page.locator('[data-testid="mode-5v5"]');
+        // Party creation
+        this.createPartyButton = page.locator('[data-testid="create-party-button"]');
         
-        // VS AI
+        // VS AI (now with correct data-testid)
         this.vsAiButton = page.locator('[data-testid="vs-ai-button"]');
         this.difficultyEasyButton = page.locator('[data-testid="difficulty-easy"]');
         this.difficultyMediumButton = page.locator('[data-testid="difficulty-medium"]');
         this.difficultyHardButton = page.locator('[data-testid="difficulty-hard"]');
         this.startAiMatchButton = page.locator('[data-testid="start-ai-match"]');
         
-        // Party
-        this.partyMembersList = page.locator('[data-testid="party-members"]');
-        this.inviteButton = page.locator('[data-testid="invite-button"]');
-        this.leavePartyButton = page.locator('[data-testid="leave-party"]');
+        // Ready system
+        this.readyButton = page.locator('[data-testid="ready-button"]');
+        this.readyCount = page.locator('[data-testid="ready-count"]');
         
         // Queue
-        this.findMatchButton = page.locator('[data-testid="find-match"]');
-        this.cancelQueueButton = page.locator('[data-testid="cancel-queue"]');
-        this.queueStatus = page.locator('[data-testid="queue-status"]');
-        
-        // Roles
-        this.iglSelector = page.locator('[data-testid="igl-selector"]');
-        this.anchorSelector = page.locator('[data-testid="anchor-selector"]');
+        this.findMatchButton = page.locator('[data-testid="find-match-button"]');
     }
     
     /**
@@ -69,11 +57,45 @@ export class SetupPage extends BasePage {
     }
     
     /**
-     * Select 5v5 mode
+     * Create a party if not already in one
      */
-    async select5v5Mode(): Promise<void> {
-        await this.mode5v5Button.click();
-        await this.waitForLoad();
+    async createParty(): Promise<void> {
+        const isVisible = await this.createPartyButton.isVisible({ timeout: 5000 }).catch(() => false);
+        if (isVisible) {
+            // Dismiss any overlays first by pressing Escape
+            await this.page.keyboard.press('Escape');
+            await this.page.waitForTimeout(500);
+            
+            // Use force click to bypass any remaining overlays
+            await this.createPartyButton.click({ force: true });
+            // Wait for state update
+            await this.page.waitForTimeout(2000);
+        }
+    }
+    
+    /**
+     * Toggle ready state
+     */
+    async toggleReady(): Promise<void> {
+        const isVisible = await this.readyButton.isVisible({ timeout: 5000 }).catch(() => false);
+        if (isVisible) {
+            await this.readyButton.click();
+            await this.page.waitForTimeout(500);
+        }
+    }
+    
+    /**
+     * Get ready count text (e.g., "1/5 ready")
+     */
+    async getReadyCountText(): Promise<string> {
+        return await this.readyCount.textContent() || '';
+    }
+    
+    /**
+     * Check if VS AI button is visible
+     */
+    async isVsAiVisible(): Promise<boolean> {
+        return await this.vsAiButton.isVisible({ timeout: 5000 }).catch(() => false);
     }
     
     /**
@@ -82,6 +104,7 @@ export class SetupPage extends BasePage {
     async startAIMatch(difficulty: 'easy' | 'medium' | 'hard' = 'easy'): Promise<void> {
         // Click VS AI button to show difficulty options
         await this.vsAiButton.click();
+        await this.page.waitForTimeout(500);
         
         // Select difficulty
         switch (difficulty) {
@@ -96,30 +119,28 @@ export class SetupPage extends BasePage {
                 break;
         }
         
+        // Click start button
+        await this.startAiMatchButton.click();
+        
         // Wait for navigation to match page
         await this.waitForNavigation(/\/arena\/teams\/match\//);
     }
     
     /**
-     * Get number of party members
+     * Check if Create Party button is visible (meaning user is not in a party)
      */
-    async getPartyMemberCount(): Promise<number> {
-        const members = await this.partyMembersList.locator('[data-testid="party-member"]').all();
-        return members.length;
-    }
-    
-    /**
-     * Check if in queue
-     */
-    async isInQueue(): Promise<boolean> {
-        return await this.queueStatus.isVisible();
+    async isNotInParty(): Promise<boolean> {
+        return await this.createPartyButton.isVisible({ timeout: 3000 }).catch(() => false);
     }
     
     /**
      * Verify page is ready
      */
     async verifyLoaded(): Promise<void> {
-        await expect(this.vsAiButton.or(this.findMatchButton)).toBeVisible({ timeout: 10000 });
+        // Either Create Party button or VS AI button should be visible
+        await expect(
+            this.createPartyButton.or(this.vsAiButton).or(this.findMatchButton)
+        ).toBeVisible({ timeout: 10000 });
     }
 }
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { MatchLobby } from "@/components/arena/match-lobby";
 import { getMatch, getArenaStats } from "@/lib/actions/matchmaking";
+import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,12 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
 
     if (!session?.user) {
         redirect("/auth/login");
+    }
+
+    // Check email verification - required for Arena access
+    const verified = await isEmailVerified();
+    if (!verified) {
+        redirect("/arena/verify-email");
     }
 
     const userId = session.user.id as string;

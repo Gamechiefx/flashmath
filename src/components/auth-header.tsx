@@ -18,6 +18,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
     const [showAchievements, setShowAchievements] = useState(false);
+    const isEmailVerified = (session?.user as any)?.emailVerified;
 
     useEffect(() => {
         setIsMuted(!soundEngine.isEnabled());
@@ -88,7 +89,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                                 <LayoutDashboard size={14} />
                                 Dashboard
                             </Link>
-                            <Link href="/practice" className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                            <Link href={isEmailVerified ? "/practice" : "/arena/verify-email"} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
                                 <Zap size={14} />
                                 Practice
                             </Link>

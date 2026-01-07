@@ -133,7 +133,8 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
     const [selectedOp, setSelectedOp] = useState<string | null>(null);
     const [showPlacementTest, setShowPlacementTest] = useState(false);
     const router = useRouter();
-    const { update } = useSession();
+    const { data: session, update } = useSession();
+    const isEmailVerified = (session?.user as any)?.emailVerified;
 
     const handlePlacementComplete = async () => {
         setShowPlacementTest(false);
@@ -360,8 +361,10 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                                 <div className="text-xs text-muted-foreground italic py-4">No sessions logged yet.</div>
                             )}
                         </div>
-                        <Link href="/practice" className="block text-center">
-                            <button className="w-full text-[10px] uppercase font-bold tracking-widest text-primary hover:underline transition-all">Start New Practice</button>
+                        <Link href={isEmailVerified ? "/practice" : "/arena/verify-email"} className="block text-center">
+                            <button className="w-full text-[10px] uppercase font-bold tracking-widest text-primary hover:underline transition-all">
+                                {isEmailVerified ? "Start New Practice" : "Verify Email to Practice"}
+                            </button>
                         </Link>
                     </GlassCard>
                 </motion.div>
@@ -524,9 +527,9 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                                             className="overflow-hidden"
                                         >
                                             <div className="pt-2">
-                                                <Link href={`/practice?op=${op.title}`}>
+                                                <Link href={isEmailVerified ? `/practice?op=${op.title}` : "/arena/verify-email"}>
                                                     <NeonButton className="w-full py-4 text-lg font-bold">
-                                                        START TRAINING
+                                                        {isEmailVerified ? "START TRAINING" : "VERIFY EMAIL"}
                                                     </NeonButton>
                                                 </Link>
                                             </div>
@@ -536,7 +539,7 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                             </div>
 
                             <div className="mt-8 flex gap-4 justify-center">
-                                {!stats?.hasPlaced && (
+                                {!stats?.hasPlaced && isEmailVerified && (
                                     <motion.button
                                         onClick={() => setShowPlacementTest(true)}
                                         className="px-8 py-4 rounded-xl border border-white/10 hover:bg-white/5 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-white transition-colors"
@@ -551,6 +554,15 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                                     >
                                         Take Placement Test
                                     </motion.button>
+                                )}
+                                {!stats?.hasPlaced && !isEmailVerified && (
+                                    <Link href="/arena/verify-email">
+                                        <motion.button
+                                            className="px-8 py-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs font-bold uppercase tracking-widest text-amber-400 hover:bg-amber-500/20 transition-colors"
+                                        >
+                                            Verify Email to Take Placement Test
+                                        </motion.button>
+                                    </Link>
                                 )}
                             </div>
                         </div>

@@ -9,6 +9,10 @@
     "start": "next start",
     "start:server": "NODE_ENV=production node server.js",
     "lint": "eslint",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:unit:ui": "vitest --ui",
+    "test:unit:coverage": "vitest run --coverage",
     "test:arena": "npx ts-node --project tests/tsconfig.json tests/arena/runner.ts",
     "test:arena:list": "npx ts-node --project tests/tsconfig.json tests/arena/runner.ts --list",
     "test:arena:all": "npx ts-node --project tests/tsconfig.json tests/arena/runner.ts --all",
@@ -21,8 +25,8 @@
     "test:e2e:interactive": "playwright test --config=tests/e2e/playwright.config.ts",
     "test:e2e:codegen": "playwright codegen",
     "test:e2e:diagnose": "node tests/scripts/generate-diagnostic.js",
-    "test:all": "npm run test:arena:all && npm run test:e2e",
-    "test:ci": "CI=1 npm run test:arena:all -- --json && CI=1 npm run test:e2e",
+    "test:all": "npm run test:unit && npm run test:arena:all && npm run test:e2e",
+    "test:ci": "npm run test:unit:coverage && CI=1 npm run test:arena:all -- --json && CI=1 npm run test:e2e",
     "reports:start": "docker-compose -f docker-compose.reports.yml up -d",
     "reports:stop": "docker-compose -f docker-compose.reports.yml down",
     "reports:build": "docker-compose -f docker-compose.reports.yml build",
@@ -33,6 +37,7 @@
     "test:archive": "node tests/scripts/archive-results.js --type=all"
   },
   "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/seedrandom": "^3.0.8",
     "bcryptjs": "^3.0.3",
@@ -69,10 +74,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "^4.0.16",
+    "@vitest/ui": "^4.0.16",
     "eslint": "^9",
     "eslint-config-next": "16.1.0",
+    "happy-dom": "^20.0.11",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.16"
   }
 }

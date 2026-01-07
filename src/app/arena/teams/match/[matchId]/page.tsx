@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { TeamMatchClient } from './team-match-client';
+import { isEmailVerified } from '@/lib/actions/verification';
 
 export default async function TeamMatchPage({
     params,
@@ -11,6 +12,12 @@ export default async function TeamMatchPage({
     
     if (!session?.user) {
         redirect('/auth/login');
+    }
+
+    // Check email verification - required for Arena access
+    const verified = await isEmailVerified();
+    if (!verified) {
+        redirect('/arena/verify-email');
     }
 
     // Await params (Next.js 16+ requirement)

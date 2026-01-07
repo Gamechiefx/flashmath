@@ -6,14 +6,58 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { Zap, Mail, Lock, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { loginUser, signInWithGoogle } from "@/lib/actions/auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [shake, setShake] = useState(false);
 
+    // Redirect authenticated users to dashboard
+    useEffect(() => {
+        if (status === 'authenticated' && session?.user) {
+            router.replace('/dashboard');
+        }
+    }, [status, session, router]);
+
+    // Show loading state while checking session (theme-aware)
+    if (status === 'loading') {
+        return (
+            <main className="min-h-screen flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <div 
+                        className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent' }}
+                    />
+                    <span className="text-muted-foreground text-sm font-medium animate-pulse">
+                        Checking authentication...
+                    </span>
+                </div>
+            </main>
+        );
+    }
+
+    // If authenticated, show redirect message (theme-aware)
+    if (status === 'authenticated') {
+        return (
+            <main className="min-h-screen flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <div 
+                        className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+                    />
+                    <span style={{ color: 'var(--primary)' }} className="text-sm font-medium animate-pulse">
+                        Redirecting to dashboard...
+                    </span>
+                </div>
+            </main>
+        );
+    }
 
     return (
         <main className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden bg-background text-foreground">

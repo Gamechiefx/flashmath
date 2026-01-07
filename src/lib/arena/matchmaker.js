@@ -146,17 +146,33 @@ class Matchmaker {
             };
         }
 
-        // Determine player's practice tier (use matchmakingTier if provided, else calculate)
-        const tier = player.matchmakingTier || player.practiceTier || getTierFromXP(player.practiceXP || 0);
-
-        // Normalize tier to have id property
-        const tierWithId = typeof tier === 'object' ? tier : getTierFromXP(player.practiceXP || 0);
+        // Determine player's practice tier (100-tier system: 1-100)
+        // matchmakingTier.tier is the numeric 1-100 value
+        let tierValue = 1; // Default to Foundation
+        
+        if (player.matchmakingTier) {
+            // New 100-tier format: { tier: 45, bandId: 3, ... }
+            tierValue = player.matchmakingTier.tier || player.matchmakingTier.level || 1;
+        } else if (typeof player.tier === 'number') {
+            // Direct numeric tier
+            tierValue = player.tier;
+        } else if (player.practiceTier) {
+            // Legacy format
+            tierValue = player.practiceTier.tier || player.practiceTier.id || 1;
+        } else {
+            // Fallback to XP-based tier (legacy)
+            const xpTier = getTierFromXP(player.practiceXP || 0);
+            tierValue = (xpTier.id + 1) * 20; // Convert 0-4 → approximate 1-100
+        }
+        
+        // Ensure tier is in valid range
+        tierValue = Math.max(1, Math.min(100, tierValue));
 
         const queueEntry = {
             id: player.id,
             name: player.name,
             socketId: player.socketId,
-            tier: tierWithId,
+            tier: tierValue,  // Now a number 1-100
             elo: player.elo || MATCHMAKING.DEFAULT_ELO,
             confidence: confidence,
             arenaMatchCount: player.arenaMatchCount || 0,  // For new player protection
@@ -192,7 +208,7 @@ class Matchmaker {
             success: true,
             matched: false,
             position: await this.getQueuePosition(player.id),
-            tier: tierWithId.name,
+            tier: tierValue,  // Now a number 1-100
             elo: queueEntry.elo
         };
     }
@@ -239,16 +255,17 @@ class Matchmaker {
             if (playerId === seeker.id) continue;
 
             // =============================================================
-            // GATE 1: PRACTICE TIER COMPATIBILITY
-            // Users must be within ±1 Practice Tier to match
-            // Bronze can match Bronze/Silver
-            // Silver can match Bronze/Silver/Gold
-            // etc.
+            // GATE 1: PRACTICE TIER COMPATIBILITY (100-Tier System)
+            // Users must be within ±20 tiers (one band width) to match
+            // E.g., tier 45 can match with tiers 25-65
+            // This keeps players within similar skill levels
             // =============================================================
-            const tierDifference = Math.abs(seeker.tier.id - candidate.tier.id);
+            const seekerTier = typeof seeker.tier === 'number' ? seeker.tier : (seeker.tier?.tier || seeker.tier?.id || 50);
+            const candidateTier = typeof candidate.tier === 'number' ? candidate.tier : (candidate.tier?.tier || candidate.tier?.id || 50);
+            const tierDifference = Math.abs(seekerTier - candidateTier);
 
             if (tierDifference > MATCHMAKING.TIER_RANGE) {
-                // Tiers too far apart, skip this candidate
+                // Tiers too far apart (more than ±20), skip this candidate
                 continue;
             }
 
@@ -280,7 +297,9 @@ class Matchmaker {
             // Lower is better - prefer closer Elo and tier matches
             // NEW PLAYER PROTECTION: Prefer matching new with new
             // =============================================================
-            let matchScore = (tierDifference * 100) + eloDifference;
+            // Tier difference is now 0-20 (100-tier system)
+            // Weight tier difference by 5 to make it comparable to ELO difference
+            let matchScore = (tierDifference * 5) + eloDifference;
 
             // New player preference: add penalty for mismatched experience levels
             const seekerIsNew = (seeker.arenaMatchCount || 0) < this.NEW_PLAYER_THRESHOLD;
@@ -302,6 +321,10 @@ class Matchmaker {
             await this.leaveQueue(seeker.id);
             await this.leaveQueue(bestMatch.id);
 
+            // Extract numeric tier values (100-tier system)
+            const seekerTierNum = typeof seeker.tier === 'number' ? seeker.tier : (seeker.tier?.tier || 50);
+            const bestMatchTierNum = typeof bestMatch.tier === 'number' ? bestMatch.tier : (bestMatch.tier?.tier || 50);
+            
             const match = {
                 id: `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 players: [
@@ -309,14 +332,14 @@ class Matchmaker {
                         id: seeker.id,
                         name: seeker.name,
                         socketId: seeker.socketId,
-                        tier: seeker.tier.name,
+                        tier: seekerTierNum,  // Now a number 1-100
                         elo: seeker.elo
                     },
                     {
                         id: bestMatch.id,
                         name: bestMatch.name,
                         socketId: bestMatch.socketId,
-                        tier: bestMatch.tier.name,
+                        tier: bestMatchTierNum,  // Now a number 1-100
                         elo: bestMatch.elo
                     }
                 ],

@@ -8,6 +8,12 @@ export async function getDashboardStats() {
     const session = await auth();
     if (!session?.user) return null;
     const userId = (session.user as any).id;
+    
+    // Guard against missing userId
+    if (!userId) {
+        console.error('[getDashboardStats] User session exists but userId is missing');
+        return null;
+    }
 
     await syncLeagueState();
     const db = loadData();

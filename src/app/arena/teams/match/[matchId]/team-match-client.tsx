@@ -7,7 +7,7 @@ import { io, Socket } from 'socket.io-client';
 import { cn } from '@/lib/utils';
 import { 
     Clock, Crown, Anchor, Zap, Check, X, 
-    Pause, Play, AlertCircle, Trophy, LogOut, ArrowLeft
+    Pause, Play, AlertCircle, Trophy, LogOut, ArrowLeft, Target
 } from 'lucide-react';
 import { 
     TeammateSpectatorView, 
@@ -15,8 +15,15 @@ import {
     LiveTypingIndicator,
     AnswerResultToast,
     AnchorAbilities,
-    IGLControls 
-} from '@/components/arena/teams/match';
+    IGLControls,
+    IGLFAB,
+    PlayerStatsCards,
+    TeamPlayerCard,
+    TeamPlayerGrid,
+    VSScreenBackground,
+    AnimatedVSText,
+    TeamBannerHeader
+} from '@/components/arena/teams';
 
 interface TeamMatchClientProps {
     matchId: string;
@@ -29,6 +36,8 @@ interface PlayerState {
     odName: string;
     odLevel: number;
     odEquippedFrame: string | null;
+    odEquippedBanner: string | null;
+    odEquippedTitle: string | null;
     slot: string;
     score: number;
     correct: number;
@@ -77,8 +86,13 @@ interface MatchState {
 interface SlotAssignment {
     slot: number;
     name: string;
+    level: number;
     isIgl: boolean;
     isAnchor: boolean;
+    // Cosmetics for banner display
+    banner: string;
+    frame: string;
+    title: string;
 }
 
 interface StrategyPhaseState {
@@ -837,118 +851,134 @@ export function TeamMatchClient({
         const team2Connected = Object.values(matchState.team2.players).filter(p => p.odUserId).length;
         const isAIMatch = matchState.team2.teamId?.startsWith('ai_team_') || matchState.team2.teamId?.startsWith('ai_party_');
         
+        // Convert players to TeamPlayerCard format
+        const myTeamPlayers = myTeam ? Object.entries(myTeam.slotAssignments || {}).map(([op, userId]) => {
+            const player = myTeam.players[userId];
+            return {
+                odUserId: userId,
+                name: player?.odName || 'Unknown',
+                level: player?.odLevel || 1,
+                banner: player?.odEquippedBanner || 'default',
+                frame: player?.odEquippedFrame || 'default',
+                title: player?.odEquippedTitle || 'Player',
+                isIgl: player?.isIgl || false,
+                isAnchor: player?.isAnchor || false,
+                slot: op,
+                isActive: !!player?.odUserId,
+            };
+        }) : [];
+        
+        const opponentPlayers = opponentTeam ? Object.entries(opponentTeam.slotAssignments || {}).map(([op, userId]) => {
+            const player = opponentTeam.players[userId];
+            return {
+                odUserId: userId,
+                name: player?.odName || 'Unknown',
+                level: player?.odLevel || 1,
+                banner: player?.odEquippedBanner || 'default',
+                frame: player?.odEquippedFrame || 'default',
+                title: isAIMatch ? 'AI Bot' : (player?.odEquippedTitle || 'Player'),
+                isIgl: player?.isIgl || false,
+                isAnchor: player?.isAnchor || false,
+                slot: op,
+                isActive: isAIMatch || !!player?.odUserId,
+            };
+        }) : [];
+        
         return (
-            <div className="min-h-screen bg-gradient-to-b from-slate-900 via-purple-900/20 to-slate-900 flex items-center justify-center">
-                <div className="text-center max-w-lg">
-                    <motion.div
-                        initial={{ scale: 0.9, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="mb-8"
-                    >
-                        <h1 className="text-4xl font-black text-white mb-2">
-                            {isAIMatch ? '🤖 AI Match' : '5v5 Arena'}
-                        </h1>
-                        <p className="text-white/60">Waiting for players to connect...</p>
-                    </motion.div>
+            <VSScreenBackground variant="versus">
+                <div className="min-h-screen flex flex-col">
+                    {/* Header with animated VS */}
+                    <div className="text-center py-6 md:py-10">
+                        <motion.p
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="text-white/50 text-sm uppercase tracking-widest mb-2"
+                        >
+                            {isAIMatch ? 'Practice Match' : '5v5 Arena'}
+                        </motion.p>
+                        <AnimatedVSText />
+                        <motion.p
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.5 }}
+                            className="text-white/40 text-xs mt-4"
+                        >
+                            Waiting for players to connect...
+                        </motion.p>
+                    </div>
                     
-                    <div className="grid grid-cols-2 gap-6 mb-8">
-                        {/* Team 1 - Your Team with Slot Assignments */}
-                        <div className="bg-white/5 rounded-xl p-4 border border-primary/30">
-                            <h3 className="text-primary font-bold mb-3">
-                                {myTeam?.teamName || 'Your Team'}
-                            </h3>
-                            
-                            {/* Slot Assignment Display */}
-                            <div className="space-y-2">
-                                {myTeam && Object.entries(myTeam.slotAssignments || {}).map(([op, userId]) => {
-                                    const player = myTeam.players[userId];
-                                    if (!player) return null;
-                                    return (
-                                        <div 
-                                            key={`${op}-${userId}`}
-                                            className={cn(
-                                                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
-                                                player.odUserId ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-white/40"
-                                            )}
-                                        >
-                                            {/* Slot indicator */}
-                                            <span className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center font-bold text-primary">
-                                                {operationSymbols[op] || '?'}
-                                            </span>
-                                            {/* Player name */}
-                                            <span className="flex-1">{player.odName}</span>
-                                            {/* Role badges */}
-                                            {player.isIgl && (
-                                                <Crown className="w-4 h-4 text-amber-400" title="IGL" />
-                                            )}
-                                            {player.isAnchor && (
-                                                <Anchor className="w-4 h-4 text-purple-400" title="Anchor" />
-                                            )}
-                                            {/* Connection status */}
-                                            <span className={cn(
-                                                "w-2 h-2 rounded-full",
-                                                player.odUserId ? "bg-emerald-400" : "bg-white/30"
-                                            )} />
-                                        </div>
-                                    );
-                                })}
+                    {/* Teams Display - Dramatic VS layout */}
+                    <div className="flex-1 flex flex-col justify-center px-4 md:px-8 pb-8">
+                        {/* Your Team */}
+                        <div className="mb-2">
+                            <TeamBannerHeader 
+                                teamName={myTeam?.teamName || 'Your Team'}
+                                teamTag={myTeam?.teamTag}
+                                isMyTeam={true}
+                            />
+                            <div className="grid grid-cols-5 gap-2 md:gap-4 max-w-6xl mx-auto mt-4">
+                                {myTeamPlayers.map((player, idx) => (
+                                    <TeamPlayerCard
+                                        key={player.odUserId}
+                                        {...player}
+                                        showSlot={true}
+                                        variant="full"
+                                        index={idx}
+                                    />
+                                ))}
                             </div>
                         </div>
                         
-                        {/* Team 2 (Opponent/AI) with Slot Assignments */}
-                        <div className="bg-white/5 rounded-xl p-4 border border-rose-500/30">
-                            <h3 className="text-rose-400 font-bold mb-3 flex items-center justify-center gap-2">
-                                {isAIMatch && <span>🤖</span>}
-                                {opponentTeam?.teamName || 'Opponent'}
-                            </h3>
-                            <div className="space-y-2">
-                                {opponentTeam && Object.entries(opponentTeam.slotAssignments || {}).map(([op, userId]) => {
-                                    const player = opponentTeam.players[userId];
-                                    if (!player) return null;
-                                    return (
-                                        <div 
-                                            key={`${op}-${userId}`}
-                                            className={cn(
-                                                "flex items-center gap-2 px-3 py-2 rounded-lg text-sm",
-                                                isAIMatch || player.odUserId 
-                                                    ? "bg-rose-500/20 text-rose-400" 
-                                                    : "bg-white/5 text-white/40"
-                                            )}
-                                        >
-                                            <span className="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center font-bold text-rose-400">
-                                                {operationSymbols[op] || '?'}
-                                            </span>
-                                            <span className="flex-1">{player.odName}</span>
-                                            {isAIMatch && <span className="text-xs bg-rose-500/30 px-2 py-0.5 rounded">BOT</span>}
-                                            <span className={cn(
-                                                "w-2 h-2 rounded-full",
-                                                isAIMatch || player.odUserId ? "bg-rose-400" : "bg-white/30"
-                                            )} />
-                                        </div>
-                                    );
-                                })}
+                        {/* Opponent Team */}
+                        <div className="mt-6">
+                            <TeamBannerHeader 
+                                teamName={opponentTeam?.teamName || 'Opponent'}
+                                teamTag={opponentTeam?.teamTag}
+                                isMyTeam={false}
+                                isAI={isAIMatch}
+                            />
+                            <div className="grid grid-cols-5 gap-2 md:gap-4 max-w-6xl mx-auto mt-4">
+                                {opponentPlayers.map((player, idx) => (
+                                    <TeamPlayerCard
+                                        key={player.odUserId}
+                                        {...player}
+                                        showSlot={true}
+                                        variant="full"
+                                        index={idx}
+                                    />
+                                ))}
                             </div>
                         </div>
                     </div>
                     
-                    <motion.div
-                        animate={{ opacity: [0.5, 1, 0.5] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                        className="text-white/40 text-sm"
-                    >
-                        Match will start when all players connect...
-                    </motion.div>
-                    
-                    {/* Leave Button */}
-                    <button
-                        onClick={() => setShowQuitConfirm(true)}
-                        className="mt-8 px-6 py-3 rounded-xl bg-rose-500/10 border border-rose-500/30 
-                                   text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/50 
-                                   transition-all flex items-center gap-2"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        Leave Match
-                    </button>
+                    {/* Footer */}
+                    <div className="text-center pb-6">
+                        <motion.div
+                            animate={{ opacity: [0.5, 1, 0.5] }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                            className="text-white/40 text-sm mb-4"
+                        >
+                            <span className="inline-flex items-center gap-2">
+                                <motion.div
+                                    animate={{ rotate: 360 }}
+                                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                                    className="w-4 h-4 border-2 border-white/30 border-t-primary rounded-full"
+                                />
+                                Match will start when all players connect...
+                            </span>
+                        </motion.div>
+                        
+                        {/* Leave Button */}
+                        <button
+                            onClick={() => setShowQuitConfirm(true)}
+                            className="px-6 py-3 rounded-xl bg-rose-500/10 border border-rose-500/30 
+                                       text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/50 
+                                       transition-all inline-flex items-center gap-2"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            Leave Match
+                        </button>
+                    </div>
                 </div>
                 
                 {/* Quit Confirmation Modal for Pre-Match */}
@@ -1019,7 +1049,7 @@ export function TeamMatchClient({
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </div>
+            </VSScreenBackground>
         );
     }
     
@@ -1055,31 +1085,83 @@ export function TeamMatchClient({
         };
         
         return (
-            <div className="min-h-screen bg-gradient-to-b from-slate-900 via-indigo-900/20 to-slate-900 flex flex-col items-center justify-center p-6">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="w-full max-w-4xl"
-                >
-                    {/* Header */}
-                    <div className="text-center mb-8">
-                        <h1 className="text-4xl font-black text-white mb-2">
-                            {isIGL ? '🎯 Assign Slots' : '⏳ Waiting for IGL'}
-                        </h1>
-                        <p className="text-white/60">
-                            {isIGL 
-                                ? 'Assign your team to operation slots before the match begins'
-                                : 'Your IGL is assigning slots...'}
-                        </p>
-                    </div>
-                    
-                    {/* Timer */}
-                    <div className="flex justify-center mb-8">
-                        <div className={cn(
-                            "px-6 py-3 rounded-full font-mono text-2xl font-bold",
-                            remainingSecs <= 10 ? "bg-rose-500/20 text-rose-400" : "bg-primary/20 text-primary"
-                        )}>
-                            {Math.floor(remainingSecs / 60)}:{(remainingSecs % 60).toString().padStart(2, '0')}
+            <VSScreenBackground variant="strategy">
+                <div className="min-h-screen flex flex-col items-center justify-center p-4 md:p-6">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="w-full max-w-6xl"
+                    >
+                        {/* Header */}
+                        <div className="text-center mb-6">
+                            <motion.div
+                                initial={{ scale: 0.9 }}
+                                animate={{ scale: 1 }}
+                                className="inline-flex items-center gap-3 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm mb-4"
+                            >
+                                <span className="text-3xl">{isIGL ? '🎯' : '⏳'}</span>
+                                <div className="text-left">
+                                    <h1 className="text-2xl font-black text-white">
+                                        {isIGL ? 'Strategy Phase' : 'Waiting for IGL'}
+                                    </h1>
+                                    <p className="text-white/50 text-sm">
+                                        {isIGL 
+                                            ? 'Assign your team to operation slots'
+                                            : 'Your IGL is assigning slots...'}
+                                    </p>
+                                </div>
+                            </motion.div>
+                        </div>
+                        
+                        {/* Timer - More dramatic */}
+                        <div className="flex justify-center mb-6">
+                            <motion.div 
+                                animate={remainingSecs <= 10 ? {
+                                    scale: [1, 1.05, 1],
+                                    boxShadow: ['0 0 20px rgba(244,63,94,0.3)', '0 0 40px rgba(244,63,94,0.5)', '0 0 20px rgba(244,63,94,0.3)']
+                                } : {}}
+                                transition={{ duration: 0.5, repeat: remainingSecs <= 10 ? Infinity : 0 }}
+                                className={cn(
+                                    "px-8 py-4 rounded-2xl font-mono text-4xl font-black border-2",
+                                    remainingSecs <= 10 
+                                        ? "bg-rose-500/20 text-rose-400 border-rose-500/50" 
+                                        : "bg-primary/10 text-primary border-primary/30"
+                                )}
+                            >
+                                {Math.floor(remainingSecs / 60)}:{(remainingSecs % 60).toString().padStart(2, '0')}
+                            </motion.div>
+                        </div>
+                        
+                        {/* Team Player Cards with Banners */}
+                        <div className="mb-6">
+                            <h3 className="text-sm font-bold text-white/70 mb-4 flex items-center gap-2">
+                                <Target className="w-4 h-4 text-primary" />
+                                Your Team
+                                {isIGL && <span className="text-xs text-white/40 ml-auto">Click a player to select for reassignment</span>}
+                            </h3>
+                        <div className="grid grid-cols-5 gap-4">
+                            {Object.entries(strategyPhase.mySlots).map(([playerId, assignment], idx) => {
+                                const slotOp = typeof assignment.slot === 'string' ? assignment.slot : '';
+                                return (
+                                    <TeamPlayerCard
+                                        key={playerId}
+                                        odUserId={playerId}
+                                        name={assignment.name}
+                                        level={assignment.level || 1}
+                                        banner={assignment.banner || 'default'}
+                                        frame={assignment.frame || 'default'}
+                                        title={assignment.title || 'Player'}
+                                        isIgl={assignment.isIgl}
+                                        isAnchor={assignment.isAnchor}
+                                        slot={slotOp}
+                                        showSlot={true}
+                                        isActive={selectedSlotPlayer === playerId}
+                                        onClick={isIGL ? () => setSelectedSlotPlayer(prev => prev === playerId ? null : playerId) : undefined}
+                                        variant="full"
+                                        index={idx}
+                                    />
+                                );
+                            })}
                         </div>
                     </div>
                     
@@ -1212,19 +1294,28 @@ export function TeamMatchClient({
                     {(strategyPhase.myTeamReady || strategyPhase.opponentTeamReady) && (
                         <div className="mt-6 flex justify-center gap-4">
                             {strategyPhase.myTeamReady && (
-                                <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm">
+                                <motion.span 
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    className="px-4 py-2 bg-emerald-500/20 text-emerald-400 rounded-full text-sm font-bold border border-emerald-500/30"
+                                >
                                     ✓ Your Team Ready
-                                </span>
+                                </motion.span>
                             )}
                             {strategyPhase.opponentTeamReady && (
-                                <span className="px-3 py-1 bg-rose-500/20 text-rose-400 rounded-full text-sm">
+                                <motion.span 
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    className="px-4 py-2 bg-rose-500/20 text-rose-400 rounded-full text-sm font-bold border border-rose-500/30"
+                                >
                                     ✓ Opponent Ready
-                                </span>
+                                </motion.span>
                             )}
                         </div>
                     )}
-                </motion.div>
-            </div>
+                    </motion.div>
+                </div>
+            </VSScreenBackground>
         );
     }
 
@@ -1262,7 +1353,9 @@ export function TeamMatchClient({
 
                         {/* Phase indicator & Quit Button */}
                         <div className="flex items-center gap-3">
-                            <div className={cn(
+                            <div 
+                                data-testid={`phase-${matchState.phase}`}
+                                className={cn(
                                 "px-4 py-2 rounded-lg font-bold uppercase tracking-wider text-sm",
                                 matchState.phase === 'active' && "bg-emerald-500/20 text-emerald-400",
                                 matchState.phase === 'break' && "bg-amber-500/20 text-amber-400",
@@ -1306,7 +1399,7 @@ export function TeamMatchClient({
                                 >
                                     <div className="text-center mb-8">
                                         <p className="text-sm text-primary/80 mb-2">YOUR TURN</p>
-                                        <div className="text-5xl font-black text-white mb-4">
+                                        <div data-testid="question-text" className="text-5xl font-black text-white mb-4">
                                             {myPlayer.currentQuestion.question}
                                         </div>
                                         <div className="flex items-center justify-center gap-4">
@@ -1326,6 +1419,7 @@ export function TeamMatchClient({
                                         <div className="relative">
                                             <input
                                                 ref={inputRef}
+                                                data-testid="answer-input"
                                                 type="text"
                                                 value={currentInput}
                                                 onChange={(e) => handleInputChange(e.target.value)}
@@ -1339,6 +1433,7 @@ export function TeamMatchClient({
                                                 autoFocus
                                             />
                                             <button
+                                                data-testid="submit-answer"
                                                 onClick={handleSubmit}
                                                 disabled={!currentInput.trim()}
                                                 className="absolute right-2 top-1/2 -translate-y-1/2
@@ -1353,6 +1448,7 @@ export function TeamMatchClient({
                                     <AnimatePresence>
                                         {lastAnswerResult && (
                                             <motion.div
+                                                data-testid={lastAnswerResult.isCorrect ? "correct-result" : "incorrect-result"}
                                                 initial={{ opacity: 0, y: 20 }}
                                                 animate={{ opacity: 1, y: 0 }}
                                                 exit={{ opacity: 0, y: -20 }}
@@ -1856,6 +1952,28 @@ export function TeamMatchClient({
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* IGL Floating Action Button */}
+            <IGLFAB
+                isIGL={isIGL}
+                half={matchState.half}
+                currentRound={matchState.round}
+                usedDoubleCallinHalf1={usedDoubleCallinHalf1}
+                usedDoubleCallinHalf2={usedDoubleCallinHalf2}
+                timeoutsRemaining={timeoutsRemaining}
+                anchorName={anchorName}
+                phase={matchState.phase}
+                availableSlots={availableSlots}
+                onDoubleCallin={handleDoubleCallin}
+                onTimeout={() => {
+                    if (socketRef.current) {
+                        socketRef.current.emit('call_timeout', {
+                            matchId,
+                            userId: currentUserId,
+                        });
+                    }
+                }}
+            />
         </div>
     );
 }

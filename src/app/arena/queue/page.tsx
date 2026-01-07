@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { getMatchmakingData } from "@/lib/actions/arena";
 import { getArenaStats } from "@/lib/actions/matchmaking";
 import { ArenaQueueClient } from "@/components/arena/arena-queue-client";
+import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,12 @@ export default async function ArenaQueuePage({ searchParams }: PageProps) {
 
     if (!session?.user) {
         redirect("/auth/login");
+    }
+
+    // Check email verification - required for Arena access
+    const verified = await isEmailVerified();
+    if (!verified) {
+        redirect("/arena/verify-email");
     }
 
     const matchmakingData = await getMatchmakingData();

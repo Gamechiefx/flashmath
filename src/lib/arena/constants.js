@@ -24,17 +24,50 @@ export const PRACTICE_TIERS = {
 export const TIER_ORDER = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM', 'DIAMOND'];
 
 // =============================================================================
-// PER-OPERATION SKILL TIER LEVELS
+// 100-TIER SYSTEM BANDS
 // =============================================================================
-// math_tiers JSON stores tier LEVELS (0-4) per operation
-// These map to Practice Tier names for matchmaking
+// math_tiers JSON stores tier LEVELS (1-100) per operation
+// These are organized into 5 bands of 20 tiers each
 
+export const TIER_BANDS = {
+    FOUNDATION:   { id: 1, name: 'Foundation',   shortName: 'F', range: [1, 20] },
+    INTERMEDIATE: { id: 2, name: 'Intermediate', shortName: 'I', range: [21, 40] },
+    ADVANCED:     { id: 3, name: 'Advanced',     shortName: 'A', range: [41, 60] },
+    EXPERT:       { id: 4, name: 'Expert',       shortName: 'E', range: [61, 80] },
+    MASTER:       { id: 5, name: 'Master',       shortName: 'M', range: [81, 100] }
+};
+
+/**
+ * Get the band for a given tier level (1-100)
+ * @param {number} tier - Tier level (1-100)
+ * @returns {Object} Band object with id, name, shortName, range
+ */
+export function getBandForTier(tier) {
+    if (tier <= 20) return TIER_BANDS.FOUNDATION;
+    if (tier <= 40) return TIER_BANDS.INTERMEDIATE;
+    if (tier <= 60) return TIER_BANDS.ADVANCED;
+    if (tier <= 80) return TIER_BANDS.EXPERT;
+    return TIER_BANDS.MASTER;
+}
+
+/**
+ * Get display name for a tier (e.g., "Advanced 45" or "Master 92")
+ * @param {number} tier - Tier level (1-100)
+ * @returns {string} Display name
+ */
+export function getTierDisplayName(tier) {
+    const band = getBandForTier(tier);
+    return `${band.name} ${tier}`;
+}
+
+// Legacy mapping for backwards compatibility (0-4 → band id)
+// Used during migration period
 export const SKILL_TIER_LEVELS = {
-    0: { name: 'Bronze', id: 0 },
-    1: { name: 'Silver', id: 1 },
-    2: { name: 'Gold', id: 2 },
-    3: { name: 'Platinum', id: 3 },
-    4: { name: 'Diamond', id: 4 }
+    0: { name: 'Foundation', id: 1, tier: 10 },    // Map old 0 → Foundation mid-point
+    1: { name: 'Intermediate', id: 2, tier: 30 },  // Map old 1 → Intermediate mid-point
+    2: { name: 'Advanced', id: 3, tier: 50 },      // Map old 2 → Advanced mid-point
+    3: { name: 'Expert', id: 4, tier: 70 },        // Map old 3 → Expert mid-point
+    4: { name: 'Master', id: 5, tier: 90 }         // Map old 4 → Master mid-point
 };
 
 // Operations tracked in math_tiers

@@ -3,131 +3,66 @@ import { BasePage } from './base-page';
 
 /**
  * Page Object for Match Page (/arena/teams/match/[matchId])
+ * 
+ * Uses data-testid attributes for reliable element selection.
  */
 export class MatchPage extends BasePage {
-    // Phase indicators
-    readonly strategyPhase: Locator;
-    readonly activePhase: Locator;
-    readonly breakPhase: Locator;
-    readonly halftimePhase: Locator;
-    
-    // Strategy phase elements
-    readonly slotAssignmentPanel: Locator;
-    readonly confirmSlotsButton: Locator;
-    readonly strategyTimer: Locator;
+    // Phase indicators (dynamic testid based on phase)
+    readonly phaseIndicator: (phase: string) => Locator;
     
     // IGL Controls
     readonly iglControlsPanel: Locator;
     readonly doubleCallinButton: Locator;
     readonly timeoutButton: Locator;
-    readonly slotSwapButton: Locator;
-    
-    // Match info
-    readonly teamScore: Locator;
-    readonly opponentScore: Locator;
-    readonly roundIndicator: Locator;
-    readonly slotIndicator: Locator;
-    readonly gameTimer: Locator;
+    readonly slotSelectionPanel: Locator;
     
     // Question UI
     readonly questionText: Locator;
     readonly answerInput: Locator;
     readonly submitAnswerButton: Locator;
-    readonly questionCounter: Locator;
     
     // Result indicators
     readonly correctResult: Locator;
     readonly incorrectResult: Locator;
     
-    // Player info
-    readonly activePlayerBadge: Locator;
-    readonly iglBadge: Locator;
-    readonly anchorBadge: Locator;
-    
-    // Quit vote
-    readonly quitButton: Locator;
-    readonly quitVoteModal: Locator;
-    readonly voteYesButton: Locator;
-    readonly voteNoButton: Locator;
-    
     constructor(page: Page) {
         super(page);
         
-        // Phases
-        this.strategyPhase = page.locator('[data-testid="strategy-phase"]');
-        this.activePhase = page.locator('[data-testid="active-phase"]');
-        this.breakPhase = page.locator('[data-testid="break-phase"]');
-        this.halftimePhase = page.locator('[data-testid="halftime-phase"]');
+        // Phase indicator - dynamically select based on phase
+        this.phaseIndicator = (phase: string) => page.locator(`[data-testid="phase-${phase}"]`);
         
-        // Strategy
-        this.slotAssignmentPanel = page.locator('[data-testid="slot-assignment-panel"]');
-        this.confirmSlotsButton = page.locator('[data-testid="confirm-slots"]');
-        this.strategyTimer = page.locator('[data-testid="strategy-timer"]');
-        
-        // IGL Controls
+        // IGL Controls (now with real data-testid)
         this.iglControlsPanel = page.locator('[data-testid="igl-controls"]');
         this.doubleCallinButton = page.locator('[data-testid="double-callin-button"]');
         this.timeoutButton = page.locator('[data-testid="timeout-button"]');
-        this.slotSwapButton = page.locator('[data-testid="slot-swap-button"]');
+        this.slotSelectionPanel = page.locator('[data-testid="slot-selection-panel"]');
         
-        // Match info
-        this.teamScore = page.locator('[data-testid="team-score"]');
-        this.opponentScore = page.locator('[data-testid="opponent-score"]');
-        this.roundIndicator = page.locator('[data-testid="round-indicator"]');
-        this.slotIndicator = page.locator('[data-testid="slot-indicator"]');
-        this.gameTimer = page.locator('[data-testid="game-timer"]');
-        
-        // Question
+        // Question (now with real data-testid)
         this.questionText = page.locator('[data-testid="question-text"]');
         this.answerInput = page.locator('[data-testid="answer-input"]');
         this.submitAnswerButton = page.locator('[data-testid="submit-answer"]');
-        this.questionCounter = page.locator('[data-testid="question-counter"]');
         
-        // Results
+        // Results (now with real data-testid)
         this.correctResult = page.locator('[data-testid="correct-result"]');
         this.incorrectResult = page.locator('[data-testid="incorrect-result"]');
-        
-        // Player info
-        this.activePlayerBadge = page.locator('[data-testid="active-player-badge"]');
-        this.iglBadge = page.locator('[data-testid="igl-badge"]');
-        this.anchorBadge = page.locator('[data-testid="anchor-badge"]');
-        
-        // Quit vote
-        this.quitButton = page.locator('[data-testid="quit-button"]');
-        this.quitVoteModal = page.locator('[data-testid="quit-vote-modal"]');
-        this.voteYesButton = page.locator('[data-testid="vote-yes"]');
-        this.voteNoButton = page.locator('[data-testid="vote-no"]');
     }
     
     /**
-     * Wait for strategy phase to appear
+     * Wait for a specific phase
      */
-    async waitForStrategyPhase(): Promise<void> {
-        await expect(this.strategyPhase).toBeVisible({ timeout: 30000 });
-    }
-    
-    /**
-     * Wait for active phase (match started)
-     */
-    async waitForActivePhase(): Promise<void> {
-        await expect(this.activePhase).toBeVisible({ timeout: 60000 });
-    }
-    
-    /**
-     * Confirm slot assignments (IGL only)
-     */
-    async confirmSlots(): Promise<void> {
-        await this.confirmSlotsButton.click();
+    async waitForPhase(phase: string, timeout = 60000): Promise<void> {
+        await expect(this.phaseIndicator(phase)).toBeVisible({ timeout });
     }
     
     /**
      * Get current phase
      */
     async getCurrentPhase(): Promise<string> {
-        if (await this.strategyPhase.isVisible()) return 'strategy';
-        if (await this.activePhase.isVisible()) return 'active';
-        if (await this.breakPhase.isVisible()) return 'break';
-        if (await this.halftimePhase.isVisible()) return 'halftime';
+        for (const phase of ['strategy', 'active', 'break', 'halftime', 'post_match']) {
+            if (await this.phaseIndicator(phase).isVisible({ timeout: 1000 }).catch(() => false)) {
+                return phase;
+            }
+        }
         return 'unknown';
     }
     
@@ -144,6 +79,13 @@ export class MatchPage extends BasePage {
      */
     async getQuestionText(): Promise<string> {
         return await this.questionText.textContent() || '';
+    }
+    
+    /**
+     * Check if question is visible (is active player)
+     */
+    async isActivePlayer(): Promise<boolean> {
+        return await this.questionText.isVisible({ timeout: 3000 }).catch(() => false);
     }
     
     /**
@@ -182,17 +124,10 @@ export class MatchPage extends BasePage {
     }
     
     /**
-     * Check if current user is the active player
-     */
-    async isActivePlayer(): Promise<boolean> {
-        return await this.questionText.isVisible();
-    }
-    
-    /**
-     * Check if current user is IGL
+     * Check if current user is IGL (can see IGL controls)
      */
     async isIGL(): Promise<boolean> {
-        return await this.iglControlsPanel.isVisible();
+        return await this.iglControlsPanel.isVisible({ timeout: 3000 }).catch(() => false);
     }
     
     /**
@@ -200,6 +135,7 @@ export class MatchPage extends BasePage {
      */
     async activateDoubleCallin(slotNumber: number): Promise<void> {
         await this.doubleCallinButton.click();
+        await this.page.waitForTimeout(500);
         await this.page.locator(`[data-testid="callin-slot-${slotNumber}"]`).click();
     }
     
@@ -211,51 +147,42 @@ export class MatchPage extends BasePage {
     }
     
     /**
-     * Initiate quit vote
+     * Check if Double Call-In button is visible
      */
-    async initiateQuitVote(): Promise<void> {
-        await this.quitButton.click();
+    async isDoubleCallinAvailable(): Promise<boolean> {
+        return await this.doubleCallinButton.isVisible({ timeout: 3000 }).catch(() => false);
     }
     
     /**
-     * Vote on quit
+     * Check if Timeout button is visible
      */
-    async voteQuit(vote: 'yes' | 'no'): Promise<void> {
-        if (vote === 'yes') {
-            await this.voteYesButton.click();
-        } else {
-            await this.voteNoButton.click();
+    async isTimeoutAvailable(): Promise<boolean> {
+        return await this.timeoutButton.isVisible({ timeout: 3000 }).catch(() => false);
+    }
+    
+    /**
+     * Wait for answer result
+     */
+    async waitForAnswerResult(expectedCorrect?: boolean): Promise<boolean> {
+        if (expectedCorrect === true) {
+            await expect(this.correctResult).toBeVisible({ timeout: 5000 });
+            return true;
+        } else if (expectedCorrect === false) {
+            await expect(this.incorrectResult).toBeVisible({ timeout: 5000 });
+            return false;
         }
-    }
-    
-    /**
-     * Get current score
-     */
-    async getScores(): Promise<{ team: number; opponent: number }> {
-        const teamScoreText = await this.teamScore.textContent() || '0';
-        const opponentScoreText = await this.opponentScore.textContent() || '0';
-        return {
-            team: parseInt(teamScoreText),
-            opponent: parseInt(opponentScoreText),
-        };
-    }
-    
-    /**
-     * Get current round
-     */
-    async getRound(): Promise<number> {
-        const text = await this.roundIndicator.textContent() || 'Round 1';
-        const match = text.match(/(\d+)/);
-        return match ? parseInt(match[1]) : 1;
+        // Wait for either
+        await expect(this.correctResult.or(this.incorrectResult)).toBeVisible({ timeout: 5000 });
+        return await this.correctResult.isVisible();
     }
     
     /**
      * Verify match page loaded
      */
     async verifyLoaded(): Promise<void> {
-        await expect(
-            this.strategyPhase.or(this.activePhase).or(this.breakPhase)
-        ).toBeVisible({ timeout: 30000 });
+        // Wait for any phase indicator to appear
+        const hasPhase = await this.page.locator('[data-testid^="phase-"]').isVisible({ timeout: 30000 }).catch(() => false);
+        expect(hasPhase).toBeTruthy();
     }
 }
 

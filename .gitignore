@@ -48,3 +48,4 @@ next-env.d.ts
 *.db-wal
 *.db-shm
 /data/
+tests/e2e/.test-credentials.json

@@ -39,7 +39,8 @@ export default defineConfig({
     // Shared settings for all projects
     use: {
         // Base URL - can be overridden with TEST_BASE_URL env var
-        baseURL: process.env.TEST_BASE_URL || 'http://localhost:3001',
+        // Default to Docker container for E2E tests (accounts created there in global-setup)
+        baseURL: process.env.TEST_BASE_URL || 'https://dev.flashmath.io',
         
         // Collect trace on first retry
         trace: 'on-first-retry',
@@ -87,8 +88,11 @@ export default defineConfig({
         // },
     ],
     
-    // Global setup - runs once before all tests
-    // globalSetup: require.resolve('./global-setup'),
+    // Global setup - creates test accounts before all tests
+    globalSetup: require.resolve('./global-setup'),
+    
+    // Global teardown - removes test accounts after all tests
+    globalTeardown: require.resolve('./global-teardown'),
     
     // Web server configuration (optional - start server before tests)
     // Uncomment if you want Playwright to start the server

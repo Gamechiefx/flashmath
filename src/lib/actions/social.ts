@@ -3,11 +3,91 @@
 /**
  * FlashMath Social System - Server Actions
  * Handles friends, friend requests, parties, and party invites
+ * 
+ * Database architecture:
+ * - PostgreSQL: Arena ELO (source of truth for ELO data)
+ * - SQLite: User profiles, friends, practice data
+ * - Redis: Real-time queue state, parties
  */
 
 import { auth } from "@/auth";
 import { getDatabase, generateId, now } from "@/lib/db/sqlite";
+import { getArenaDisplayStatsBatch, getRankFromElo } from "@/lib/arena/arena-db";
 const { getLeagueFromElo } = require('@/lib/arena/leagues.js');
+
+// =============================================================================
+// REDIS QUEUE HELPERS
+// =============================================================================
+
+let redisClient: any = null;
+
+async function getRedis() {
+    if (redisClient) return redisClient;
+    try {
+        const Redis = (await import('ioredis')).default;
+        redisClient = new Redis({
+            host: process.env.REDIS_HOST || 'redis',
+            port: parseInt(process.env.REDIS_PORT || '6379'),
+            maxRetriesPerRequest: 3,
+        });
+        return redisClient;
+    } catch (error) {
+        console.error('[Social] Redis connection failed:', error);
+        return null;
+    }
+}
+
+/**
+ * Cancel all queue entries for a party
+ * Called when party membership changes or party is disbanded
+ */
+async function cancelPartyQueues(partyId: string): Promise<void> {
+    try {
+        const redis = await getRedis();
+        if (!redis) return;
+
+        // Team queue prefixes
+        const TEAM_QUEUE_PREFIX = 'team:queue:';
+        const TEAMMATE_QUEUE_PREFIX = 'team:teammates:';
+
+        // Get the entry data to find which queue type
+        const entryData = await redis.get(`${TEAM_QUEUE_PREFIX}entry:${partyId}`);
+        if (entryData) {
+            const entry = JSON.parse(entryData);
+            const queueKey = `${TEAM_QUEUE_PREFIX}${entry.odMatchType}:5v5`;
+            await redis.zrem(queueKey, partyId);
+            await redis.del(`${TEAM_QUEUE_PREFIX}entry:${partyId}`);
+            console.log(`[Social] Cancelled team queue for party ${partyId}`);
+        }
+
+        // Also check teammate queue
+        const teammateData = await redis.get(`${TEAMMATE_QUEUE_PREFIX}entry:${partyId}`);
+        if (teammateData) {
+            await redis.zrem(`${TEAMMATE_QUEUE_PREFIX}5v5`, partyId);
+            await redis.del(`${TEAMMATE_QUEUE_PREFIX}entry:${partyId}`);
+            console.log(`[Social] Cancelled teammate queue for party ${partyId}`);
+        }
+    } catch (error) {
+        console.error('[Social] Failed to cancel party queues:', error);
+    }
+}
+
+/**
+ * Check if party has an active match found (prevent modifications)
+ */
+async function hasActiveMatch(partyId: string): Promise<boolean> {
+    try {
+        const redis = await getRedis();
+        if (!redis) return false;
+
+        const TEAM_MATCH_PREFIX = 'team:match:';
+        const matchData = await redis.get(`${TEAM_MATCH_PREFIX}${partyId}`);
+        return !!matchData;
+    } catch (error) {
+        console.error('[Social] Failed to check active match:', error);
+        return false;
+    }
+}
 
 // =============================================================================
 // TYPES
@@ -67,6 +147,8 @@ export interface PartyMember {
     odName: string;
     odLevel: number;
     odEquippedFrame: string;
+    odEquippedBanner: string;
+    odEquippedTitle: string;
     odOnline: boolean;
     isLeader: boolean;
     joinedAt: string;
@@ -126,8 +208,34 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
     const db = getDatabase();
 
     try {
-        // Get all friends - only query where user_id = current user to avoid duplicates
-        // (friendships are stored bidirectionally, so each friendship has 2 rows)
+        // Auto-repair: Check for and fix one-way friendships for this user
+        // Find users who have this user as a friend (f.friend_id = userId), 
+        // but this user doesn't have them as a friend (no matching f.user_id = userId row)
+        const missingReverse = db.prepare(`
+            SELECT f.user_id as other_user_id, f.created_at
+            FROM friendships f
+            WHERE f.friend_id = ?
+            AND NOT EXISTS (
+                SELECT 1 FROM friendships f2 
+                WHERE f2.user_id = ? AND f2.friend_id = f.user_id
+            )
+        `).all(userId, userId) as any[];
+
+        if (missingReverse.length > 0) {
+            console.log(`[Social] Auto-repairing ${missingReverse.length} one-way friendships for user ${userId}`);
+            for (const f of missingReverse) {
+                const newId = generateId();
+                // Create userId -> other_user_id friendship
+                db.prepare(`
+                    INSERT OR IGNORE INTO friendships (id, user_id, friend_id, created_at)
+                    VALUES (?, ?, ?, ?)
+                `).run(newId, userId, f.other_user_id, f.created_at || now());
+                console.log(`[Social] Auto-repaired: ${userId} -> ${f.other_user_id}`);
+            }
+        }
+
+        // Get all friends from SQLite (profile data only, no ELO)
+        // ELO is fetched from PostgreSQL separately
         const friends = db.prepare(`
             SELECT 
                 f.id as friendship_id,
@@ -136,13 +244,16 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
                 u.name,
                 u.level,
                 u.equipped_items,
-                u.last_active,
-                u.arena_elo_duel
+                u.last_active
             FROM friendships f
             JOIN users u ON f.friend_id = u.id
             WHERE f.user_id = ?
             ORDER BY u.last_active DESC NULLS LAST
         `).all(userId) as any[];
+
+        // Batch fetch ELO data from PostgreSQL (source of truth)
+        const friendIds = friends.map(f => f.user_id);
+        const arenaStats = await getArenaDisplayStatsBatch(friendIds);
 
         const result: Friend[] = friends.map(f => {
             let equipped: any = {};
@@ -152,9 +263,8 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
                     : f.equipped_items || {};
             } catch { }
 
-            // Calculate rank from ELO
-            const duelElo = f.arena_elo_duel || 300;
-            const leagueInfo = getLeagueFromElo(duelElo);
+            // Get arena stats from PostgreSQL (source of truth)
+            const stats = arenaStats.get(f.user_id);
 
             return {
                 id: f.user_id,
@@ -167,9 +277,10 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
                 odLastActive: f.last_active,
                 friendshipId: f.friendship_id,
                 friendsSince: f.friends_since,
-                odDuelElo: duelElo,
-                odDuelRank: leagueInfo.league, // Use 'league' (BRONZE) not 'leagueName' (Bronze)
-                odDuelDivision: leagueInfo.divisionRoman,
+                // ELO from PostgreSQL (source of truth)
+                odDuelElo: stats?.odDuelElo || 300,
+                odDuelRank: stats?.odDuelRank || 'BRONZE',
+                odDuelDivision: stats?.odDuelDivision || 'IV',
             };
         });
 
@@ -177,6 +288,138 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
     } catch (error: any) {
         console.error('[Social] getFriendsList error:', error);
         return { friends: [], error: error.message };
+    }
+}
+
+/**
+ * Repair one-way friendships by creating missing bidirectional entries
+ * 
+ * This fixes data inconsistencies where friendship A->B exists but B->A is missing.
+ * Run this if users report asymmetric friend visibility.
+ */
+export async function repairOneWayFriendships(): Promise<{
+    success: boolean;
+    repaired: number;
+    error?: string;
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, repaired: 0, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Find friendships where the reverse doesn't exist for this user
+        // Case 1: User is in user_id but reverse (friend_id -> user_id) is missing
+        const missingReverse1 = db.prepare(`
+            SELECT f.id, f.user_id, f.friend_id, f.created_at
+            FROM friendships f
+            WHERE f.user_id = ?
+            AND NOT EXISTS (
+                SELECT 1 FROM friendships f2 
+                WHERE f2.user_id = f.friend_id AND f2.friend_id = f.user_id
+            )
+        `).all(userId) as any[];
+
+        // Case 2: User is in friend_id but reverse (user_id -> friend_id) is missing  
+        const missingReverse2 = db.prepare(`
+            SELECT f.id, f.user_id, f.friend_id, f.created_at
+            FROM friendships f
+            WHERE f.friend_id = ?
+            AND NOT EXISTS (
+                SELECT 1 FROM friendships f2 
+                WHERE f2.user_id = f.friend_id AND f2.friend_id = f.user_id
+            )
+        `).all(userId) as any[];
+
+        let repaired = 0;
+        const timestamp = now();
+
+        // Repair missing reverse friendships
+        for (const f of missingReverse1) {
+            const newId = generateId();
+            db.prepare(`
+                INSERT OR IGNORE INTO friendships (id, user_id, friend_id, created_at)
+                VALUES (?, ?, ?, ?)
+            `).run(newId, f.friend_id, f.user_id, f.created_at || timestamp);
+            repaired++;
+            console.log(`[Social] Repaired friendship: added ${f.friend_id} -> ${f.user_id}`);
+        }
+
+        for (const f of missingReverse2) {
+            const newId = generateId();
+            db.prepare(`
+                INSERT OR IGNORE INTO friendships (id, user_id, friend_id, created_at)
+                VALUES (?, ?, ?, ?)
+            `).run(newId, f.friend_id, f.user_id, f.created_at || timestamp);
+            repaired++;
+            console.log(`[Social] Repaired friendship: added ${f.friend_id} -> ${f.user_id}`);
+        }
+
+        if (repaired > 0) {
+            console.log(`[Social] Repaired ${repaired} one-way friendships for user ${userId}`);
+        }
+
+        return { success: true, repaired };
+    } catch (error: any) {
+        console.error('[Social] repairOneWayFriendships error:', error);
+        return { success: false, repaired: 0, error: error.message };
+    }
+}
+
+/**
+ * Repair all one-way friendships in the database (admin only)
+ */
+export async function repairAllOneWayFriendships(): Promise<{
+    success: boolean;
+    repaired: number;
+    error?: string;
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, repaired: 0, error: 'Unauthorized' };
+    }
+
+    // Check if user is admin
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+    const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as any;
+    
+    if (!user || !['admin', 'super_admin'].includes(user.role)) {
+        return { success: false, repaired: 0, error: 'Admin access required' };
+    }
+
+    try {
+        // Find ALL one-way friendships in the database
+        const oneWayFriendships = db.prepare(`
+            SELECT f.id, f.user_id, f.friend_id, f.created_at
+            FROM friendships f
+            WHERE NOT EXISTS (
+                SELECT 1 FROM friendships f2 
+                WHERE f2.user_id = f.friend_id AND f2.friend_id = f.user_id
+            )
+        `).all() as any[];
+
+        let repaired = 0;
+        const timestamp = now();
+
+        for (const f of oneWayFriendships) {
+            const newId = generateId();
+            db.prepare(`
+                INSERT OR IGNORE INTO friendships (id, user_id, friend_id, created_at)
+                VALUES (?, ?, ?, ?)
+            `).run(newId, f.friend_id, f.user_id, f.created_at || timestamp);
+            repaired++;
+            console.log(`[Social] Admin repair: added ${f.friend_id} -> ${f.user_id}`);
+        }
+
+        console.log(`[Social] Admin repaired ${repaired} one-way friendships globally`);
+        return { success: true, repaired };
+    } catch (error: any) {
+        console.error('[Social] repairAllOneWayFriendships error:', error);
+        return { success: false, repaired: 0, error: error.message };
     }
 }
 
@@ -435,29 +678,36 @@ export async function acceptFriendRequest(requestId: string): Promise<{
             return { success: false, error: 'Request already processed' };
         }
 
-        // Update request status
-        db.prepare(`
-            UPDATE friend_requests 
-            SET status = 'accepted', responded_at = ?
-            WHERE id = ?
-        `).run(now(), requestId);
-
-        // Create bidirectional friendship entries
+        // Create bidirectional friendship entries in a transaction
+        // This ensures both directions are created atomically
         const friendshipId1 = generateId();
         const friendshipId2 = generateId();
         const timestamp = now();
 
-        db.prepare(`
-            INSERT INTO friendships (id, user_id, friend_id, created_at)
-            VALUES (?, ?, ?, ?)
-        `).run(friendshipId1, request.sender_id, request.receiver_id, timestamp);
+        const createFriendship = db.transaction(() => {
+            // Update request status
+            db.prepare(`
+                UPDATE friend_requests 
+                SET status = 'accepted', responded_at = ?
+                WHERE id = ?
+            `).run(timestamp, requestId);
 
-        db.prepare(`
-            INSERT INTO friendships (id, user_id, friend_id, created_at)
-            VALUES (?, ?, ?, ?)
-        `).run(friendshipId2, request.receiver_id, request.sender_id, timestamp);
+            // Create A -> B friendship (use INSERT OR IGNORE to handle existing)
+            db.prepare(`
+                INSERT OR IGNORE INTO friendships (id, user_id, friend_id, created_at)
+                VALUES (?, ?, ?, ?)
+            `).run(friendshipId1, request.sender_id, request.receiver_id, timestamp);
 
-        console.log(`[Social] Friend request ${requestId} accepted`);
+            // Create B -> A friendship (use INSERT OR IGNORE to handle existing)
+            db.prepare(`
+                INSERT OR IGNORE INTO friendships (id, user_id, friend_id, created_at)
+                VALUES (?, ?, ?, ?)
+            `).run(friendshipId2, request.receiver_id, request.sender_id, timestamp);
+        });
+
+        createFriendship();
+
+        console.log(`[Social] Friend request ${requestId} accepted (bidirectional)`);
         return { success: true, senderId: request.sender_id, accepterName };
     } catch (error: any) {
         console.error('[Social] acceptFriendRequest error:', error);
@@ -604,17 +854,26 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                 WHERE p.id = ?
             `).get(membership.party_id) as any;
 
+            // Clean up stale party membership if party no longer exists
+            if (!partyData) {
+                console.log(`[Social] getPartyData: Cleaning up orphaned party membership for user ${userId}, party ${membership.party_id} no longer exists`);
+                db.prepare(`DELETE FROM party_members WHERE user_id = ? AND party_id = ?`).run(userId, membership.party_id);
+            }
+
             if (partyData) {
-                // Get all members with team mode extensions
+                // Get all members (profile data only, no ELO from SQLite)
                 const members = db.prepare(`
                     SELECT pm.user_id, pm.joined_at, pm.is_ready, pm.preferred_operation,
-                           u.name, u.level, u.equipped_items, u.last_active, 
-                           u.arena_elo_duel, u.arena_elo_5v5
+                           u.name, u.level, u.equipped_items, u.last_active
                     FROM party_members pm
                     JOIN users u ON pm.user_id = u.id
                     WHERE pm.party_id = ?
                     ORDER BY pm.joined_at ASC
                 `).all(membership.party_id) as any[];
+
+                // Batch fetch ELO data from PostgreSQL (source of truth)
+                const memberIds = members.map(m => m.user_id);
+                const arenaStats = await getArenaDisplayStatsBatch(memberIds);
 
                 party = {
                     id: partyData.id,
@@ -637,19 +896,21 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                             equipped = JSON.parse(m.equipped_items || '{}');
                         } catch { }
 
-                        // Calculate rank from ELO
-                        const duelElo = m.arena_elo_duel || 300;
-                        const leagueInfo = getLeagueFromElo(duelElo);
+                        // Get arena stats from PostgreSQL (source of truth)
+                        const stats = arenaStats.get(m.user_id);
 
                         return {
                             odUserId: m.user_id,
                             odName: m.name,
                             odLevel: m.level || 1,
                             odEquippedFrame: equipped.frame || 'default',
+                            odEquippedBanner: equipped.banner || 'default',
+                            odEquippedTitle: equipped.title || 'default',
                             odOnline: isUserOnline(m.last_active),
-                            odDuelElo: duelElo,
-                            odDuelRank: leagueInfo.league, // Use 'league' (BRONZE) not 'leagueName' (Bronze)
-                            odDuelDivision: leagueInfo.divisionRoman,
+                            // ELO from PostgreSQL (source of truth)
+                            odDuelElo: stats?.odDuelElo || 300,
+                            odDuelRank: stats?.odDuelRank || 'BRONZE',
+                            odDuelDivision: stats?.odDuelDivision || 'IV',
                             isLeader: m.user_id === partyData.leader_id,
                             joinedAt: m.joined_at,
                             // Arena Teams 5v5 extensions
@@ -657,7 +918,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                             isIgl: m.user_id === partyData.igl_id,
                             isAnchor: m.user_id === partyData.anchor_id,
                             preferredOperation: m.preferred_operation || null,
-                            odElo5v5: m.arena_elo_5v5 || 300,
+                            odElo5v5: stats?.odElo5v5 || 300,
                         };
                     }),
                 };
@@ -1001,6 +1262,7 @@ export async function leaveParty(): Promise<{
     leaverName?: string;
     leaverId?: string;
     disbanded?: boolean;
+    queueCancelled?: boolean;
 }> {
     const session = await auth();
     if (!session?.user) {
@@ -1013,7 +1275,7 @@ export async function leaveParty(): Promise<{
 
     try {
         const membership = db.prepare(`
-            SELECT pm.party_id, p.leader_id
+            SELECT pm.party_id, p.leader_id, p.queue_status
             FROM party_members pm
             JOIN parties p ON pm.party_id = p.id
             WHERE pm.user_id = ?
@@ -1025,6 +1287,22 @@ export async function leaveParty(): Promise<{
 
         const partyId = membership.party_id;
         const isLeader = membership.leader_id === userId;
+        const wasInQueue = !!membership.queue_status;
+
+        // Check if a match has already been found (prevent leaving)
+        if (await hasActiveMatch(partyId)) {
+            return { success: false, error: 'Cannot leave party while a match is in progress. Please complete or decline the match first.' };
+        }
+
+        // Cancel any active Redis queue entries BEFORE removing from party
+        let queueCancelled = false;
+        if (wasInQueue) {
+            await cancelPartyQueues(partyId);
+            // Clear SQLite queue status
+            db.prepare(`UPDATE parties SET queue_status = NULL, queue_started_at = NULL WHERE id = ?`).run(partyId);
+            queueCancelled = true;
+            console.log(`[Social] Queue cancelled for party ${partyId} because ${userId} left`);
+        }
 
         // Remove from party
         db.prepare(`DELETE FROM party_members WHERE user_id = ? AND party_id = ?`).run(userId, partyId);
@@ -1048,12 +1326,121 @@ export async function leaveParty(): Promise<{
             const newLeader = remaining[0].user_id;
             db.prepare(`UPDATE parties SET leader_id = ? WHERE id = ?`).run(newLeader, partyId);
             console.log(`[Social] Party ${partyId} leadership transferred to ${newLeader}`);
+            
+            // Clear IGL/Anchor if they were the leaving player
+            db.prepare(`
+                UPDATE parties 
+                SET igl_id = CASE WHEN igl_id = ? THEN NULL ELSE igl_id END,
+                    anchor_id = CASE WHEN anchor_id = ? THEN NULL ELSE anchor_id END
+                WHERE id = ?
+            `).run(userId, userId, partyId);
         }
 
         console.log(`[Social] ${userId} left party ${partyId}`);
-        return { success: true, remainingMemberIds, leaverName, leaverId: userId, disbanded };
+        return { success: true, remainingMemberIds, leaverName, leaverId: userId, disbanded, queueCancelled };
     } catch (error: any) {
         console.error('[Social] leaveParty error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Kick a member from the party
+ * Only the party leader can kick members
+ */
+export async function kickFromParty(targetUserId: string): Promise<{
+    success: boolean;
+    error?: string;
+    remainingMemberIds?: string[];
+    kickedName?: string;
+    kickedId?: string;
+    queueCancelled?: boolean;
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { success: false, error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+    const db = getDatabase();
+
+    try {
+        // Verify current user is the party leader
+        const leaderMembership = db.prepare(`
+            SELECT pm.party_id, p.leader_id, p.queue_status, p.igl_id, p.anchor_id
+            FROM party_members pm
+            JOIN parties p ON pm.party_id = p.id
+            WHERE pm.user_id = ?
+        `).get(userId) as any;
+
+        if (!leaderMembership) {
+            return { success: false, error: 'You are not in a party' };
+        }
+
+        if (leaderMembership.leader_id !== userId) {
+            return { success: false, error: 'Only the party leader can kick members' };
+        }
+
+        if (targetUserId === userId) {
+            return { success: false, error: 'You cannot kick yourself. Use leave party instead.' };
+        }
+
+        const partyId = leaderMembership.party_id;
+
+        // Verify target is in the same party
+        const targetMembership = db.prepare(`
+            SELECT pm.id, u.name
+            FROM party_members pm
+            JOIN users u ON u.id = pm.user_id
+            WHERE pm.party_id = ? AND pm.user_id = ?
+        `).get(partyId, targetUserId) as any;
+
+        if (!targetMembership) {
+            return { success: false, error: 'Player is not in your party' };
+        }
+
+        // Check if a match has already been found (prevent kicking)
+        if (await hasActiveMatch(partyId)) {
+            return { success: false, error: 'Cannot kick members while a match is in progress' };
+        }
+
+        // Cancel queue if party was queuing
+        let queueCancelled = false;
+        if (leaderMembership.queue_status) {
+            await cancelPartyQueues(partyId);
+            db.prepare(`UPDATE parties SET queue_status = NULL, queue_started_at = NULL WHERE id = ?`).run(partyId);
+            queueCancelled = true;
+            console.log(`[Social] Queue cancelled for party ${partyId} because ${targetUserId} was kicked`);
+        }
+
+        // Remove target from party
+        db.prepare(`DELETE FROM party_members WHERE user_id = ? AND party_id = ?`).run(targetUserId, partyId);
+
+        // Clear IGL/Anchor if they were the kicked player
+        if (leaderMembership.igl_id === targetUserId || leaderMembership.anchor_id === targetUserId) {
+            db.prepare(`
+                UPDATE parties 
+                SET igl_id = CASE WHEN igl_id = ? THEN NULL ELSE igl_id END,
+                    anchor_id = CASE WHEN anchor_id = ? THEN NULL ELSE anchor_id END
+                WHERE id = ?
+            `).run(targetUserId, targetUserId, partyId);
+        }
+
+        // Get remaining member IDs for notification
+        const remaining = db.prepare(`
+            SELECT user_id FROM party_members WHERE party_id = ?
+        `).all(partyId) as { user_id: string }[];
+
+        console.log(`[Social] ${userId} kicked ${targetUserId} (${targetMembership.name}) from party ${partyId}`);
+        return { 
+            success: true, 
+            remainingMemberIds: remaining.map(m => m.user_id), 
+            kickedName: targetMembership.name,
+            kickedId: targetUserId,
+            queueCancelled
+        };
+    } catch (error: any) {
+        console.error('[Social] kickFromParty error:', error);
         return { success: false, error: error.message };
     }
 }
@@ -1154,6 +1541,20 @@ export async function getSocialStats(): Promise<SocialStats> {
     const db = getDatabase();
 
     try {
+        // Clean up any orphaned party memberships (where party no longer exists)
+        // This handles cases where a user logs in and has stale party references
+        const orphanedMembership = db.prepare(`
+            SELECT pm.party_id 
+            FROM party_members pm
+            LEFT JOIN parties p ON pm.party_id = p.id
+            WHERE pm.user_id = ? AND p.id IS NULL
+        `).get(userId) as any;
+        
+        if (orphanedMembership) {
+            console.log(`[Social] getSocialStats: Cleaning up orphaned party membership for user ${userId}, party ${orphanedMembership.party_id}`);
+            db.prepare(`DELETE FROM party_members WHERE user_id = ? AND party_id = ?`).run(userId, orphanedMembership.party_id);
+        }
+
         // Count friends and online friends - only query one direction to avoid duplicates
         const friends = db.prepare(`
             SELECT u.last_active
@@ -1170,7 +1571,7 @@ export async function getSocialStats(): Promise<SocialStats> {
             WHERE receiver_id = ? AND status = 'pending'
         `).get(userId) as any;
 
-        // Get party info
+        // Get party info (only valid parties with existing party record)
         const membership = db.prepare(`
             SELECT pm.party_id, p.max_size
             FROM party_members pm
@@ -1400,10 +1801,10 @@ export async function togglePartyReady(): Promise<{
     const db = getDatabase();
 
     try {
-        // Get user's party membership with party queue status
+        // Get user's party membership with party queue status and role info
         const membership = db.prepare(`
             SELECT pm.id, pm.party_id, pm.is_ready,
-                   p.queue_status
+                   p.queue_status, p.igl_id, p.anchor_id
             FROM party_members pm
             JOIN parties p ON p.id = pm.party_id
             WHERE pm.user_id = ?
@@ -1413,6 +1814,14 @@ export async function togglePartyReady(): Promise<{
             return { success: false, error: 'Not in a party' };
         }
 
+        const isCurrentlyReady = !!membership.is_ready;
+        const wantsToUnready = isCurrentlyReady;
+
+        // Check if a match has been found - prevent un-readying
+        if (wantsToUnready && await hasActiveMatch(membership.party_id)) {
+            return { success: false, error: 'Cannot change ready state while a match is in progress' };
+        }
+
         // Toggle ready state
         const newReadyState = membership.is_ready ? 0 : 1;
         db.prepare(`UPDATE party_members SET is_ready = ? WHERE id = ?`).run(newReadyState, membership.id);
@@ -1420,6 +1829,10 @@ export async function togglePartyReady(): Promise<{
         // If player is un-readying AND the party is currently in queue, cancel the queue
         let queueCancelled = false;
         if (newReadyState === 0 && membership.queue_status) {
+            // Cancel Redis queue entries
+            await cancelPartyQueues(membership.party_id);
+            
+            // Clear SQLite queue status
             db.prepare(`
                 UPDATE parties SET queue_status = NULL, queue_started_at = NULL 
                 WHERE id = ?

@@ -26,6 +26,7 @@ import { TeamWithElo } from '@/lib/actions/teams';
 import { createAITeamMatch, BotDifficulty } from '@/lib/actions/team-matchmaking';
 import { UserAvatar } from '@/components/user-avatar';
 import { usePresence } from '@/lib/socket/use-presence';
+import { TeamPlayerCard, VSScreenBackground } from '@/components/arena/teams';
 
 interface TeamSetupClientProps {
     mode: string;
@@ -551,9 +552,9 @@ export function TeamSetupClient({
     };
 
     return (
-        <div className="min-h-screen bg-background text-foreground">
+        <VSScreenBackground variant="strategy" className="min-h-screen text-foreground">
             {/* Header */}
-            <div className="border-b border-[var(--glass-border)] glass sticky top-0 z-40">
+            <div className="border-b border-[var(--glass-border)] bg-black/40 backdrop-blur-xl sticky top-0 z-40">
                 <div className="max-w-4xl mx-auto px-6 py-4">
                     <div className="flex items-center justify-between">
                         <Link 
@@ -714,6 +715,7 @@ export function TeamSetupClient({
                                         Create a party and invite up to {requiredSize - 1} friends to compete together
                                     </p>
                                     <button
+                                        data-testid="create-party-button"
                                         onClick={handleCreateParty}
                                         disabled={loading}
                                         className={cn(
@@ -735,68 +737,28 @@ export function TeamSetupClient({
                                 </motion.div>
                             ) : (
                                 <div className="space-y-3">
-                                    {/* Party Members */}
+                                    {/* Party Members with Banners */}
                                     {party.members.map((member, index) => (
-                                        <motion.div
+                                        <TeamPlayerCard
                                             key={member.odUserId}
-                                            initial={{ opacity: 0, x: -20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: index * 0.05 }}
-                                            className="flex items-center gap-3 p-3 rounded-xl bg-card/50 border border-[var(--glass-border)]"
-                                        >
-                                            {/* Avatar with Frame */}
-                                            <div className="relative">
-                                                <UserAvatar
-                                                    user={{
-                                                        name: member.odName,
-                                                        equipped_items: { frame: member.odEquippedFrame },
-                                                    }}
-                                                    size="sm"
-                                                />
-                                                {member.isLeader && (
-                                                    <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-accent flex items-center justify-center z-10">
-                                                        <Crown size={10} className="text-accent-foreground" />
-                                                    </div>
-                                                )}
-                                            </div>
-
-                                            {/* Info */}
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    <span className="font-bold text-sm text-card-foreground truncate">
-                                                        {member.odName}
-                                                    </span>
-                                                    {/* Rank Badge */}
-                                                    <span className={cn(
-                                                        "text-[7px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider border",
-                                                        getRankColors(member.odDuelRank)
-                                                    )}>
-                                                        {member.odDuelRank || 'BRONZE'} {member.odDuelDivision || 'I'}
-                                                    </span>
-                                                    {member.isLeader && (
-                                                        <span className="text-[8px] text-accent uppercase tracking-widest font-bold">
-                                                            Leader
-                                                        </span>
-                                                    )}
-                                                    {member.odUserId === currentUserId && (
-                                                        <span className="text-[8px] text-muted-foreground uppercase tracking-widest">
-                                                            You
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                                                    <span>LVL {member.odLevel}</span>
-                                                    <span className="text-[var(--glass-border)]">•</span>
-                                                    <span>{member.odElo5v5 || 300} ELO</span>
-                                                </div>
-                                            </div>
-
-                                            {/* Status */}
-                                            <div className={cn(
-                                                "w-2.5 h-2.5 rounded-full ring-2 ring-background",
-                                                member.odOnline ? "bg-green-500" : "bg-zinc-600"
-                                            )} />
-                                        </motion.div>
+                                            odUserId={member.odUserId}
+                                            name={member.odName}
+                                            level={member.odLevel}
+                                            banner={member.odEquippedBanner || 'default'}
+                                            frame={member.odEquippedFrame || 'default'}
+                                            title={member.odEquippedTitle || 'Player'}
+                                            rank={member.odDuelRank}
+                                            division={member.odDuelDivision}
+                                            isIgl={member.isIgl}
+                                            isAnchor={member.isAnchor}
+                                            isReady={member.isReady || member.isLeader}
+                                            variant="compact"
+                                            index={index}
+                                            className={cn(
+                                                member.isLeader && "ring-1 ring-accent/50",
+                                                member.odUserId === currentUserId && "ring-1 ring-primary/50"
+                                            )}
+                                        />
                                     ))}
                                     
                                     {/* Empty Slots */}
@@ -916,6 +878,7 @@ export function TeamSetupClient({
                                         {party.members.map((member) => (
                                             <button
                                                 key={member.odUserId}
+                                                data-testid={`igl-select-${member.odUserId}`}
                                                 onClick={() => handleSetIGL(member.odUserId)}
                                                 disabled={!isLeader || loading}
                                                 className={cn(
@@ -948,6 +911,7 @@ export function TeamSetupClient({
                                         {party.members.map((member) => (
                                             <button
                                                 key={member.odUserId}
+                                                data-testid={`anchor-select-${member.odUserId}`}
                                                 onClick={() => handleSetAnchor(member.odUserId)}
                                                 disabled={!isLeader || loading}
                                                 className={cn(
@@ -985,57 +949,35 @@ export function TeamSetupClient({
                                 </div>
                                 <div>
                                     <h2 className="text-lg font-bold text-card-foreground">Ready Check</h2>
-                                    <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                                    <p data-testid="ready-count" className="text-[10px] text-muted-foreground uppercase tracking-widest">
                                         {readyCount}/{party.members.length} ready
                                     </p>
                                 </div>
                             </div>
 
                             <div className="space-y-2 mb-8">
-                                {party.members.map((member) => {
+                                {party.members.map((member, idx) => {
                                     const isReady = member.isReady || member.isLeader;
                                     return (
-                                        <motion.div
+                                        <TeamPlayerCard
                                             key={member.odUserId}
-                                            animate={{ 
-                                                backgroundColor: isReady ? 'rgba(34, 197, 94, 0.1)' : 'transparent'
-                                            }}
+                                            odUserId={member.odUserId}
+                                            name={member.odName}
+                                            level={member.odLevel}
+                                            banner={member.odEquippedBanner || 'default'}
+                                            frame={member.odEquippedFrame || 'default'}
+                                            title={member.odEquippedTitle || 'Player'}
+                                            rank={member.odDuelRank}
+                                            division={member.odDuelDivision}
+                                            isIgl={member.isIgl}
+                                            isAnchor={member.isAnchor}
+                                            isReady={isReady}
+                                            variant="compact"
+                                            index={idx}
                                             className={cn(
-                                                "flex items-center justify-between p-3 rounded-xl border transition-all",
-                                                isReady 
-                                                    ? "border-green-500/30" 
-                                                    : "border-[var(--glass-border)]"
+                                                isReady && "ring-2 ring-green-500/50"
                                             )}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                {/* Avatar or Ready Check */}
-                                                <div className="relative">
-                                                    {isReady ? (
-                                                        <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
-                                                            <Check className="w-5 h-5 text-white" />
-                                                        </div>
-                                                    ) : (
-                                                        <UserAvatar
-                                                            user={{
-                                                                name: member.odName,
-                                                                equipped_items: { frame: member.odEquippedFrame },
-                                                            }}
-                                                            size="sm"
-                                                        />
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-sm text-card-foreground flex items-center gap-2">
-                                                        {member.odName}
-                                                        {member.isIgl && <Crown className="w-3.5 h-3.5 text-accent" />}
-                                                        {member.isAnchor && <Anchor className="w-3.5 h-3.5 text-primary" />}
-                                                    </div>
-                                                    <div className="text-[10px] text-muted-foreground">
-                                                        {isReady ? 'Ready!' : 'Not ready'}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </motion.div>
+                                        />
                                     );
                                 })}
                             </div>
@@ -1043,6 +985,7 @@ export function TeamSetupClient({
                             <div className="flex flex-col items-center gap-4">
                                 {!isLeader && (
                                     <button
+                                        data-testid="ready-button"
                                         onClick={handleToggleReady}
                                         disabled={loading}
                                         className={cn(
@@ -1066,6 +1009,7 @@ export function TeamSetupClient({
                                     <div className="flex flex-col items-center gap-3">
                                         <div className="flex items-center gap-3">
                                             <button
+                                                data-testid="find-match-button"
                                                 onClick={handleStartQueue}
                                                 disabled={!allReady || loading}
                                                 className={cn(
@@ -1089,6 +1033,7 @@ export function TeamSetupClient({
                                             
                                             {/* AI Match Button for Testing */}
                                             <button
+                                                data-testid="vs-ai-button"
                                                 onClick={() => setShowAIOptions(!showAIOptions)}
                                                 disabled={!allReady || loading}
                                                 className={cn(
@@ -1123,6 +1068,7 @@ export function TeamSetupClient({
                                                             {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => (
                                                                 <button
                                                                     key={diff}
+                                                                    data-testid={`difficulty-${diff}`}
                                                                     onClick={() => setAIDifficulty(diff)}
                                                                     className={cn(
                                                                         "px-3 py-2 rounded-lg text-sm font-medium transition-all capitalize",
@@ -1137,6 +1083,7 @@ export function TeamSetupClient({
                                                         </div>
                                                         
                                                         <button
+                                                            data-testid="start-ai-match"
                                                             onClick={handleStartAIMatch}
                                                             disabled={loading}
                                                             className="w-full px-6 py-3 rounded-xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:scale-[1.02] transition-all"
@@ -1191,6 +1138,6 @@ export function TeamSetupClient({
                     </motion.div>
                 )}
             </div>
-        </div>
+        </VSScreenBackground>
     );
 }

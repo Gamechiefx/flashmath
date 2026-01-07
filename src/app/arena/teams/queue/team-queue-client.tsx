@@ -786,6 +786,7 @@ export function TeamQueueClient({
                 <AnimatePresence>
                     {match && (
                         <motion.div
+                            data-testid="match-found"
                             initial={{ opacity: 0, scale: 0.8 }}
                             animate={{ opacity: 1, scale: 1 }}
                             className="fixed inset-0 z-50 flex items-center justify-center 
@@ -884,7 +885,7 @@ export function TeamQueueClient({
                     </div>
 
                     {/* Queue Status */}
-                    <div className="p-8 text-center">
+                    <div data-testid="queue-status" className="p-8 text-center">
                         {isJoining ? (
                             <div className="flex flex-col items-center gap-4">
                                 <Loader2 className="w-12 h-12 text-primary animate-spin" />

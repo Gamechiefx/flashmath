@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ArenaModesClient } from "@/components/arena/arena-modes-client";
+import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
@@ -9,6 +10,12 @@ export default async function ArenaModesPage() {
 
     if (!session?.user) {
         redirect("/auth/login");
+    }
+
+    // Check email verification - required for Arena access
+    const verified = await isEmailVerified();
+    if (!verified) {
+        redirect("/arena/verify-email");
     }
 
     // Get user's arena stats from database

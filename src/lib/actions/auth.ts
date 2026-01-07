@@ -2,7 +2,7 @@
 
 import { execute, queryOne, initSchema, getDatabase } from "@/lib/db";
 import bcrypt from "bcryptjs";
-import { signIn } from "@/auth";
+import { signIn, auth } from "@/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
@@ -233,6 +233,36 @@ export async function verifyEmailCode(
 
 export async function resendVerificationCode(email: string): Promise<{ success: boolean; error?: string }> {
     return sendVerificationEmail(email);
+}
+
+/**
+ * Resend verification email to the currently logged-in user
+ * Used when user is authenticated but hasn't verified their email yet
+ */
+export async function resendVerificationEmail(): Promise<{ success: boolean; error?: string }> {
+    const session = await auth();
+    
+    if (!session?.user) {
+        return { success: false, error: 'Not authenticated' };
+    }
+    
+    const userId = (session.user as any).id;
+    if (!userId) {
+        return { success: false, error: 'User ID not found' };
+    }
+    
+    const db = getDatabase();
+    const user = db.prepare('SELECT email, email_verified FROM users WHERE id = ?').get(userId) as any;
+    
+    if (!user) {
+        return { success: false, error: 'User not found' };
+    }
+    
+    if (user.email_verified === 1) {
+        return { success: false, error: 'Email is already verified' };
+    }
+    
+    return sendVerificationEmail(user.email);
 }
 
 // ============================================

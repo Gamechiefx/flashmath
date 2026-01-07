@@ -3,10 +3,26 @@
 /**
  * Arena Matchmaking Server Actions
  * Real-time matchmaking using Redis for queue management
+ * 
+ * Database usage:
+ * - PostgreSQL: Player ELO, match history (via arena-db)
+ * - SQLite: User profiles, practice data
+ * - Redis: Real-time queue state
  */
 
 import { auth } from "@/auth";
 import { v4 as uuidv4 } from 'uuid';
+import { 
+    getPlayerElo as getPlayerEloFromPostgres,
+    getOrCreateArenaPlayer,
+    updatePlayerDuelElo,
+    recordDuelMatch,
+    getFullArenaStats,
+    updatePlayerOperationElo,
+    updatePlayerTeamOperationElo,
+    getRankFromElo,
+    type FullArenaStats,
+} from "@/lib/arena/arena-db";
 
 // Redis client for matchmaking
 let redisClient: any = null;
@@ -32,7 +48,7 @@ interface QueueEntry {
     odUserId: string;
     odUserName: string;
     odElo: number;
-    odTier: string;
+    odTier: number;             // Player's tier (1-100, 100-tier system)
     odOperation: string;
     odMode: string;
     odEquippedBanner: string;
@@ -358,13 +374,13 @@ export async function joinQueue(params: {
     mode: string;
     operation: string;
     elo: number;
-    tier: string;
+    tier: number;           // Player's tier (1-100, 100-tier system)
     equippedBanner: string;
     equippedTitle: string;
     level: number;
     rank: string;           // Player's rank (Bronze, Silver, Gold, etc.)
     division: string;       // Player's division (I, II, III, IV)
-    confidence?: number;  // Practice confidence score (0-1)
+    confidence?: number;    // Practice confidence score (0-1)
     isReturningPlayer?: boolean; // Flagged as returning player
 }): Promise<{ success: boolean; queuePosition?: number; error?: string; confidenceBracket?: string }> {
     const session = await auth();
@@ -380,6 +396,20 @@ export async function joinQueue(params: {
     // Log confidence bracket for debugging
     console.log(`[Matchmaking] ${userName} joining queue - confidence: ${(confidence * 100).toFixed(1)}% (${confidenceBracket})`);
 
+    // Ensure player exists in PostgreSQL arena database and get authoritative ELO
+    let playerElo = params.elo;
+    try {
+        await getOrCreateArenaPlayer(userId, userName);
+        const pgEloData = await getPlayerEloFromPostgres(userId, '1v1');
+        // Use PostgreSQL ELO if available and different from client-provided
+        if (pgEloData.elo && pgEloData.elo !== 1000) {
+            playerElo = pgEloData.elo;
+            console.log(`[Matchmaking] Using PostgreSQL ELO: ${playerElo} (client sent: ${params.elo})`);
+        }
+    } catch (error) {
+        console.warn(`[Matchmaking] PostgreSQL unavailable, using client ELO: ${params.elo}`);
+    }
+
     const redis = await getRedis();
     if (!redis) {
         return { success: false, error: 'Queue service unavailable' };
@@ -393,7 +423,7 @@ export async function joinQueue(params: {
     const entry: QueueEntry = {
         odUserId: userId,
         odUserName: userName,
-        odElo: params.elo,
+        odElo: playerElo,  // Use PostgreSQL-validated ELO
         odTier: params.tier,
         odOperation: params.operation,
         odMode: params.mode,
@@ -572,8 +602,11 @@ export async function checkForMatch(params: {
                 continue;
             }
 
-            // Check tier is within range
-            const candidateTier = parseInt(candidate.odTier) || 0;
+            // Check tier is within range (100-tier system: ±20 tiers)
+            // Handle both number and legacy string formats
+            const candidateTier = typeof candidate.odTier === 'number' 
+                ? candidate.odTier 
+                : (parseInt(String(candidate.odTier)) || 50);
             if (Math.abs(params.tier - candidateTier) > TIER_RANGE) {
                 console.log(`[Matchmaking] Skipping ${candidate.odUserName}: tier ${candidateTier} outside range ±${TIER_RANGE} from ${params.tier}`);
                 continue;
@@ -660,7 +693,7 @@ export async function checkForMatch(params: {
                 playerConfidence: playerConfidence,
                 playerIsReturning: playerIsReturning,
                 opponentElo: candidate.odElo,
-                opponentTier: parseInt(candidate.odTier) || 0,
+                opponentTier: typeof candidate.odTier === 'number' ? candidate.odTier : (parseInt(String(candidate.odTier)) || 50),
                 opponentConfidence: candidate.odConfidence ?? 0.5,
                 opponentIsReturning: candidate.odIsReturningPlayer ?? false,
                 queueTimeSeconds: params.queueTime,
@@ -749,7 +782,7 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             odUserId: userId,
             odUserName: userName,
             odElo: params.elo,
-            odTier: params.tier.toString(),
+            odTier: params.tier,  // Now a number (1-100)
             odOperation: params.operation,
             odMode: params.mode,
             odEquippedBanner: userBanner,
@@ -765,7 +798,7 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
             odUserId: 'ai-' + matchId, // Unique ID for AI
             odUserName: aiName,
             odElo: params.elo + aiEloVariance,
-            odTier: aiTier.toString(),
+            odTier: aiTier,  // Now a number (1-100)
             odOperation: params.operation,
             odMode: params.mode,
             odEquippedBanner: aiBanners[Math.floor(Math.random() * aiBanners.length)],
@@ -1286,22 +1319,34 @@ export async function saveMatchResult(params: {
 
         // Only update ELO for ranked matches (not mixed operation)
         if (isRanked) {
-            // Get the ELO column name based on mode and operation
-            const eloColumn = getEloColumnName(params.mode, params.operation);
+            // Map operation name to PostgreSQL column suffix
+            const pgOperation = params.operation as 'addition' | 'subtraction' | 'multiplication' | 'division';
             
-            // Get current ELOs for the specific operation
+            // Get current ELOs from PostgreSQL (source of truth)
             let winnerCurrentElo = 300;
             let loserCurrentElo = 300;
             let winnerStreak = 0;
 
             if (isWinnerHuman) {
-                const winnerData = db.prepare(`SELECT ${eloColumn}, ${isDuel ? 'arena_duel_win_streak' : 'arena_team_win_streak'} as streak FROM users WHERE id = ?`).get(params.winnerId) as any;
-                winnerCurrentElo = winnerData?.[eloColumn] || 300;
-                winnerStreak = (winnerData?.streak || 0) + 1;
+                // Ensure player exists in PostgreSQL
+                const winnerUser = db.prepare('SELECT name FROM users WHERE id = ?').get(params.winnerId) as any;
+                const winnerPg = await getOrCreateArenaPlayer(params.winnerId, winnerUser?.name || 'Player');
+                
+                // Get operation-specific ELO
+                const eloKey = isDuel 
+                    ? `elo_${pgOperation}` 
+                    : `elo_${params.mode}_${pgOperation}`;
+                winnerCurrentElo = (winnerPg as any)[eloKey] || 300;
+                winnerStreak = (isDuel ? winnerPg.duel_win_streak : winnerPg.team_win_streak) + 1 || 1;
             }
             if (isLoserHuman) {
-                const loserData = db.prepare(`SELECT ${eloColumn} FROM users WHERE id = ?`).get(params.loserId) as any;
-                loserCurrentElo = loserData?.[eloColumn] || 300;
+                const loserUser = db.prepare('SELECT name FROM users WHERE id = ?').get(params.loserId) as any;
+                const loserPg = await getOrCreateArenaPlayer(params.loserId, loserUser?.name || 'Player');
+                
+                const eloKey = isDuel 
+                    ? `elo_${pgOperation}` 
+                    : `elo_${params.mode}_${pgOperation}`;
+                loserCurrentElo = (loserPg as any)[eloKey] || 300;
             }
 
             // Build performance metrics for new ELO calculation
@@ -1422,119 +1467,62 @@ export async function saveMatchResult(params: {
             const newWinnerElo = Math.max(100, winnerCurrentElo + winnerEloChange);
             const newLoserElo = Math.max(100, loserCurrentElo + loserEloChange);
 
-            // Update winner
+            // Update winner ELO in PostgreSQL (source of truth)
             if (isWinnerHuman) {
+                // Update coins in SQLite (user profile data)
                 const winner = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.winnerId) as any;
                 const newCoins = (winner?.coins || 0) + winnerCoinsEarned;
+                db.prepare("UPDATE users SET coins = ? WHERE id = ?").run(newCoins, params.winnerId);
 
-                // Get all operation ELOs for this mode to calculate average
-                const winnerAllElos = db.prepare(`
-                    SELECT ${isDuel ? 'arena_elo_duel_addition, arena_elo_duel_subtraction, arena_elo_duel_multiplication, arena_elo_duel_division, arena_duel_win_streak, arena_duel_best_win_streak'
-                        : `arena_elo_${params.mode}_addition, arena_elo_${params.mode}_subtraction, arena_elo_${params.mode}_multiplication, arena_elo_${params.mode}_division, arena_team_win_streak, arena_team_best_win_streak`}
-                    FROM users WHERE id = ?
-                `).get(params.winnerId) as any;
-
-                // Calculate new averages
-                const opElos: Record<string, number> = {};
-                for (const op of RANKED_OPERATIONS) {
-                    const col = isDuel ? `arena_elo_duel_${op}` : `arena_elo_${params.mode}_${op}`;
-                    opElos[op] = op === params.operation ? newWinnerElo : (winnerAllElos?.[col] || 300);
-                }
-                const newModeAvg = calculateAverageElo(opElos);
-
-                const streakCol = isDuel ? 'arena_duel_win_streak' : 'arena_team_win_streak';
-                const bestStreakCol = isDuel ? 'arena_duel_best_win_streak' : 'arena_team_best_win_streak';
-                const winsCol = isDuel ? 'arena_duel_wins' : 'arena_team_wins';
-                const avgCol = isDuel ? 'arena_elo_duel' : `arena_elo_${params.mode}`;
-
-                const currentBestStreak = winnerAllElos?.[bestStreakCol] || 0;
-                const newBestStreak = Math.max(currentBestStreak, winnerStreak);
-
-                // For team modes, also update overall team ELO average
-                let teamEloUpdate = '';
-                if (!isDuel) {
-                    // Get all team mode averages and recalculate team overall
-                    const teamModeElos = db.prepare(`
-                        SELECT arena_elo_2v2, arena_elo_3v3, arena_elo_4v4, arena_elo_5v5 FROM users WHERE id = ?
-                    `).get(params.winnerId) as any;
-                    
-                    const modeAvgs = {
-                        '2v2': params.mode === '2v2' ? newModeAvg : (teamModeElos?.arena_elo_2v2 || 300),
-                        '3v3': params.mode === '3v3' ? newModeAvg : (teamModeElos?.arena_elo_3v3 || 300),
-                        '4v4': params.mode === '4v4' ? newModeAvg : (teamModeElos?.arena_elo_4v4 || 300),
-                        '5v5': params.mode === '5v5' ? newModeAvg : (teamModeElos?.arena_elo_5v5 || 300),
-                    };
-                    const newTeamAvg = Math.round((modeAvgs['2v2'] + modeAvgs['3v3'] + modeAvgs['4v4'] + modeAvgs['5v5']) / 4);
-                    teamEloUpdate = `, arena_elo_team = ${newTeamAvg}`;
+                // Update ELO in PostgreSQL
+                if (isDuel) {
+                    await updatePlayerOperationElo(
+                        params.winnerId,
+                        pgOperation,
+                        newWinnerElo,
+                        winnerEloChange,
+                        true // won
+                    );
+                } else {
+                    await updatePlayerTeamOperationElo(
+                        params.winnerId,
+                        params.mode as '2v2' | '3v3' | '4v4' | '5v5',
+                        pgOperation,
+                        newWinnerElo,
+                        true // won
+                    );
                 }
 
-                db.prepare(`
-                    UPDATE users SET
-                        ${eloColumn} = ?,
-                        ${avgCol} = ?,
-                        ${winsCol} = COALESCE(${winsCol}, 0) + 1,
-                        ${streakCol} = ?,
-                        ${bestStreakCol} = ?,
-                        coins = ?
-                        ${teamEloUpdate}
-                    WHERE id = ?
-                `).run(newWinnerElo, newModeAvg, winnerStreak, newBestStreak, newCoins, params.winnerId);
-
-                console.log(`[Match] Winner updated: ${eloColumn}=${newWinnerElo}, avg=${newModeAvg}, streak=${winnerStreak}, coins=${newCoins} (+${winnerCoinsEarned})`);
+                console.log(`[Match] Winner updated in PostgreSQL: elo_${pgOperation}=${newWinnerElo}, coins=${newCoins} (+${winnerCoinsEarned})`);
             }
 
-            // Update loser
+            // Update loser ELO in PostgreSQL (source of truth)
             if (isLoserHuman) {
+                // Update coins in SQLite (user profile data)
                 const loser = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.loserId) as any;
                 const newCoins = (loser?.coins || 0) + loserCoinsEarned;
+                db.prepare("UPDATE users SET coins = ? WHERE id = ?").run(newCoins, params.loserId);
 
-                // Get all operation ELOs for this mode to calculate average
-                const loserAllElos = db.prepare(`
-                    SELECT ${isDuel ? 'arena_elo_duel_addition, arena_elo_duel_subtraction, arena_elo_duel_multiplication, arena_elo_duel_division'
-                        : `arena_elo_${params.mode}_addition, arena_elo_${params.mode}_subtraction, arena_elo_${params.mode}_multiplication, arena_elo_${params.mode}_division`}
-                    FROM users WHERE id = ?
-                `).get(params.loserId) as any;
-
-                const opElos: Record<string, number> = {};
-                for (const op of RANKED_OPERATIONS) {
-                    const col = isDuel ? `arena_elo_duel_${op}` : `arena_elo_${params.mode}_${op}`;
-                    opElos[op] = op === params.operation ? newLoserElo : (loserAllElos?.[col] || 300);
-                }
-                const newModeAvg = calculateAverageElo(opElos);
-
-                const lossesCol = isDuel ? 'arena_duel_losses' : 'arena_team_losses';
-                const streakCol = isDuel ? 'arena_duel_win_streak' : 'arena_team_win_streak';
-                const avgCol = isDuel ? 'arena_elo_duel' : `arena_elo_${params.mode}`;
-
-                // For team modes, also update overall team ELO average
-                let teamEloUpdate = '';
-                if (!isDuel) {
-                    const teamModeElos = db.prepare(`
-                        SELECT arena_elo_2v2, arena_elo_3v3, arena_elo_4v4, arena_elo_5v5 FROM users WHERE id = ?
-                    `).get(params.loserId) as any;
-                    
-                    const modeAvgs = {
-                        '2v2': params.mode === '2v2' ? newModeAvg : (teamModeElos?.arena_elo_2v2 || 300),
-                        '3v3': params.mode === '3v3' ? newModeAvg : (teamModeElos?.arena_elo_3v3 || 300),
-                        '4v4': params.mode === '4v4' ? newModeAvg : (teamModeElos?.arena_elo_4v4 || 300),
-                        '5v5': params.mode === '5v5' ? newModeAvg : (teamModeElos?.arena_elo_5v5 || 300),
-                    };
-                    const newTeamAvg = Math.round((modeAvgs['2v2'] + modeAvgs['3v3'] + modeAvgs['4v4'] + modeAvgs['5v5']) / 4);
-                    teamEloUpdate = `, arena_elo_team = ${newTeamAvg}`;
+                // Update ELO in PostgreSQL
+                if (isDuel) {
+                    await updatePlayerOperationElo(
+                        params.loserId,
+                        pgOperation,
+                        newLoserElo,
+                        loserEloChange,
+                        false // lost
+                    );
+                } else {
+                    await updatePlayerTeamOperationElo(
+                        params.loserId,
+                        params.mode as '2v2' | '3v3' | '4v4' | '5v5',
+                        pgOperation,
+                        newLoserElo,
+                        false // lost
+                    );
                 }
 
-                db.prepare(`
-                    UPDATE users SET
-                        ${eloColumn} = ?,
-                        ${avgCol} = ?,
-                        ${lossesCol} = COALESCE(${lossesCol}, 0) + 1,
-                        ${streakCol} = 0,
-                        coins = ?
-                        ${teamEloUpdate}
-                    WHERE id = ?
-                `).run(newLoserElo, newModeAvg, newCoins, params.loserId);
-
-                console.log(`[Match] Loser updated: ${eloColumn}=${newLoserElo}, avg=${newModeAvg}, coins=${newCoins} (+${loserCoinsEarned})`);
+                console.log(`[Match] Loser updated in PostgreSQL: elo_${pgOperation}=${newLoserElo}, coins=${newCoins} (+${loserCoinsEarned})`);
             }
             // Record placement match progress for returning players
             if (winnerPlacement.inPlacementMode) {
@@ -1794,120 +1782,24 @@ export async function getArenaStats(userId?: string): Promise<ArenaStatsResult> 
     }
 
     try {
-        const { getDatabase } = await import("@/lib/db");
-        const { calculateArenaRank, getHighestTier } = await import("@/lib/arena/ranks");
-        const db = getDatabase();
-
-        // Get all arena-related columns
-        let user;
-        try {
-            user = db.prepare(`
-                SELECT 
-                    -- Duel stats
-                    arena_elo_duel, arena_elo_duel_addition, arena_elo_duel_subtraction,
-                    arena_elo_duel_multiplication, arena_elo_duel_division,
-                    arena_duel_wins, arena_duel_losses, arena_duel_win_streak, arena_duel_best_win_streak,
-                    -- Team stats
-                    arena_elo_team, arena_team_wins, arena_team_losses, 
-                    arena_team_win_streak, arena_team_best_win_streak,
-                    -- 2v2
-                    arena_elo_2v2, arena_elo_2v2_addition, arena_elo_2v2_subtraction,
-                    arena_elo_2v2_multiplication, arena_elo_2v2_division,
-                    -- 3v3
-                    arena_elo_3v3, arena_elo_3v3_addition, arena_elo_3v3_subtraction,
-                    arena_elo_3v3_multiplication, arena_elo_3v3_division,
-                    -- 4v4
-                    arena_elo_4v4, arena_elo_4v4_addition, arena_elo_4v4_subtraction,
-                    arena_elo_4v4_multiplication, arena_elo_4v4_division,
-                    -- 5v5
-                    arena_elo_5v5, arena_elo_5v5_addition, arena_elo_5v5_subtraction,
-                    arena_elo_5v5_multiplication, arena_elo_5v5_division,
-                    -- For rank calculation
-                    math_tiers
-                FROM users WHERE id = ?
-            `).get(targetId) as any;
-        } catch (e) {
-            console.error('[Arena] Error fetching stats, using defaults:', e);
+        // Get stats from PostgreSQL (source of truth)
+        const pgStats = await getFullArenaStats(targetId);
+        
+        if (!pgStats) {
+            // Player doesn't exist in PostgreSQL yet, create them
+            const { getDatabase } = await import("@/lib/db");
+            const db = getDatabase();
+            const user = db.prepare('SELECT name FROM users WHERE id = ?').get(targetId) as any;
+            if (user) {
+                await getOrCreateArenaPlayer(targetId, user.name || 'Player');
+                // Return defaults for new player
+            }
             return DEFAULT_STATS;
         }
 
-        if (!user) return DEFAULT_STATS;
-
-        // Get highest practice tier for rank bracket
-        let mathTiers: Record<string, number> = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
-        try {
-            if (user.math_tiers) {
-                mathTiers = typeof user.math_tiers === 'string' ? JSON.parse(user.math_tiers) : user.math_tiers;
-            }
-        } catch (e) { }
-        const highestTier = getHighestTier(mathTiers);
-
-        // Calculate duel rank
-        const duelWins = user.arena_duel_wins || 0;
-        const duelRankInfo = calculateArenaRank(duelWins, highestTier);
-
-        // Calculate team rank
-        const teamWins = user.arena_team_wins || 0;
-        const teamRankInfo = calculateArenaRank(teamWins, highestTier);
-
-        return {
-            duel: {
-                elo: user.arena_elo_duel || 300,
-                addition: user.arena_elo_duel_addition || 300,
-                subtraction: user.arena_elo_duel_subtraction || 300,
-                multiplication: user.arena_elo_duel_multiplication || 300,
-                divisionOp: user.arena_elo_duel_division || 300,
-                wins: duelWins,
-                losses: user.arena_duel_losses || 0,
-                winStreak: user.arena_duel_win_streak || 0,
-                bestWinStreak: user.arena_duel_best_win_streak || 0,
-                rank: duelRankInfo.rank,
-                rankDivision: duelRankInfo.division,
-                winsToNextDivision: duelRankInfo.winsToNextDivision
-            },
-            team: {
-                elo: user.arena_elo_team || 300,
-                wins: teamWins,
-                losses: user.arena_team_losses || 0,
-                winStreak: user.arena_team_win_streak || 0,
-                bestWinStreak: user.arena_team_best_win_streak || 0,
-                rank: teamRankInfo.rank,
-                rankDivision: teamRankInfo.division,
-                winsToNextDivision: teamRankInfo.winsToNextDivision,
-                modes: {
-                    '2v2': {
-                        elo: user.arena_elo_2v2 || 300,
-                        addition: user.arena_elo_2v2_addition || 300,
-                        subtraction: user.arena_elo_2v2_subtraction || 300,
-                        multiplication: user.arena_elo_2v2_multiplication || 300,
-                        divisionOp: user.arena_elo_2v2_division || 300,
-                    },
-                    '3v3': {
-                        elo: user.arena_elo_3v3 || 300,
-                        addition: user.arena_elo_3v3_addition || 300,
-                        subtraction: user.arena_elo_3v3_subtraction || 300,
-                        multiplication: user.arena_elo_3v3_multiplication || 300,
-                        divisionOp: user.arena_elo_3v3_division || 300,
-                    },
-                    '4v4': {
-                        elo: user.arena_elo_4v4 || 300,
-                        addition: user.arena_elo_4v4_addition || 300,
-                        subtraction: user.arena_elo_4v4_subtraction || 300,
-                        multiplication: user.arena_elo_4v4_multiplication || 300,
-                        divisionOp: user.arena_elo_4v4_division || 300,
-                    },
-                    '5v5': {
-                        elo: user.arena_elo_5v5 || 300,
-                        addition: user.arena_elo_5v5_addition || 300,
-                        subtraction: user.arena_elo_5v5_subtraction || 300,
-                        multiplication: user.arena_elo_5v5_multiplication || 300,
-                        divisionOp: user.arena_elo_5v5_division || 300,
-                    },
-                }
-            }
-        };
+        return pgStats;
     } catch (error) {
-        console.error('[Arena] Error getting stats:', error);
+        console.error('[Arena] Error getting stats from PostgreSQL:', error);
         return DEFAULT_STATS;
     }
 }

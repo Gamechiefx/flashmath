@@ -178,6 +178,7 @@ export function FriendListItem({
                         {/* Invite to party (only if in party and friend is online) */}
                         {inParty && friend.odOnline && onInviteToParty && (
                             <button
+                                data-testid={`invite-friend-${friend.odUserId}`}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onInviteToParty(friend.odUserId);

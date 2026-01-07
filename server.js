@@ -1,13 +1,28 @@
 /**
  * Custom Next.js Server with Socket.io
  * Enables WebSocket support for arena matches and real-time presence
+ * 
+ * Redis-First Architecture:
+ * - Redis is the primary state store for match data
+ * - In-memory Maps are kept for timer/interval references only
+ * - Socket.IO Redis adapter enables horizontal scaling
  */
 
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const { Server: SocketIOServer } = require('socket.io');
+const { createAdapter } = require('@socket.io/redis-adapter');
 const Redis = require('ioredis');
+
+// Import Redis arena state management
+const arenaRedis = require('./server-redis');
+
+// Import PostgreSQL arena database (for permanent match history and ELO)
+const arenaPostgres = require('./src/lib/arena/postgres.js');
+
+// Server identification for multi-server deployments
+const SERVER_ID = process.env.SERVER_ID || `server-${process.pid}`;
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
@@ -16,11 +31,381 @@ const port = parseInt(process.env.PORT || '3000', 10);
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
-// Store active matches
-const activeMatches = new Map();
+// =============================================================================
+// IN-MEMORY STATE (for timer/interval references only)
+// Redis is the primary source of truth for match state
+// =============================================================================
 
-// Map socket IDs to match IDs
-const socketToMatch = new Map();
+// In-memory Maps hold timer/interval references that can't be serialized to Redis
+const activeMatches = new Map();      // matchId -> { timer, botInterval, ...matchState }
+const socketToMatch = new Map();      // socketId -> matchId (fast lookup cache)
+
+// =============================================================================
+// 1v1 MATCH STATE HELPERS (Redis-First Architecture)
+// =============================================================================
+
+/**
+ * Save a 1v1 match to Redis (primary) and in-memory (for timers)
+ * @param {string} matchId - Match ID
+ * @param {Object} match - Match state object
+ */
+async function saveMatchState(matchId, match) {
+    // Keep in memory for timer access
+    activeMatches.set(matchId, match);
+    
+    // Save to Redis (primary storage)
+    try {
+        await arenaRedis.saveMatch({
+            matchId: match.matchId,
+            players: match.players,
+            odOperation: match.odOperation,
+            odTimeLeft: match.odTimeLeft,
+            odStarted: match.odStarted,
+            odEnded: match.odEnded,
+            isAiMatch: match.isAiMatch,
+            hostRank: match.hostRank,
+            hostDivision: match.hostDivision,
+            currentQuestion: match.currentQuestion,
+            status: match.odEnded ? 'finished' : (match.odStarted ? 'active' : 'pending'),
+        });
+    } catch (err) {
+        console.error(`[Match] Redis save error for ${matchId}:`, err.message);
+    }
+}
+
+/**
+ * Get a 1v1 match - checks in-memory first (for timers), then Redis
+ * @param {string} matchId - Match ID
+ * @returns {Object|null} Match state or null
+ */
+async function getMatchState(matchId) {
+    // In-memory first (has timer references)
+    let match = activeMatches.get(matchId);
+    if (match) return match;
+    
+    // Try Redis as fallback (for recovery or cross-server access)
+    try {
+        const redisMatch = await arenaRedis.getMatch(matchId);
+        if (redisMatch) {
+            console.log(`[Match] Recovered match ${matchId} from Redis`);
+            // Note: timer/botInterval won't be restored - may need to reinitialize
+            activeMatches.set(matchId, redisMatch);
+            return redisMatch;
+        }
+    } catch (err) {
+        console.error(`[Match] Redis get error for ${matchId}:`, err.message);
+    }
+    
+    return null;
+}
+
+/**
+ * Delete a 1v1 match from both in-memory and Redis
+ * Also decrements active match counter
+ * @param {string} matchId - Match ID
+ */
+async function removeMatchState(matchId) {
+    const match = activeMatches.get(matchId);
+    if (match) {
+        // Clean up timers
+        if (match.timer) clearInterval(match.timer);
+        if (match.botInterval) clearInterval(match.botInterval);
+    }
+    
+    // Remove from in-memory
+    activeMatches.delete(matchId);
+    
+    // Remove from Redis
+    try {
+        await arenaRedis.deleteMatch(matchId);
+        await arenaRedis.decrementActiveMatches();
+    } catch (err) {
+        console.error(`[Match] Redis delete error for ${matchId}:`, err.message);
+    }
+}
+
+/**
+ * Set socket-to-match mapping in both in-memory and Redis
+ * @param {string} socketId - Socket ID
+ * @param {string} matchId - Match ID
+ */
+async function setSocketMatch(socketId, matchId) {
+    socketToMatch.set(socketId, matchId);
+    try {
+        await arenaRedis.setSocketToMatch(socketId, matchId);
+    } catch (err) {
+        console.error(`[Match] Redis socket map error:`, err.message);
+    }
+}
+
+/**
+ * Get match ID for a socket (in-memory cache first, then Redis)
+ * @param {string} socketId - Socket ID
+ * @returns {string|null} Match ID or null
+ */
+async function getSocketMatch(socketId) {
+    // Check in-memory cache first
+    const matchId = socketToMatch.get(socketId);
+    if (matchId) return matchId;
+    
+    // Try Redis as fallback
+    try {
+        const redisMatchId = await arenaRedis.getMatchFromSocket(socketId);
+        if (redisMatchId) {
+            // Update local cache
+            socketToMatch.set(socketId, redisMatchId);
+            return redisMatchId;
+        }
+    } catch (err) {
+        console.error(`[Match] Redis socket lookup error:`, err.message);
+    }
+    
+    return null;
+}
+
+/**
+ * Remove socket-to-match mapping from both in-memory and Redis
+ * @param {string} socketId - Socket ID
+ */
+async function removeSocketMatch(socketId) {
+    socketToMatch.delete(socketId);
+    try {
+        await arenaRedis.clearSocketMappings(socketId);
+    } catch (err) {
+        console.error(`[Match] Redis socket cleanup error:`, err.message);
+    }
+}
+
+/**
+ * Track a new active match in Redis statistics
+ */
+async function trackNewMatch() {
+    try {
+        await arenaRedis.incrementActiveMatches();
+    } catch (err) {
+        console.error(`[Match] Redis stats error:`, err.message);
+    }
+}
+
+// =============================================================================
+// PUB/SUB FOR CROSS-SERVER EVENTS
+// =============================================================================
+
+/**
+ * Publish a match event for cross-server synchronization
+ * Other servers subscribed to this match will receive the event
+ * @param {string} matchId - Match ID
+ * @param {string} eventType - Type of event (e.g., 'answer_submitted', 'player_joined')
+ * @param {Object} data - Event data
+ */
+async function publishMatchEvent(matchId, eventType, data) {
+    try {
+        await arenaRedis.publishMatchEvent(matchId, {
+            type: eventType,
+            serverId: SERVER_ID,
+            ...data,
+        });
+    } catch (err) {
+        console.error(`[Pub/Sub] Failed to publish event:`, err.message);
+    }
+}
+
+/**
+ * Publish a global arena event (e.g., match completed, leaderboard update)
+ * @param {string} eventType - Type of event
+ * @param {Object} data - Event data
+ */
+async function publishGlobalEvent(eventType, data) {
+    try {
+        await arenaRedis.publishGlobalEvent({
+            type: eventType,
+            serverId: SERVER_ID,
+            ...data,
+        });
+    } catch (err) {
+        console.error(`[Pub/Sub] Failed to publish global event:`, err.message);
+    }
+}
+
+/**
+ * Cache a match result for quick access
+ * @param {string} odUserId - User ID
+ * @param {Object} matchSummary - Summary of the match
+ */
+async function cacheMatchResult(odUserId, matchSummary) {
+    try {
+        await arenaRedis.addRecentMatch(odUserId, matchSummary);
+    } catch (err) {
+        console.error(`[Cache] Failed to cache match result:`, err.message);
+    }
+}
+
+/**
+ * Update leaderboard in Redis
+ * @param {string} odUserId - User ID
+ * @param {number} elo - New ELO rating
+ * @param {string} operation - Operation (e.g., 'global', 'multiplication')
+ */
+async function updateRedisLeaderboard(odUserId, elo, operation = 'global') {
+    try {
+        await arenaRedis.updateLeaderboard(odUserId, elo, operation);
+    } catch (err) {
+        console.error(`[Leaderboard] Failed to update:`, err.message);
+    }
+}
+
+/**
+ * Get arena statistics from Redis
+ * @returns {Object} Arena stats
+ */
+async function getArenaStatistics() {
+    try {
+        return await arenaRedis.getArenaStats();
+    } catch (err) {
+        console.error(`[Stats] Failed to get arena stats:`, err.message);
+        return { activeMatches: 0, activeTeamMatches: 0, queueSize: 0 };
+    }
+}
+
+// =============================================================================
+// POSTGRESQL MATCH RECORDING
+// =============================================================================
+
+/**
+ * Record a completed 1v1 duel match to PostgreSQL
+ * @param {Object} match - Match state object
+ * @param {string} winnerId - Winner's user ID
+ * @param {number} durationMs - Match duration in milliseconds
+ */
+async function recordDuelMatchToPostgres(match, winnerId, durationMs) {
+    try {
+        const playerEntries = Object.entries(match.players);
+        if (playerEntries.length < 2) return;
+
+        const [player1Id, player1] = playerEntries[0];
+        const [player2Id, player2] = playerEntries[1];
+
+        // Skip if both are AI
+        if (player1Id.startsWith('ai_') && player2Id.startsWith('ai_')) return;
+
+        // Calculate ELO changes (simple algorithm)
+        const p1Elo = player1.odElo || 1000;
+        const p2Elo = player2.odElo || 1000;
+        const p1Won = player1Id === winnerId;
+        const p2Won = player2Id === winnerId;
+        
+        // K-factor based on ELO (lower K for higher rated players)
+        const k1 = p1Elo < 1200 ? 32 : (p1Elo < 1600 ? 24 : 16);
+        const k2 = p2Elo < 1200 ? 32 : (p2Elo < 1600 ? 24 : 16);
+        
+        // Expected scores
+        const exp1 = 1 / (1 + Math.pow(10, (p2Elo - p1Elo) / 400));
+        const exp2 = 1 / (1 + Math.pow(10, (p1Elo - p2Elo) / 400));
+        
+        // Actual scores
+        const actual1 = p1Won ? 1 : (winnerId ? 0 : 0.5);
+        const actual2 = p2Won ? 1 : (winnerId ? 0 : 0.5);
+        
+        // ELO changes
+        const p1EloChange = Math.round(k1 * (actual1 - exp1));
+        const p2EloChange = Math.round(k2 * (actual2 - exp2));
+
+        const matchData = {
+            id: match.matchId,
+            player1: {
+                id: player1Id,
+                score: player1.odScore || 0,
+                eloBefore: p1Elo,
+                eloChange: player1Id.startsWith('ai_') ? 0 : p1EloChange,
+            },
+            player2: {
+                id: player2Id,
+                score: player2.odScore || 0,
+                eloBefore: p2Elo,
+                eloChange: player2Id.startsWith('ai_') ? 0 : p2EloChange,
+            },
+            winner: winnerId ? { id: winnerId } : null,
+            questionsCount: Object.values(match.players).reduce((sum, p) => sum + (p.odQuestionsAnswered || 0), 0),
+            durationMs: durationMs,
+            isDraw: !winnerId,
+            isForfeit: false,
+        };
+
+        await arenaPostgres.recordMatch(matchData);
+        console.log(`[PostgreSQL] Recorded 1v1 match ${match.matchId}`);
+
+        // Update leaderboards
+        if (!player1Id.startsWith('ai_')) {
+            await updateRedisLeaderboard(player1Id, p1Elo + p1EloChange, match.odOperation || 'global');
+        }
+        if (!player2Id.startsWith('ai_')) {
+            await updateRedisLeaderboard(player2Id, p2Elo + p2EloChange, match.odOperation || 'global');
+        }
+
+    } catch (err) {
+        console.error(`[PostgreSQL] Failed to record duel match:`, err.message);
+    }
+}
+
+/**
+ * Record a completed 5v5 team match to PostgreSQL
+ * @param {Object} match - Team match state object
+ * @param {number} winnerTeam - 1 or 2 (or null for draw)
+ * @param {number} durationMs - Match duration in milliseconds
+ */
+async function recordTeamMatchToPostgres(match, winnerTeam, durationMs) {
+    try {
+        const matchData = {
+            id: match.matchId,
+            team1: {
+                id: match.team1?.odTeamId || null,
+                name: match.team1?.odTeamName || 'Team 1',
+                players: (match.team1?.odMembers || []).map(m => ({
+                    userId: m.odUserId,
+                    isIgl: m.odUserId === match.team1?.odIglId,
+                    isAnchor: m.odUserId === match.team1?.odAnchorId,
+                    score: m.odScore || 0,
+                    questionsAnswered: m.odQuestionsAnswered || 0,
+                    correctAnswers: m.odCorrectAnswers || 0,
+                    eloBefore: m.odElo || 300,
+                    eloChange: winnerTeam === 1 ? 25 : (winnerTeam === 2 ? -20 : 0),
+                })),
+                score: match.team1?.odTotalScore || 0,
+                eloBefore: match.team1?.odElo || 1200,
+                eloChange: winnerTeam === 1 ? 30 : (winnerTeam === 2 ? -25 : 0),
+            },
+            team2: {
+                id: match.team2?.odTeamId || null,
+                name: match.team2?.odTeamName || 'Team 2',
+                players: (match.team2?.odMembers || []).map(m => ({
+                    userId: m.odUserId,
+                    isIgl: m.odUserId === match.team2?.odIglId,
+                    isAnchor: m.odUserId === match.team2?.odAnchorId,
+                    score: m.odScore || 0,
+                    questionsAnswered: m.odQuestionsAnswered || 0,
+                    correctAnswers: m.odCorrectAnswers || 0,
+                    eloBefore: m.odElo || 300,
+                    eloChange: winnerTeam === 2 ? 25 : (winnerTeam === 1 ? -20 : 0),
+                })),
+                score: match.team2?.odTotalScore || 0,
+                eloBefore: match.team2?.odElo || 1200,
+                eloChange: winnerTeam === 2 ? 30 : (winnerTeam === 1 ? -25 : 0),
+            },
+            winnerTeam: winnerTeam,
+            matchType: match.odMatchType || 'ranked',
+            questionsCount: match.odQuestionsAsked || 0,
+            durationMs: durationMs,
+            isForfeit: false,
+            isAIMatch: match.isAIMatch || false,
+        };
+
+        await arenaPostgres.recordTeamMatch(matchData);
+        console.log(`[PostgreSQL] Recorded 5v5 match ${match.matchId}`);
+
+    } catch (err) {
+        console.error(`[PostgreSQL] Failed to record team match:`, err.message);
+    }
+}
 
 // =============================================================================
 // CONNECTION QUALITY STATE MACHINE (GREEN / YELLOW / RED)
@@ -449,33 +834,104 @@ function generateQuestion(operation) {
     };
 }
 
-app.prepare().then(() => {
+app.prepare().then(async () => {
+    // =========================================================================
+    // REDIS INITIALIZATION
+    // =========================================================================
+    
+    // Initialize Redis for arena state management
+    const redisInitialized = await arenaRedis.initRedis();
+    if (redisInitialized) {
+        console.log(`[Server ${SERVER_ID}] Arena Redis state management initialized`);
+    } else {
+        console.warn(`[Server ${SERVER_ID}] Arena Redis not available, using in-memory fallback`);
+    }
+    
     const httpServer = createServer((req, res) => {
         const parsedUrl = parse(req.url, true);
         handle(req, res, parsedUrl);
     });
 
-    // Initialize Socket.io
+    // =========================================================================
+    // SOCKET.IO WITH REDIS ADAPTER
+    // =========================================================================
+    
+    // Initialize Socket.io with performance optimizations
     const io = new SocketIOServer(httpServer, {
         path: '/api/socket/arena',
         cors: {
             origin: '*',
             methods: ['GET', 'POST'],
         },
+        // Connection settings for better reliability
+        pingTimeout: 30000,
+        pingInterval: 10000,
+        
+        // === PERFORMANCE OPTIMIZATIONS ===
+        
+        // Enable per-message compression (50-70% bandwidth reduction)
+        perMessageDeflate: {
+            threshold: 1024, // Only compress messages > 1KB
+            zlibDeflateOptions: {
+                chunkSize: 16 * 1024,   // 16KB chunks
+            },
+            zlibInflateOptions: {
+                chunkSize: 16 * 1024,
+            },
+            clientNoContextTakeover: true, // Don't maintain compression context between messages
+            serverNoContextTakeover: true, // Reduces memory usage
+        },
+        
+        // Limit maximum HTTP buffer size (security + memory)
+        maxHttpBufferSize: 1e6, // 1MB max payload
+        
+        // Allow binary parser for efficiency
+        allowEIO3: true,
+        
+        // Transports: prefer websocket, fallback to polling
+        transports: ['websocket', 'polling'],
+        
+        // Upgrade settings
+        allowUpgrades: true,
+        upgradeTimeout: 10000,
     });
+    
+    // Setup Socket.IO Redis Adapter for horizontal scaling
+    if (redisInitialized) {
+        try {
+            const redisHost = process.env.REDIS_HOST || 'localhost';
+            const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+            const redisPassword = process.env.REDIS_PASSWORD;
+            
+            const pubClient = new Redis({
+                host: redisHost,
+                port: redisPort,
+                password: redisPassword,
+                lazyConnect: true,
+            });
+            const subClient = pubClient.duplicate();
+            
+            await Promise.all([pubClient.connect(), subClient.connect()]);
+            
+            io.adapter(createAdapter(pubClient, subClient));
+            console.log(`[Server ${SERVER_ID}] Socket.IO Redis adapter enabled - horizontal scaling ready`);
+        } catch (adapterError) {
+            console.warn(`[Server ${SERVER_ID}] Socket.IO Redis adapter failed, using default adapter:`, adapterError.message);
+        }
+    }
 
     io.on('connection', (socket) => {
         console.log(`[Arena Socket] Client connected: ${socket.id}`);
 
         // Player joins a match
-        socket.on('join_match', (data) => {
+        socket.on('join_match', async (data) => {
             const { matchId, userId, userName, operation, isAiMatch, userRank, userDivision, userLevel, userBanner, userTitle } = data;
 
             socket.join(matchId);
-            socketToMatch.set(socket.id, matchId);
+            await setSocketMatch(socket.id, matchId);
 
-            // Get or create match state
-            let match = activeMatches.get(matchId);
+            // Get or create match state (check Redis if not in memory)
+            let match = await getMatchState(matchId);
             if (!match) {
                 match = {
                     matchId,
@@ -492,7 +948,7 @@ app.prepare().then(() => {
                     hostRank: userRank || 'Bronze',
                     hostDivision: userDivision || 'I',
                 };
-                activeMatches.set(matchId, match);
+                await saveMatchState(matchId, match);
             } else {
                 // Update isAiMatch if provided (in case match was created before socket joined)
                 if (isAiMatch) {
@@ -529,6 +985,9 @@ app.prepare().then(() => {
             };
 
             console.log(`[Arena Socket] ${userName} joined match ${matchId} (AI: ${match.isAiMatch}, ${Object.keys(match.players).length} players)`);
+            
+            // Save updated match state to Redis
+            await saveMatchState(matchId, match);
 
             // Notify all players in match
             io.to(matchId).emit('player_joined', {
@@ -543,6 +1002,9 @@ app.prepare().then(() => {
 
             if (shouldStart && !match.odStarted) {
                 match.odStarted = true;
+                
+                // Track new active match in Redis
+                await trackNewMatch();
 
                 // Add Bot if AI match
                 if (match.isAiMatch) {
@@ -627,6 +1089,9 @@ app.prepare().then(() => {
                         });
                     }
                 }
+                
+                // Save match state after all players added and match started
+                await saveMatchState(matchId, match);
 
                 // Start the timer
                 match.timer = setInterval(() => {
@@ -763,16 +1228,54 @@ app.prepare().then(() => {
                         // Determine match type and operation for leaderboard
                         const matchType = m.odMode === '1v1' ? 'duel' : 'team';
                         const matchOperation = m.odOperation || 'overall';
-                        const affectedUserIds = Object.keys(m.players).filter(id => !id.startsWith('ai-'));
+                        const affectedUserIds = Object.keys(m.players).filter(id => !id.startsWith('ai-') && !id.startsWith('ai_'));
                         
                         if (affectedUserIds.length > 0) {
                             // Use presenceNs (presence namespace) for leaderboard updates
                             broadcastLeaderboardUpdate(presenceNs, matchType, matchOperation, affectedUserIds);
                         }
+                        
+                        // Publish global event for cross-server coordination
+                        publishGlobalEvent('match_completed', {
+                            matchId,
+                            operation: matchOperation,
+                            affectedUserIds,
+                            matchIntegrity,
+                        });
+                        
+                        // Cache match results for each player
+                        const playerScores = Object.entries(m.players)
+                            .filter(([id]) => !id.startsWith('ai_'))
+                            .sort(([, a], [, b]) => b.odScore - a.odScore);
+                        
+                        const winnerId = playerScores[0]?.[0];
+                        
+                        for (const [playerId, player] of Object.entries(m.players)) {
+                            if (playerId.startsWith('ai_')) continue;
+                            
+                            const isWinner = playerId === winnerId;
+                            cacheMatchResult(playerId, {
+                                matchId,
+                                opponent: Object.entries(m.players)
+                                    .find(([id]) => id !== playerId)?.[1]?.odName || 'Unknown',
+                                result: isWinner ? 'win' : 'loss',
+                                score: player.odScore,
+                                operation: matchOperation,
+                                timestamp: Date.now(),
+                            });
+                        }
 
-                        // Clean up match after 30 seconds
-                        setTimeout(() => {
-                            activeMatches.delete(matchId);
+                        // Record match to PostgreSQL for permanent history
+                        // Only record if match had valid integrity (not voided)
+                        if (matchIntegrity === INTEGRITY_STATE.GREEN) {
+                            const matchStartTime = m.odStartTime || (Date.now() - 120000); // Fallback 2 min
+                            const durationMs = Date.now() - matchStartTime;
+                            recordDuelMatchToPostgres(m, winnerId, durationMs);
+                        }
+
+                        // Clean up match after 30 seconds (from both memory and Redis)
+                        setTimeout(async () => {
+                            await removeMatchState(matchId);
                             console.log(`[Arena Socket] Match ${matchId} cleaned up`);
                         }, 30000);
                     }
@@ -853,6 +1356,19 @@ app.prepare().then(() => {
                 odUserId,
                 question: newQuestion,
             });
+            
+            // Publish event for cross-server sync (non-blocking)
+            publishMatchEvent(matchId, 'answer_submitted', {
+                odUserId,
+                isCorrect,
+                newScore: player.odScore,
+                streak: player.odStreak,
+            });
+            
+            // Periodically save match state to Redis (every 5 answers)
+            if ((player.odQuestionsAnswered % 5) === 0) {
+                saveMatchState(matchId, match).catch(() => {});
+            }
         });
 
         // Connection quality pong response
@@ -895,10 +1411,10 @@ app.prepare().then(() => {
         });
 
         // Player disconnects
-        socket.on('disconnect', () => {
-            const matchId = socketToMatch.get(socket.id);
+        socket.on('disconnect', async () => {
+            const matchId = await getSocketMatch(socket.id);
             if (matchId) {
-                const match = activeMatches.get(matchId);
+                const match = await getMatchState(matchId);
                 if (match) {
                     // Find and remove the disconnected player
                     for (const [odUserId, player] of Object.entries(match.players)) {
@@ -912,25 +1428,27 @@ app.prepare().then(() => {
 
                     // Clean up empty matches
                     if (Object.keys(match.players).length === 0) {
-                        if (match.timer) clearInterval(match.timer);
-                        activeMatches.delete(matchId);
+                        await removeMatchState(matchId);
                         console.log(`[Arena Socket] Match ${matchId} cleaned up (no players)`);
+                    } else {
+                        // Update match state in Redis
+                        await saveMatchState(matchId, match);
                     }
                 }
-                socketToMatch.delete(socket.id);
+                await removeSocketMatch(socket.id);
             }
             console.log(`[Arena Socket] Client disconnected: ${socket.id}`);
         });
 
         // Leave match explicitly (forfeit)
-        socket.on('leave_match', (data) => {
+        socket.on('leave_match', async (data) => {
             const { matchId, userId } = data;
-            const match = activeMatches.get(matchId);
+            const match = await getMatchState(matchId);
             if (match && match.players[userId]) {
                 const forfeitingPlayer = match.players[userId];
                 delete match.players[userId];
                 socket.leave(matchId);
-                socketToMatch.delete(socket.id);
+                await removeSocketMatch(socket.id);
 
                 // If match was active, notify remaining player they won
                 if (match.odStarted && !match.odEnded) {
@@ -945,8 +1463,13 @@ app.prepare().then(() => {
                     });
 
                     console.log(`[Arena Socket] Player ${forfeitingPlayer.odName} forfeited match ${matchId}`);
+                    
+                    // Update match state in Redis
+                    await saveMatchState(matchId, match);
                 } else {
                     io.to(matchId).emit('player_left', { odUserId: userId });
+                    // Update match state in Redis
+                    await saveMatchState(matchId, match);
                 }
             }
         });
@@ -963,9 +1486,67 @@ app.prepare().then(() => {
     
     const presenceNs = io.of('/presence');
     
+    // =============================================================================
+    // PARTY REDIS INTEGRATION
+    // =============================================================================
+    
+    // Party Redis key pattern (matches src/lib/party/party-redis.ts)
+    const PARTY_USER_KEY = (userId) => `user:${userId}:party`;
+    
+    /**
+     * Get user's current party ID from Redis
+     * Inlined version of partyRedis.getUserParty() to avoid TypeScript import
+     */
+    async function getUserPartyId(userId) {
+        if (!presenceRedis) return null;
+        try {
+            return await presenceRedis.get(PARTY_USER_KEY(userId));
+        } catch (err) {
+            console.error('[Party] Failed to get user party:', err.message);
+            return null;
+        }
+    }
+    
+    /**
+     * Join a user to their party's Socket.IO room
+     * This enables efficient broadcasts to all party members
+     */
+    async function joinPartyRoom(socket, userId) {
+        try {
+            const partyId = await getUserPartyId(userId);
+            if (partyId) {
+                socket.join(`party:${partyId}`);
+                console.log(`[Party] User ${userId} joined room party:${partyId}`);
+                return partyId;
+            }
+        } catch (err) {
+            console.error(`[Party] Failed to join party room:`, err.message);
+        }
+        return null;
+    }
+    
+    /**
+     * Leave party Socket.IO room
+     */
+    function leavePartyRoom(socket, partyId) {
+        socket.leave(`party:${partyId}`);
+        console.log(`[Party] Socket left room party:${partyId}`);
+    }
+    
+    /**
+     * Broadcast to all members of a party
+     */
+    function broadcastToParty(partyId, event, data) {
+        presenceNs.to(`party:${partyId}`).emit(event, {
+            ...data,
+            timestamp: Date.now(),
+        });
+    }
+    
     presenceNs.on('connection', (socket) => {
         console.log(`[Presence] Client connected: ${socket.id}`);
         let currentUserId = null;
+        let currentPartyId = null;
         
         // User comes online
         socket.on('presence:online', async (data) => {
@@ -981,6 +1562,9 @@ app.prepare().then(() => {
             
             // Join a room for this user to receive direct messages
             socket.join(`user:${userId}`);
+            
+            // Auto-join party room if user is in a party
+            currentPartyId = await joinPartyRoom(socket, userId);
             
             // #region agent log - Track user joining room
             try {
@@ -1130,62 +1714,267 @@ app.prepare().then(() => {
             }
         });
         
-        // Party queue status changed notification (notify all party members)
-        // This enables real-time sync when leader starts/stops queue
+        // Party queue status changed notification (using party room for efficient broadcast)
         socket.on('presence:notify_party_queue_status', async (data) => {
-            const { partyMemberIds, queueStatus, partyId, updaterId } = data;
+            const { queueStatus, partyId, updaterId } = data;
             console.log(`[Presence] 📢 BROADCASTING queue status change for party ${partyId}`);
-            console.log(`[Presence] Status: ${queueStatus}, UpdaterId: ${updaterId}`);
-            console.log(`[Presence] Broadcasting to members:`, partyMemberIds);
             
-            // #region agent log - Check room membership for each member
-            const roomInfo = {};
-            for (const memberId of partyMemberIds) {
-                const roomName = `user:${memberId}`;
-                const socketsInRoom = presenceNs.adapter.rooms.get(roomName);
-                roomInfo[memberId] = {
-                    roomName,
-                    socketCount: socketsInRoom ? socketsInRoom.size : 0,
-                    socketIds: socketsInRoom ? Array.from(socketsInRoom) : []
-                };
+            // Use party room for efficient broadcast (no member iteration needed)
+            broadcastToParty(partyId, 'party:queue_status_changed', {
+                queueStatus,
+                partyId,
+                updaterId,
+            });
+        });
+        
+        // =============================================================================
+        // REDIS-BASED PARTY EVENTS (New)
+        // =============================================================================
+        
+        // Create a new party
+        socket.on('party:create', async (data) => {
+            const { userId, userName, level, equippedFrame, equippedTitle } = data;
+            if (!userId || !userName) return;
+            
+            const result = await partyRedis.createParty(userId, userName, {
+                level: level || 1,
+                equippedFrame,
+                equippedTitle,
+            });
+            
+            if (result.success) {
+                currentPartyId = result.partyId;
+                socket.join(`party:${result.partyId}`);
+                socket.emit('party:created', { partyId: result.partyId });
+            } else {
+                socket.emit('party:error', { error: result.error });
             }
-            try {
-                const fs = require('fs');
-                const logEntry = JSON.stringify({
-                    location: 'server.js:SOCKET_BROADCAST',
-                    message: 'Server broadcasting queue status - checking room membership',
-                    data: { partyId, queueStatus, updaterId, memberCount: partyMemberIds.length, roomInfo },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session',
-                    hypothesisId: 'H1'
-                }) + '\n';
-                fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', logEntry);
-            } catch (e) { /* ignore */ }
-            // #endregion
+        });
+        
+        // Get party data
+        socket.on('party:get', async (data) => {
+            const { partyId } = data;
+            if (!partyId) return;
             
-            for (const memberId of partyMemberIds) {
-                console.log(`[Presence] Emitting to user:${memberId}`);
-                // #region agent log - H1: Track each member broadcast
-                try {
-                    const fs = require('fs');
-                    const roomName = `user:${memberId}`;
-                    const socketsInRoom = presenceNs.adapter.rooms.get(roomName);
-                    fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', JSON.stringify({
-                        location: 'server.js:EMIT_TO_MEMBER',
-                        message: 'Emitting to individual member',
-                        data: { memberId: memberId.slice(-8), roomName, hasSocketInRoom: socketsInRoom?.size > 0, socketCount: socketsInRoom?.size || 0 },
-                        timestamp: Date.now(),
-                        sessionId: 'debug-session',
-                        hypothesisId: 'H1'
-                    }) + '\n');
-                } catch (e) {}
-                // #endregion
-                presenceNs.to(`user:${memberId}`).emit('party:queue_status_changed', {
-                    queueStatus,
+            const partyData = await partyRedis.getParty(partyId);
+            socket.emit('party:data', partyData);
+        });
+        
+        // Join a party
+        socket.on('party:join', async (data) => {
+            const { partyId, userId, userName, level, equippedFrame, equippedTitle } = data;
+            if (!partyId || !userId || !userName) return;
+            
+            const result = await partyRedis.joinParty(partyId, userId, userName, {
+                level: level || 1,
+                equippedFrame,
+                equippedTitle,
+            });
+            
+            if (result.success) {
+                currentPartyId = partyId;
+                socket.join(`party:${partyId}`);
+                
+                // Broadcast to party room
+                broadcastToParty(partyId, 'party:member_joined', {
+                    odUserId: userId,
+                    odUserName: userName,
+                });
+                
+                socket.emit('party:joined', { partyId });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Leave party
+        socket.on('party:leave', async (data) => {
+            const { partyId, userId } = data;
+            if (!partyId || !userId) return;
+            
+            const result = await partyRedis.leaveParty(partyId, userId);
+            
+            if (result.success) {
+                // Broadcast BEFORE leaving room
+                broadcastToParty(partyId, 'party:member_left', {
+                    odUserId: userId,
+                    disbanded: result.disbanded,
+                    newLeaderId: result.newLeaderId,
+                });
+                
+                leavePartyRoom(socket, partyId);
+                currentPartyId = null;
+                
+                socket.emit('party:left', { disbanded: result.disbanded });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Kick member
+        socket.on('party:kick', async (data) => {
+            const { partyId, leaderId, targetUserId } = data;
+            if (!partyId || !leaderId || !targetUserId) return;
+            
+            const result = await partyRedis.kickMember(partyId, leaderId, targetUserId);
+            
+            if (result.success) {
+                broadcastToParty(partyId, 'party:member_kicked', {
+                    kickedUserId: targetUserId,
+                    kickedName: result.kickedName,
+                });
+                
+                // Notify the kicked user directly
+                presenceNs.to(`user:${targetUserId}`).emit('party:you_were_kicked', {
                     partyId,
-                    updaterId,
                     timestamp: Date.now(),
                 });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Toggle ready
+        socket.on('party:toggle_ready', async (data) => {
+            const { partyId, userId } = data;
+            if (!partyId || !userId) return;
+            
+            const result = await partyRedis.toggleReady(partyId, userId);
+            
+            if (result.success) {
+                broadcastToParty(partyId, 'party:ready_changed', {
+                    odUserId: userId,
+                    isReady: result.isReady,
+                    queueCancelled: result.queueCancelled,
+                });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Set IGL
+        socket.on('party:set_igl', async (data) => {
+            const { partyId, leaderId, iglUserId } = data;
+            if (!partyId || !leaderId || !iglUserId) return;
+            
+            const result = await partyRedis.setIGL(partyId, leaderId, iglUserId);
+            
+            if (result.success) {
+                broadcastToParty(partyId, 'party:igl_changed', { iglUserId });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Set Anchor
+        socket.on('party:set_anchor', async (data) => {
+            const { partyId, leaderId, anchorUserId } = data;
+            if (!partyId || !leaderId || !anchorUserId) return;
+            
+            const result = await partyRedis.setAnchor(partyId, leaderId, anchorUserId);
+            
+            if (result.success) {
+                broadcastToParty(partyId, 'party:anchor_changed', { anchorUserId });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Set preferred operation
+        socket.on('party:set_preferred_op', async (data) => {
+            const { partyId, userId, operation } = data;
+            if (!partyId || !userId) return;
+            
+            const result = await partyRedis.setPreferredOperation(partyId, userId, operation);
+            
+            if (result.success) {
+                broadcastToParty(partyId, 'party:preferred_op_changed', {
+                    odUserId: userId,
+                    operation,
+                });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Create invite
+        socket.on('party:invite', async (data) => {
+            const { partyId, inviterId, inviterName, inviteeId, inviteeName } = data;
+            if (!partyId || !inviterId || !inviteeId) return;
+            
+            const result = await partyRedis.createInvite(partyId, inviterId, inviterName, inviteeId, inviteeName);
+            
+            if (result.success) {
+                // Notify invitee
+                presenceNs.to(`user:${inviteeId}`).emit('party:invite_received', {
+                    inviteId: result.inviteId,
+                    partyId,
+                    inviterName,
+                    timestamp: Date.now(),
+                });
+                
+                socket.emit('party:invite_sent', { inviteeId });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Accept invite
+        socket.on('party:accept_invite', async (data) => {
+            const { partyId, userId, userName, level, equippedFrame, equippedTitle } = data;
+            if (!partyId || !userId) return;
+            
+            const result = await partyRedis.acceptInvite(partyId, userId, userName, {
+                level: level || 1,
+                equippedFrame,
+                equippedTitle,
+            });
+            
+            if (result.success) {
+                currentPartyId = partyId;
+                socket.join(`party:${partyId}`);
+                
+                broadcastToParty(partyId, 'party:member_joined', {
+                    odUserId: userId,
+                    odUserName: userName,
+                    fromInvite: true,
+                });
+                
+                socket.emit('party:joined', { partyId });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Transfer leadership
+        socket.on('party:transfer_leadership', async (data) => {
+            const { partyId, currentLeaderId, newLeaderId } = data;
+            if (!partyId || !currentLeaderId || !newLeaderId) return;
+            
+            const result = await partyRedis.transferLeadership(partyId, currentLeaderId, newLeaderId);
+            
+            if (result.success) {
+                broadcastToParty(partyId, 'party:leader_changed', {
+                    newLeaderId,
+                    newLeaderName: result.newLeaderName,
+                });
+            } else {
+                socket.emit('party:error', { error: result.error });
+            }
+        });
+        
+        // Disband party
+        socket.on('party:disband', async (data) => {
+            const { partyId, userId } = data;
+            if (!partyId || !userId) return;
+            
+            const result = await partyRedis.disbandParty(partyId, userId);
+            
+            if (result.success) {
+                broadcastToParty(partyId, 'party:disbanded', {});
+                currentPartyId = null;
+            } else {
+                socket.emit('party:error', { error: result.error });
             }
         });
         
@@ -1230,6 +2019,13 @@ app.prepare().then(() => {
                     timestamp: Date.now(),
                 });
                 
+                // If user was in a party, notify party members they went offline
+                if (currentPartyId) {
+                    broadcastToParty(currentPartyId, 'party:member_offline', {
+                        odUserId: userId,
+                    });
+                }
+                
                 console.log(`[Presence] ${userId} went offline`);
             }
             
@@ -1246,11 +2042,101 @@ app.prepare().then(() => {
     // ARENA TEAMS 5v5 NAMESPACE
     // =============================================================================
     
-    // Store active team matches
-    const activeTeamMatches = new Map();
+    // In-memory storage for timer references (Redis is primary for state)
+    const activeTeamMatches = new Map();      // matchId -> { timer, ...matchState }
+    const socketToTeamMatch = new Map();       // socketId -> matchId (cache)
     
-    // Map socket IDs to team match IDs
-    const socketToTeamMatch = new Map();
+    /**
+     * Save team match to Redis (primary) and in-memory (for timers)
+     */
+    async function saveTeamMatchState(matchId, match) {
+        // Keep in memory for timer access
+        activeTeamMatches.set(matchId, match);
+        
+        // Save to Redis (primary storage)
+        try {
+            await arenaRedis.saveTeamMatch(match);
+        } catch (err) {
+            console.error(`[TeamMatch] Redis save error for ${matchId}:`, err.message);
+        }
+    }
+    
+    /**
+     * Get team match - checks in-memory first (for timers), then Redis
+     */
+    async function getTeamMatchState(matchId) {
+        // In-memory first (has timer references)
+        let match = activeTeamMatches.get(matchId);
+        if (match) return match;
+        
+        // Try Redis as fallback
+        try {
+            const redisMatch = await arenaRedis.getTeamMatch(matchId);
+            if (redisMatch) {
+                console.log(`[TeamMatch] Recovered match ${matchId} from Redis`);
+                activeTeamMatches.set(matchId, redisMatch);
+                return redisMatch;
+            }
+        } catch (err) {
+            console.error(`[TeamMatch] Redis get error for ${matchId}:`, err.message);
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Delete team match from both in-memory and Redis
+     */
+    async function removeTeamMatchState(matchId) {
+        const match = activeTeamMatches.get(matchId);
+        if (match) {
+            // Clean up timers
+            if (match.timer) clearInterval(match.timer);
+            if (match.relayTimer) clearInterval(match.relayTimer);
+        }
+        
+        // Remove from in-memory
+        activeTeamMatches.delete(matchId);
+        
+        // Remove from Redis
+        try {
+            await arenaRedis.deleteTeamMatch(matchId);
+        } catch (err) {
+            console.error(`[TeamMatch] Redis delete error for ${matchId}:`, err.message);
+        }
+    }
+    
+    /**
+     * Set socket-to-team-match mapping
+     */
+    async function setSocketTeamMatch(socketId, matchId) {
+        socketToTeamMatch.set(socketId, matchId);
+        try {
+            await arenaRedis.setSocketToMatch(socketId, matchId);
+        } catch (err) {
+            console.error(`[TeamMatch] Redis socket map error:`, err.message);
+        }
+    }
+    
+    /**
+     * Get team match ID for a socket
+     */
+    async function getSocketTeamMatch(socketId) {
+        const matchId = socketToTeamMatch.get(socketId);
+        if (matchId) return matchId;
+        
+        try {
+            const redisMatchId = await arenaRedis.getMatchFromSocket(socketId);
+            if (redisMatchId) {
+                socketToTeamMatch.set(socketId, redisMatchId);
+                return redisMatchId;
+            }
+        } catch (err) {
+            console.error(`[TeamMatch] Redis socket lookup error:`, err.message);
+        }
+        
+        return null;
+    }
     
     // Team match state constants
     const TEAM_MATCH_PHASES = {
@@ -1307,6 +2193,7 @@ app.prepare().then(() => {
 
     const BOT_TITLES = ['AI Overlord', 'Machine Mind', 'Digital Champion', 'Binary Beast', 'Algorithm Master'];
     const BOT_FRAMES = ['matrix', 'cyber', 'neon', 'hologram', 'circuit'];
+    const BOT_BANNERS = ['matrices', 'synthwave', 'plasma', 'legendary', 'royal'];
 
     const BOT_DIFFICULTY_CONFIGS = {
         easy: { answerTimeRange: [3000, 6000], accuracy: 0.6 },
@@ -1329,6 +2216,7 @@ app.prepare().then(() => {
             odElo: targetElo + Math.floor(Math.random() * 100) - 50,
             odLevel: Math.floor(Math.random() * 50) + 50,
             odEquippedFrame: BOT_FRAMES[Math.floor(Math.random() * BOT_FRAMES.length)],
+            odEquippedBanner: BOT_BANNERS[Math.floor(Math.random() * BOT_BANNERS.length)],
             odEquippedTitle: BOT_TITLES[Math.floor(Math.random() * BOT_TITLES.length)],
             odPreferredOperation: op,
             isBot: true,
@@ -1442,6 +2330,7 @@ app.prepare().then(() => {
                     odName: member.odUserName,
                     odLevel: member.odLevel,
                     odEquippedFrame: member.odEquippedFrame,
+                    odEquippedBanner: member.odEquippedBanner || 'default',
                     odEquippedTitle: member.odEquippedTitle,
                     odSocketId: null,
                     slot: slotOp,
@@ -1544,54 +2433,84 @@ app.prepare().then(() => {
         socket.on('join_team_match', async (data) => {
             const { matchId, userId, teamId, partyId } = data;
             
+            // First check in-memory (for matches already created)
             let match = activeTeamMatches.get(matchId);
             
-            // If match doesn't exist, check for AI match setup in Redis
+            // If match doesn't exist in memory, check Redis for:
+            // 1. Already created match state
+            // 2. AI match setup
+            // 3. PvP match from matchmaking (by partyId)
             if (!match) {
                 try {
-                    const Redis = require('ioredis');
-                    const redis = new Redis({
-                        host: process.env.REDIS_HOST || 'redis',
-                        port: parseInt(process.env.REDIS_PORT || '6379'),
-                    });
+                    // Use the centralized arena Redis helper
+                    console.log(`[TeamMatch] Match ${matchId} not in memory, checking Redis...`);
                     
-                    const setupData = await redis.get(`team:match:setup:${matchId}`);
-                    await redis.quit();
+                    // Check for existing match state in Redis
+                    match = await arenaRedis.getTeamMatch(matchId);
+                    if (match) {
+                        console.log(`[TeamMatch] Found match ${matchId} in Redis`);
+                        activeTeamMatches.set(matchId, match);
+                    }
                     
-                    if (setupData) {
-                        const setup = JSON.parse(setupData);
-                        if (setup.isAIMatch) {
+                    // Check for AI match setup
+                    if (!match) {
+                        const setupData = await arenaRedis.getTeamMatchSetup(matchId);
+                        if (setupData && setupData.isAIMatch) {
                             console.log(`[TeamMatch] Creating AI match ${matchId} on first player join`);
                             
                             // Generate AI team
-                            const aiTeam = generateAITeam(matchId, setup.targetElo, setup.aiDifficulty);
+                            const aiTeam = generateAITeam(matchId, setupData.targetElo, setupData.aiDifficulty);
                             
                             // Create the match
-                            match = initTeamMatchState(matchId, setup.humanTeam, aiTeam, 'mixed', 'casual');
+                            match = initTeamMatchState(matchId, setupData.humanTeam, aiTeam, 'mixed', 'casual');
                             match.isAIMatch = true;
-                            match.aiDifficulty = setup.aiDifficulty;
+                            match.aiDifficulty = setupData.aiDifficulty;
                             
                             // Mark AI players as already "connected"
                             for (const playerId of Object.keys(match.team2.players)) {
                                 if (isAIBot(playerId)) {
                                     match.team2.players[playerId].odSocketId = 'ai_bot';
                                     match.team2.players[playerId].isBot = true;
-                                    match.team2.players[playerId].botConfig = BOT_DIFFICULTY_CONFIGS[setup.aiDifficulty || 'medium'];
+                                    match.team2.players[playerId].botConfig = BOT_DIFFICULTY_CONFIGS[setupData.aiDifficulty || 'medium'];
                                 }
                             }
                             
+                            // Save to both Redis and in-memory
                             activeTeamMatches.set(matchId, match);
-                            console.log(`[TeamMatch] AI Match ${matchId} created: ${setup.humanTeam.odTeamName || 'Team 1'} vs ${aiTeam.odTeamName}`);
+                            await arenaRedis.saveTeamMatch(match);
+                            console.log(`[TeamMatch] AI Match ${matchId} created: ${setupData.humanTeam.odTeamName || 'Team 1'} vs ${aiTeam.odTeamName}`);
+                        }
+                    }
+                    
+                    // Check for PvP match from matchmaking (stored by partyId)
+                    if (!match && partyId) {
+                        const matchResult = await arenaRedis.getMatchFromMatchmaking(partyId);
+                        if (matchResult && matchResult.matchId === matchId) {
+                            console.log(`[TeamMatch] Creating PvP match ${matchId} from matchmaking data`);
+                            
+                            // Create match state from matchmaking result
+                            match = initTeamMatchState(
+                                matchId,
+                                matchResult.odTeam1,
+                                matchResult.odTeam2,
+                                'mixed',  // operation
+                                'ranked'  // match type
+                            );
+                            
+                            // Save to both Redis and in-memory
+                            activeTeamMatches.set(matchId, match);
+                            await arenaRedis.saveTeamMatch(match);
+                            console.log(`[TeamMatch] PvP Match ${matchId} created: ${matchResult.odTeam1.odTeamName || 'Team 1'} vs ${matchResult.odTeam2.odTeamName || 'Team 2'}`);
                         }
                     }
                 } catch (err) {
-                    console.error('[TeamMatch] Error checking for AI match setup:', err);
+                    console.error('[TeamMatch] Error checking for match in Redis:', err);
                 }
             }
             
             if (!match) {
-                console.log(`[TeamMatch] Match ${matchId} not found`);
-                socket.emit('error', { message: 'Match not found' });
+                console.log(`[TeamMatch] Match ${matchId} not found (checked memory + Redis)`);
+                socket.emit('error', { message: 'Match not found', matchId, partyId });
                 return;
             }
             
@@ -1616,6 +2535,8 @@ app.prepare().then(() => {
             socket.join(matchId);                                  // Match room (both teams)
             socket.join(`team:${matchId}:${team.teamId}`);        // Team room (own team only)
             socketToTeamMatch.set(socket.id, { matchId, userId, teamId: team.teamId });
+            // Also save to Redis for cross-process access
+            await arenaRedis.setSocketToTeamMatch(socket.id, { matchId, userId, teamId: team.teamId });
             
             console.log(`[TeamMatch] ${player.odName} joined match ${matchId} as ${isTeam1 ? 'Team 1' : 'Team 2'}`);
             
@@ -1685,7 +2606,8 @@ app.prepare().then(() => {
                 }
             }
             
-            activeTeamMatches.set(matchId, match);
+            // Save to both in-memory and Redis
+            await saveTeamMatchState(matchId, match);
             
             console.log(`[TeamMatch] AI Match ${matchId} created: ${humanTeam.odTeamName || 'Team 1'} vs ${aiTeam.odTeamName}`);
             
@@ -1701,6 +2623,7 @@ app.prepare().then(() => {
                         odUserName: m.odUserName,
                         odLevel: m.odLevel,
                         odEquippedFrame: m.odEquippedFrame,
+                        odEquippedBanner: m.odEquippedBanner || 'default',
                         odEquippedTitle: m.odEquippedTitle,
                         slot: m.odPreferredOperation,
                     })),
@@ -2530,7 +3453,7 @@ app.prepare().then(() => {
         // ========================================
         
         // Handle disconnect
-        socket.on('disconnect', () => {
+        socket.on('disconnect', async () => {
             const socketData = socketToTeamMatch.get(socket.id);
             if (!socketData) return;
             
@@ -2555,6 +3478,8 @@ app.prepare().then(() => {
             }
             
             socketToTeamMatch.delete(socket.id);
+            // Also remove from Redis
+            await arenaRedis.removeSocketMapping(socket.id);
         });
     });
     
@@ -2653,6 +3578,7 @@ app.prepare().then(() => {
     
     /**
      * Get slot assignments for a team (player -> slot mapping)
+     * Includes cosmetic data for banner display
      */
     function getTeamSlotAssignments(team) {
         const slots = {};
@@ -2660,8 +3586,13 @@ app.prepare().then(() => {
             slots[playerId] = {
                 slot: player.slot,
                 name: player.odName,
+                level: player.odLevel || 1,
                 isIgl: player.isIgl,
                 isAnchor: player.isAnchor,
+                // Cosmetics for banner display
+                banner: player.odEquippedBanner || 'default',
+                frame: player.odEquippedFrame || 'default',
+                title: player.odEquippedTitle || 'Player',
             };
         }
         return slots;
@@ -3325,29 +4256,41 @@ app.prepare().then(() => {
         
         console.log(`[TeamMatch] Match ${match.matchId} ended. Winner: ${winnerId || 'DRAW'}`);
         
+        // Record team match to PostgreSQL for permanent history
+        const winnerTeam = isDraw ? null : (team1Won ? 1 : 2);
+        const durationMs = Date.now() - match.startTime;
+        recordTeamMatchToPostgres(match, winnerTeam, durationMs);
+        
         // Clean up after a delay (let clients receive the end event)
-        setTimeout(() => {
-            activeTeamMatches.delete(match.matchId);
+        setTimeout(async () => {
+            await removeTeamMatchState(match.matchId);
         }, 30000);
     }
     
     /**
      * Create a team match from matchmaking result
      * Called by the matchmaking system when a match is found
+     * Now async to support Redis storage
      */
-    global.createTeamMatch = function(matchId, team1, team2, operation, matchType) {
+    global.createTeamMatch = async function(matchId, team1, team2, operation, matchType) {
         const match = initTeamMatchState(matchId, team1, team2, operation, matchType);
-        activeTeamMatches.set(matchId, match);
-        console.log(`[TeamMatch] Match ${matchId} created: ${team1.odTeamName || 'Team 1'} vs ${team2.odTeamName || 'Team 2'}`);
+        await saveTeamMatchState(matchId, match);
+        console.log(`[TeamMatch] Match ${matchId} created and saved to Redis: ${team1.odTeamName || 'Team 1'} vs ${team2.odTeamName || 'Team 2'}`);
         return match;
     };
     
     console.log('[TeamMatch] Team match namespace initialized at /arena/teams');
+
+    // Initialize PostgreSQL schema for arena data
+    arenaPostgres.initSchema()
+        .then(() => console.log('[PostgreSQL] Arena database schema initialized'))
+        .catch(err => console.error('[PostgreSQL] Schema init failed:', err.message));
 
     httpServer.listen(port, hostname, () => {
         console.log(`> Ready on http://${hostname}:${port}`);
         console.log(`> WebSocket server running on /api/socket/arena`);
         console.log(`> Presence server running on /presence`);
         console.log(`> Team match server running on /arena/teams`);
+        console.log(`> PostgreSQL arena database connected`);
     });
 });

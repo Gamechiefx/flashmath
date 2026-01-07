@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { AuthHeader } from "@/components/auth-header";
 import { ArenaEligibility } from "@/components/arena/arena-eligibility";
 import { getArenaEligibilityData } from "@/lib/actions/arena";
+import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
@@ -11,6 +12,12 @@ export default async function ArenaPage() {
 
     if (!session?.user) {
         redirect("/auth/login");
+    }
+
+    // Check email verification - required for Arena access
+    const verified = await isEmailVerified();
+    if (!verified) {
+        redirect("/arena/verify-email");
     }
 
     const eligibilityData = await getArenaEligibilityData();

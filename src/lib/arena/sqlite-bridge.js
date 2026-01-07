@@ -19,6 +19,9 @@ const {
     TIER_ORDER,
     MATCHMAKING,
     SKILL_TIER_LEVELS,
+    TIER_BANDS,
+    getBandForTier,
+    getTierDisplayName,
     OPERATIONS
 } = require('./constants.js');
 
@@ -91,36 +94,57 @@ function calculateAggregateMathTier(mathTiers) {
  * Get the lowest operation tier from math_tiers
  * Per spec: "Use lowest relevant operation tier to prevent skill masking"
  * 
- * @param {Object} mathTiers - JSON object like {addition: 2, subtraction: 1, ...}
+ * UPDATED FOR 100-TIER SYSTEM:
+ * - math_tiers now stores values 1-100 per operation
+ * - Returns band info for matchmaking (±20 tier range)
+ * 
+ * @param {Object} mathTiers - JSON object like {addition: 45, subtraction: 32, ...}
  * @param {string[]} relevantOperations - Operations relevant to game mode (defaults to all)
- * @returns {Object} { tierLevel, tierName, tierId, operationTiers }
+ * @returns {Object} { tierLevel, tierName, bandId, weakestOperation, operationTiers }
  */
 function getLowestOperationTier(mathTiers, relevantOperations = OPERATIONS) {
     const operationTiers = {};
-    let lowestLevel = 4; // Start at max (Diamond)
+    let lowestTier = 100; // Start at max (Master 100)
     let lowestOperation = null;
 
     for (const op of relevantOperations) {
-        const level = typeof mathTiers[op] === 'number' ? mathTiers[op] : 0;
+        // Get tier value (1-100), default to 1 if not set
+        let tier = typeof mathTiers[op] === 'number' ? mathTiers[op] : 1;
+        
+        // Handle legacy 0-4 values by mapping to 100-tier equivalents
+        if (tier >= 0 && tier <= 4) {
+            const legacyMapping = SKILL_TIER_LEVELS[tier];
+            if (legacyMapping) {
+                tier = legacyMapping.tier; // Convert 0-4 to 1-100 range
+            }
+        }
+        
+        // Clamp to valid range
+        tier = Math.max(1, Math.min(100, tier));
+        
+        const band = getBandForTier(tier);
         operationTiers[op] = {
-            level: level,
-            tier: SKILL_TIER_LEVELS[level] || SKILL_TIER_LEVELS[0]
+            tier: tier,
+            band: band,
+            displayName: getTierDisplayName(tier)
         };
 
-        if (level < lowestLevel) {
-            lowestLevel = level;
+        if (tier < lowestTier) {
+            lowestTier = tier;
             lowestOperation = op;
         }
     }
 
-    const lowestTier = SKILL_TIER_LEVELS[lowestLevel] || SKILL_TIER_LEVELS[0];
+    const lowestBand = getBandForTier(lowestTier);
 
     return {
-        tierLevel: lowestLevel,           // 0-4
-        tierName: lowestTier.name,         // 'Bronze', 'Silver', etc.
-        tierId: lowestTier.id,             // 0-4 (same as level)
-        weakestOperation: lowestOperation, // Which operation is holding them back
-        operationTiers: operationTiers     // Full breakdown
+        tierLevel: lowestTier,              // 1-100
+        tierName: lowestBand.name,          // 'Foundation', 'Intermediate', etc.
+        bandId: lowestBand.id,              // 1-5
+        bandShortName: lowestBand.shortName, // 'F', 'I', 'A', 'E', 'M'
+        displayName: getTierDisplayName(lowestTier), // 'Advanced 45'
+        weakestOperation: lowestOperation,  // Which operation is holding them back
+        operationTiers: operationTiers      // Full breakdown per operation
     };
 }
 
@@ -315,18 +339,24 @@ function getArenaMatchmakingData(userId) {
         name: user.name,
 
         // =============================================================
-        // PRIMARY MATCHMAKING DATA (Per Spec)
+        // PRIMARY MATCHMAKING DATA (100-Tier System)
         // =============================================================
 
-        // For matchmaking tier gate: use LOWEST operation tier
+        // For matchmaking tier gate: use LOWEST operation tier (1-100)
+        // Matchmaking uses ±20 tier range (one band width)
         matchmakingTier: {
-            level: lowestTier.tierLevel,      // 0-4 (used for ±1 tier matching)
-            name: lowestTier.tierName,        // 'Bronze', 'Silver', etc.
-            id: lowestTier.tierId,
-            weakestOperation: lowestTier.weakestOperation
+            tier: lowestTier.tierLevel,         // 1-100 (used for ±20 tier matching)
+            bandId: lowestTier.bandId,          // 1-5 (band for display)
+            bandName: lowestTier.tierName,      // 'Foundation', 'Intermediate', etc.
+            bandShortName: lowestTier.bandShortName, // 'F', 'I', 'A', 'E', 'M'
+            displayName: lowestTier.displayName, // 'Advanced 45'
+            weakestOperation: lowestTier.weakestOperation,
+            // Legacy compatibility (for old code that expects 'level' or 'id')
+            level: lowestTier.tierLevel,
+            id: lowestTier.bandId
         },
 
-        // Full per-operation breakdown
+        // Full per-operation breakdown (each operation has tier 1-100)
         operationTiers: lowestTier.operationTiers,
         operationAccuracy: operationAccuracy,
 

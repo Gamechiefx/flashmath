@@ -3,11 +3,13 @@
 /**
  * Party Section Component
  * Displays current party or create party option
+ * 
+ * Enhanced with real-time Socket.IO indicators for member online status.
  */
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Crown, Plus, LogOut, UserPlus, Bell, Settings, Lock, Globe, ArrowUpCircle } from 'lucide-react';
+import { Users, Crown, Plus, LogOut, UserPlus, Bell, Settings, Lock, Globe, ArrowUpCircle, Wifi, WifiOff } from 'lucide-react';
 import { UserAvatar } from '@/components/user-avatar';
 import { cn } from '@/lib/utils';
 import type { Party, PartyInvite, Friend } from '@/lib/actions/social';
@@ -181,6 +183,7 @@ export function PartySection({
                                 </button>
                             )}
                             <button
+                                data-testid="leave-party-button"
                                 onClick={onLeaveParty}
                                 disabled={isLoading}
                                 className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
@@ -335,10 +338,22 @@ export function PartySection({
                                         )
                                     )}
                                     
-                                    <div className={cn(
-                                        "w-2 h-2 rounded-full",
-                                        getStatusColor(member.odUserId, member.odOnline)
-                                    )} />
+                                    {/* Online/Offline indicator with animation */}
+                                    <div className="relative flex items-center">
+                                        <div className={cn(
+                                            "w-2.5 h-2.5 rounded-full transition-all duration-300",
+                                            getStatusColor(member.odUserId, member.odOnline)
+                                        )} />
+                                        {/* Pulse animation for online status */}
+                                        {(memberStatuses?.get(member.odUserId) === 'online' || 
+                                          (memberStatuses?.get(member.odUserId) === undefined && member.odOnline)) && (
+                                            <motion.div
+                                                className="absolute w-2.5 h-2.5 rounded-full bg-green-500/50"
+                                                animate={{ scale: [1, 1.5, 1], opacity: [0.5, 0, 0.5] }}
+                                                transition={{ duration: 2, repeat: Infinity }}
+                                            />
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })}
@@ -348,6 +363,7 @@ export function PartySection({
                     {party.members.length < party.maxSize && canInvite && (
                         <div className="mt-3">
                             <button
+                                data-testid="invite-friend-button"
                                 onClick={() => setShowInviteList(!showInviteList)}
                                 className="w-full p-3 rounded-lg border border-dashed border-white/20 text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors flex items-center justify-center gap-2"
                             >
@@ -412,6 +428,7 @@ export function PartySection({
                 </div>
             ) : (
                 <button
+                    data-testid="create-party-social"
                     onClick={onCreateParty}
                     disabled={isLoading}
                     className={cn(

@@ -2,6 +2,7 @@ import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { TeamResultsClient } from './team-results-client';
 import { getDatabase } from '@/lib/db/sqlite';
+import { isEmailVerified } from '@/lib/actions/verification';
 
 async function getMatchResults(matchId: string) {
     const db = getDatabase();
@@ -45,6 +46,12 @@ export default async function TeamResultsPage({
     
     if (!session?.user) {
         redirect('/auth/login');
+    }
+
+    // Check email verification - required for Arena access
+    const verified = await isEmailVerified();
+    if (!verified) {
+        redirect('/arena/verify-email');
     }
 
     // Await params (Next.js 16+ requirement)

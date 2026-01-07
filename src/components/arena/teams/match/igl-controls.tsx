@@ -115,6 +115,7 @@ export function IGLControls({
 
     return (
         <motion.div
+            data-testid="igl-controls"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-gradient-to-b from-amber-900/40 to-slate-900/90 
@@ -219,6 +220,7 @@ export function IGLControls({
                                     <>
                                         {canUseNow && (
                                             <button
+                                                data-testid="double-callin-button"
                                                 onClick={handleUseNow}
                                                 className="w-full py-3 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 
                                                            text-purple-400 font-semibold transition-all
@@ -281,10 +283,11 @@ export function IGLControls({
                                     </button>
                                 </div>
                                 
-                                <div className="grid grid-cols-5 gap-2">
+                                <div data-testid="slot-selection-panel" className="grid grid-cols-5 gap-2">
                                     {availableSlots.map(({ slot, operation, playerName }) => (
                                         <button
                                             key={slot}
+                                            data-testid={`callin-slot-${slot}`}
                                             onClick={() => handleSlotSelect(slot)}
                                             className="p-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/40 
                                                        text-purple-400 text-xs font-bold transition-all
@@ -339,6 +342,7 @@ export function IGLControls({
                     </p>
                     {timeoutsRemaining > 0 && (
                         <button
+                            data-testid="timeout-button"
                             onClick={onTimeout}
                             className="w-full py-2 rounded bg-blue-500/20 hover:bg-blue-500/30 
                                        text-blue-400 text-sm font-bold transition-colors 

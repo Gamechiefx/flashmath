@@ -72,7 +72,7 @@ const SCENARIOS: Record<string, { name: string; tests: ((config: any) => Promise
             MatchFlowTests.testStrategyPhase,
             MatchFlowTests.testCompleteRound,
         ],
-        requiresMatch: true,
+        requiresMatch: false, // Each test creates its own match
     },
     'question-counter': {
         name: 'Question Counter',

@@ -36,6 +36,8 @@ import { DevFooter } from "@/components/dev-footer";
 import { SocialProvider, SocialFAB, SocialPanel } from "@/components/social";
 import { AuditorProvider, AuditorPanel, AuditorFab } from "@/components/auditor";
 import { Toaster } from "sonner";
+import { MatchAlertProvider } from "@/components/arena/match-alert-provider";
+import { PartyProvider } from "@/lib/socket/party-context";
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -67,9 +69,12 @@ export default async function RootLayout({
                 disableTransitionOnChange
               >
                 <SocialProvider>
+                  <PartyProvider>
                   <AuditorProvider>
-                    <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
-                    {children}
+                    <MatchAlertProvider>
+                      <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
+                      {children}
+                    </MatchAlertProvider>
                     {/* Social Panel - Right side */}
                     <SocialFAB />
                     <SocialPanel />
@@ -96,6 +101,7 @@ export default async function RootLayout({
                     }}
                   />
                   </AuditorProvider>
+                  </PartyProvider>
                 </SocialProvider>
               </ThemeProvider>
             </ItemPreviewProvider>
