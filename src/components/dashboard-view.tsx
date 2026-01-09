@@ -231,9 +231,9 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                     </GlassCard>
                 </motion.div>
 
-                {/* Quick Links - Leagues, Shop, Locker */}
+                {/* Quick Links - Leagues, Shop, Locker, Analytics */}
                 <motion.div
-                    className="grid grid-cols-3 gap-4"
+                    className="grid grid-cols-2 md:grid-cols-4 gap-4"
                     variants={containerVariants}
                 >
                     <motion.div variants={itemVariants}>
@@ -262,6 +262,16 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
                                 <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-green-400/5 transition-all group">
                                     <Archive size={24} className="text-green-400 group-hover:scale-110 transition-transform" />
                                     <span className="text-[10px] font-bold uppercase tracking-widest">Locker</span>
+                                </GlassCard>
+                            </motion.div>
+                        </Link>
+                    </motion.div>
+                    <motion.div variants={itemVariants}>
+                        <Link href="/analytics" className="block">
+                            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                <GlassCard className="p-4 flex flex-col items-center gap-2 hover:bg-purple-400/5 transition-all group">
+                                    <Activity size={24} className="text-purple-400 group-hover:scale-110 transition-transform" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">Analytics</span>
                                 </GlassCard>
                             </motion.div>
                         </Link>
