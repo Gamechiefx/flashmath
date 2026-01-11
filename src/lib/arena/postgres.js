@@ -30,12 +30,28 @@ function getPool() {
         return pool;
     }
 
-    pool = new Pool({
-        connectionString: process.env.ARENA_DATABASE_URL || process.env.DATABASE_URL,
-        max: 10,                    // Max connections in pool
-        idleTimeoutMillis: 30000,   // Close idle connections after 30s
-        connectionTimeoutMillis: 5000
-    });
+    // Support both connection string and individual env vars
+    const connectionString = process.env.ARENA_DATABASE_URL || process.env.DATABASE_URL;
+
+    const poolConfig = connectionString
+        ? {
+            connectionString,
+            max: 10,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000
+        }
+        : {
+            host: process.env.POSTGRES_HOST || 'localhost',
+            port: parseInt(process.env.POSTGRES_PORT || '5432'),
+            database: process.env.POSTGRES_DB || 'flashmath_arena',
+            user: process.env.POSTGRES_USER || 'flashmath',
+            password: process.env.POSTGRES_PASSWORD || '',
+            max: 10,
+            idleTimeoutMillis: 30000,
+            connectionTimeoutMillis: 5000
+        };
+
+    pool = new Pool(poolConfig);
 
     pool.on('error', (err) => {
         console.error('[PostgreSQL] Unexpected error:', err);
@@ -994,6 +1010,134 @@ async function getTeamMatchHistory(teamId, limit = 20) {
 }
 
 /**
+ * Get team match results by match ID (for results page)
+ * @param {string} matchId - The match ID to look up
+ * @param {Object} sqliteDb - Optional SQLite database for fallback name lookups
+ * @returns {Object} Match data with players
+ */
+async function getTeamMatchById(matchId, sqliteDb = null) {
+    const pool = getPool();
+
+    try {
+        // Get match data
+        const matchResult = await pool.query(`
+            SELECT
+                id,
+                team1_id, team2_id,
+                team1_name, team2_name,
+                winner_team,
+                team1_score, team2_score,
+                team1_elo_before, team2_elo_before,
+                team1_elo_change, team2_elo_change,
+                match_type,
+                questions_count,
+                match_duration_ms,
+                is_forfeit, is_ai_match,
+                created_at
+            FROM arena_team_matches
+            WHERE id = $1
+        `, [matchId]);
+
+        if (matchResult.rows.length === 0) {
+            return null;
+        }
+
+        const match = matchResult.rows[0];
+
+        // Get player data
+        const playersResult = await pool.query(`
+            SELECT
+                tmp.match_id, tmp.user_id, tmp.team_number,
+                tmp.is_igl as was_igl, tmp.is_anchor as was_anchor,
+                tmp.score as questions_correct,
+                tmp.questions_answered as questions_attempted,
+                tmp.correct_answers,
+                tmp.elo_before, tmp.elo_change,
+                ap.username as player_name
+            FROM arena_team_match_players tmp
+            LEFT JOIN arena_players ap ON tmp.user_id = ap.user_id
+            WHERE tmp.match_id = $1
+            ORDER BY tmp.team_number, tmp.score DESC
+        `, [matchId]);
+
+        // Transform to expected format
+        const transformedMatch = {
+            id: match.id,
+            team1_id: match.team1_id || 'team1',
+            team2_id: match.team2_id || 'team2',
+            team1_name: match.team1_name,
+            team2_name: match.team2_name,
+            team1_tag: null, // PostgreSQL doesn't store tags currently
+            team2_tag: null,
+            winner_team_id: match.winner_team === 1 ? (match.team1_id || 'team1') :
+                            match.winner_team === 2 ? (match.team2_id || 'team2') : null,
+            team1_score: match.team1_score,
+            team2_score: match.team2_score,
+            team1_elo_change: match.team1_elo_change,
+            team2_elo_change: match.team2_elo_change,
+            match_type: match.match_type,
+            created_at: match.created_at,
+        };
+
+        // If we have SQLite DB, try to get player names from there as fallback
+        let sqliteNames = {};
+        if (sqliteDb) {
+            try {
+                const userIds = playersResult.rows.map(p => p.user_id).filter(id => id);
+                if (userIds.length > 0) {
+                    const placeholders = userIds.map(() => '?').join(',');
+                    const users = sqliteDb.prepare(`SELECT id, name FROM users WHERE id IN (${placeholders})`).all(...userIds);
+                    for (const u of users) {
+                        sqliteNames[u.id] = u.name;
+                    }
+                }
+            } catch (err) {
+                console.log('[PostgreSQL] Could not get names from SQLite:', err.message);
+            }
+        }
+
+        const transformedPlayers = playersResult.rows.map(p => {
+            // Try postgres name, then sqlite name, then fallback
+            let playerName = p.player_name;
+            if (!playerName && sqliteNames[p.user_id]) {
+                playerName = sqliteNames[p.user_id];
+            }
+            if (!playerName) {
+                // Check if it's an AI player
+                if (p.user_id && (p.user_id.startsWith('ai_') || p.user_id.startsWith('ai-'))) {
+                    playerName = `AI ${p.user_id.slice(-4)}`;
+                } else {
+                    playerName = `Player_${(p.user_id || 'unknown').slice(-4)}`;
+                }
+            }
+
+            return {
+                match_id: p.match_id,
+                user_id: p.user_id,
+                team_id: p.team_number === 1 ? (match.team1_id || 'team1') : (match.team2_id || 'team2'),
+                player_name: playerName,
+                was_igl: p.was_igl,
+                was_anchor: p.was_anchor,
+                questions_correct: p.questions_correct || 0,
+                questions_attempted: p.questions_attempted || 0,
+                accuracy: p.questions_attempted > 0 ? p.correct_answers / p.questions_attempted : 0,
+                best_streak: 0, // Not tracked in current schema
+                avg_answer_time_ms: null, // Not tracked in current schema
+                operation_slot: p.was_anchor ? 'Anchor' : p.was_igl ? 'IGL' : 'Player',
+            };
+        });
+
+        return {
+            match: transformedMatch,
+            players: transformedPlayers,
+        };
+    } catch (err) {
+        console.error('[PostgreSQL] Error getting team match by ID:', err);
+        return null;
+    }
+}
+
+/**
  * Get global arena statistics
  */
 async function getGlobalStats() {
@@ -1080,5 +1224,6 @@ module.exports = {
     // Match operations (5v5)
     recordTeamMatch,
     getPlayerTeamMatchHistory,
-    getTeamMatchHistory
+    getTeamMatchHistory,
+    getTeamMatchById
 };

@@ -28,6 +28,7 @@ import {
     type PartyState,
     type PartyMember,
 } from "@/lib/party/party-redis";
+import { checkPartyArenaEligibility } from "@/lib/actions/arena";
 
 // Redis client for matchmaking
 let redisClient: any = null;
@@ -37,8 +38,9 @@ async function getRedis() {
 
     try {
         const Redis = (await import('ioredis')).default;
+        // IMPORTANT: Must match server-redis.js default ('localhost') for local development
         redisClient = new Redis({
-            host: process.env.REDIS_HOST || 'redis',
+            host: process.env.REDIS_HOST || 'localhost',
             port: parseInt(process.env.REDIS_PORT || '6379'),
             maxRetriesPerRequest: 3,
         });
@@ -70,6 +72,8 @@ export interface TeamQueueEntry {
     odAnchorName: string;
     odMembers: TeamQueueMember[];
     odJoinedAt: number;
+    hasAITeammates?: boolean;       // True if team includes AI teammates (non-ranked only)
+    humanMemberCount?: number;       // Number of human players in the team
 }
 
 export interface TeamQueueMember {
@@ -79,9 +83,11 @@ export interface TeamQueueMember {
     odTier: number;                 // Individual tier (1-100, 100-tier system)
     odLevel: number;
     odEquippedFrame: string | null;
+    odEquippedBanner: string | null; // Arena banner style
     odEquippedTitle: string | null;
     odPreferredOperation?: string | null;  // Preferred math operation
     odOriginalPartyId?: string;             // Original party ID when merging parties
+    isAITeammate?: boolean;                 // True if this is an AI teammate (not opponent)
 }
 
 export interface TeamMatchResult {
@@ -144,6 +150,7 @@ export interface TeammateSearchResult {
 
 const TEAM_QUEUE_PREFIX = 'team:queue:';
 const TEAM_MATCH_PREFIX = 'team:match:';
+const TEAM_MATCH_SETUP_PREFIX = 'arena:team_match_setup:'; // Must match server-redis.js KEYS.TEAM_MATCH_SETUP
 const TEAM_IGL_SELECTION_PREFIX = 'team:igl:';
 const TEAMMATE_QUEUE_PREFIX = 'team:teammates:'; // For partial parties looking for teammates
 const ASSEMBLED_TEAM_PREFIX = 'team:assembled:'; // For assembled teams in IGL selection
@@ -233,9 +240,45 @@ function calculateEloRange(queueTimeMs: number): number {
     return Math.min(INITIAL_ELO_RANGE + (expansions * ELO_EXPANSION_RATE), MAX_ELO_RANGE);
 }
 
-// =============================================================================
-// TEAM QUEUE OPERATIONS
-// =============================================================================
+/**
+ * Validate match type parameter
+ */
+function validateMatchType(matchType: any): { valid: boolean; error?: string } {
+    if (!matchType) {
+        return { valid: false, error: 'Match type is required' };
+    }
+    
+    if (typeof matchType !== 'string') {
+        return { valid: false, error: 'Match type must be a string' };
+    }
+    
+    const validTypes = ['ranked', 'casual'];
+    if (!validTypes.includes(matchType)) {
+        return { valid: false, error: `Invalid match type '${matchType}'. Must be one of: ${validTypes.join(', ')}` };
+    }
+    
+    return { valid: true };
+}
+
+/**
+ * Log queue operation with match type context
+ */
+function logQueueOperation(
+    operation: string, 
+    partyId: string, 
+    matchType: string, 
+    details?: Record<string, any>
+): void {
+    const logData = {
+        operation,
+        partyId,
+        matchType,
+        timestamp: new Date().toISOString(),
+        ...details
+    };
+    
+    console.log(`[TeamMatchmaking:${operation}] ${JSON.stringify(logData)}`);
+}
 
 /**
  * Join the team queue with a party
@@ -245,18 +288,44 @@ export async function joinTeamQueue(params: {
     partyId: string;
     matchType: 'ranked' | 'casual';
 }): Promise<{ success: boolean; error?: string }> {
+    // #region agent log - HB/HD: Track joinTeamQueue calls
+    const fs = require('fs');
+    try {
+        fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', JSON.stringify({location:'team-matchmaking.ts:joinTeamQueue',message:'JOIN TEAM QUEUE CALLED',data:{partyId:params.partyId,matchType:params.matchType,stackTrace:new Error().stack?.split('\n').slice(0,5).join('|')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'}) + '\n');
+    } catch {}
+    // #endregion
+    
     const session = await auth();
     if (!session?.user?.id) {
         return { success: false, error: 'Not authenticated' };
     }
 
+    // Validate match type
+    const matchTypeValidation = validateMatchType(params.matchType);
+    if (!matchTypeValidation.valid) {
+        logQueueOperation('joinQueue', params.partyId, String(params.matchType), {
+            error: matchTypeValidation.error,
+            userId: session.user.id
+        });
+        return { success: false, error: matchTypeValidation.error };
+    }
+
     const db = getDatabase();
     const userId = session.user.id;
+
+    logQueueOperation('joinQueue', params.partyId, params.matchType, {
+        userId,
+        action: 'starting'
+    });
 
     try {
         // Get party data from Redis
         const partyData = await getParty(params.partyId);
         if (!partyData) {
+            logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                error: 'Party not found',
+                userId
+            });
             return { success: false, error: 'Party not found' };
         }
 
@@ -265,11 +334,21 @@ export async function joinTeamQueue(params: {
 
         // Verify user is party leader
         if (party.leaderId !== userId) {
+            logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                error: 'Non-leader attempted to start queue',
+                userId,
+                actualLeader: party.leaderId
+            });
             return { success: false, error: 'Only the party leader can start the queue' };
         }
 
         // Check party size for ranked
         if (params.matchType === 'ranked' && redisMembers.length < 5) {
+            logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                error: 'Insufficient party size for ranked',
+                partySize: redisMembers.length,
+                requiredSize: 5
+            });
             return { success: false, error: 'Ranked 5v5 requires a full party of 5 players' };
         }
 
@@ -284,29 +363,76 @@ export async function joinTeamQueue(params: {
         // Check all other members are ready (leader is now always ready)
         const notReady = redisMembers.filter(m => !m.isReady && m.odUserId !== party.leaderId);
         if (notReady.length > 0) {
+            logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                error: 'Not all members ready',
+                notReadyMembers: notReady.map(m => m.odUserName),
+                notReadyCount: notReady.length
+            });
             return { success: false, error: 'Not all party members are ready' };
         }
 
         // Validate IGL and Anchor are set and are actual party members for ranked
         if (params.matchType === 'ranked') {
             if (!party.iglId) {
+                logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                    error: 'Missing IGL assignment',
+                    validationStep: 'IGL_check'
+                });
                 return { success: false, error: 'IGL must be assigned before queuing' };
             }
             if (!party.anchorId) {
+                logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                    error: 'Missing Anchor assignment',
+                    validationStep: 'Anchor_check'
+                });
                 return { success: false, error: 'Anchor must be assigned before queuing' };
             }
             
             // Verify IGL is still a party member
             const iglMember = redisMembers.find(m => m.odUserId === party.iglId);
             if (!iglMember) {
+                logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                    error: 'IGL not in party',
+                    iglId: party.iglId,
+                    currentMembers: redisMembers.map(m => m.odUserId)
+                });
                 return { success: false, error: 'Assigned IGL is no longer in the party. Please reassign.' };
             }
             
             // Verify Anchor is still a party member
             const anchorMember = redisMembers.find(m => m.odUserId === party.anchorId);
             if (!anchorMember) {
+                logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                    error: 'Anchor not in party',
+                    anchorId: party.anchorId,
+                    currentMembers: redisMembers.map(m => m.odUserId)
+                });
                 return { success: false, error: 'Assigned Anchor is no longer in the party. Please reassign.' };
             }
+        }
+
+        // =============================================================
+        // ARENA ELIGIBILITY CHECK - All party members must be eligible
+        // =============================================================
+        const memberIds = redisMembers.map(m => m.odUserId);
+        const eligibilityResult = await checkPartyArenaEligibility(memberIds);
+        
+        if (!eligibilityResult.allEligible) {
+            const ineligibleNames = eligibilityResult.ineligibleMembers
+                .map(m => m.userName || 'Unknown')
+                .join(', ');
+            const firstIneligible = eligibilityResult.ineligibleMembers[0];
+            
+            logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                error: 'Party has ineligible members',
+                ineligibleMembers: eligibilityResult.ineligibleMembers,
+                memberCount: redisMembers.length
+            });
+            
+            return { 
+                success: false, 
+                error: `Cannot queue: ${ineligibleNames} ${eligibilityResult.ineligibleMembers.length === 1 ? 'is' : 'are'} not eligible for arena play. ${firstIneligible?.reason ? `(${firstIneligible.reason})` : ''}`
+            };
         }
 
         // Get Leader, IGL and Anchor from Redis members
@@ -345,19 +471,37 @@ export async function joinTeamQueue(params: {
                     odTier: tier,
                     odLevel: m.odLevel || 1,
                     odEquippedFrame: m.odEquippedFrame || null,
+                    odEquippedBanner: m.odEquippedBanner || null,
                     odEquippedTitle: m.odEquippedTitle || null,
                 };
             })
         );
 
-        // Calculate matchmaking ELO
+        // For casual matches: Add AI teammates to fill remaining slots
+        let finalQueueMembers = queueMembers;
+        let hasAITeammates = false;
+        let humanMemberCount = redisMembers.length;
+        
+        if (params.matchType === 'casual' && queueMembers.length < 5) {
+            const slotsToFill = 5 - queueMembers.length;
+            const avgHumanElo = queueMembers.reduce((sum, m) => sum + m.odElo, 0) / queueMembers.length;
+            
+            // Generate AI teammates with balanced ELO (±25 of human average)
+            const aiTeammates = generateAITeammates(params.partyId, slotsToFill, avgHumanElo, queueMembers.length);
+            finalQueueMembers = [...queueMembers, ...aiTeammates];
+            hasAITeammates = true;
+            
+            console.log(`[TeamMatchmaking] Added ${slotsToFill} AI teammates to casual party ${params.partyId} (human avg ELO: ${avgHumanElo})`);
+        }
+
+        // Calculate matchmaking ELO using final team (including AI teammates for casual)
         const matchElo = await getMatchmakingElo(
             party.teamId,
-            queueMembers.map(m => ({ odUserId: m.odUserId, odElo: m.odElo }))
+            finalQueueMembers.map(m => ({ odUserId: m.odUserId, odElo: m.odElo }))
         );
 
         // Calculate average team tier
-        const avgTier = calculateTeamAvgTier(queueMembers);
+        const avgTier = calculateTeamAvgTier(finalQueueMembers);
 
         // Update party queue state in Redis
         await updateQueueState(params.partyId, party.leaderId, 'finding_opponents', params.matchType);
@@ -378,17 +522,33 @@ export async function joinTeamQueue(params: {
             odIglName: igl?.odUserName || 'Unknown',
             odAnchorId: party.anchorId || redisMembers[0]?.odUserId,
             odAnchorName: anchor?.odUserName || 'Unknown',
-            odMembers: queueMembers,
+            odMembers: finalQueueMembers, // Use final members (including AI teammates)
             odJoinedAt: Date.now(),
+            hasAITeammates, // Flag for AI teammates
+            humanMemberCount, // Number of human players
         };
 
         // Add to Redis queue
         const redis = await getRedis();
         if (!redis) {
+            logQueueOperation('joinQueue', params.partyId, params.matchType, {
+                error: 'Redis unavailable',
+                step: 'redis_connection'
+            });
             return { success: false, error: 'Queue service unavailable' };
         }
 
         const queueKey = `${TEAM_QUEUE_PREFIX}${params.matchType}:5v5`;
+        
+        logQueueOperation('joinQueue', params.partyId, params.matchType, {
+            queueKey,
+            matchElo,
+            avgTier,
+            partySize: redisMembers.length,
+            finalTeamSize: finalQueueMembers.length,
+            hasAITeammates,
+            step: 'adding_to_queue'
+        });
         
         // Add to sorted set with ELO as score
         await redis.zadd(queueKey, matchElo, params.partyId);
@@ -400,10 +560,22 @@ export async function joinTeamQueue(params: {
             'EX', QUEUE_TIMEOUT_MS / 1000
         );
 
+        logQueueOperation('joinQueue', params.partyId, params.matchType, {
+            success: true,
+            matchElo,
+            avgTier,
+            queueKey,
+            step: 'completed'
+        });
         console.log(`[TeamMatchmaking] Party ${params.partyId} joined queue: ELO=${matchElo}, AvgTier=${avgTier}`);
         return { success: true };
 
     } catch (error: any) {
+        logQueueOperation('joinQueue', params.partyId, params.matchType, {
+            error: error.message,
+            stack: error.stack,
+            step: 'exception'
+        });
         console.error('[TeamMatchmaking] joinTeamQueue error:', error);
         return { success: false, error: error.message };
     }
@@ -454,8 +626,21 @@ export async function leaveTeamQueue(partyId: string): Promise<{ success: boolea
 
         // Remove entry data
         await redis.del(`${TEAM_QUEUE_PREFIX}entry:${partyId}`);
+        
+        // Also delete any match result data
+        await redis.del(`team:match:${partyId}`);
 
-        console.log(`[TeamMatchmaking] Party ${partyId} left queue`);
+        // CRITICAL: Reset the party's queue state to idle
+        // This is what the UI reads to show the queue status
+        const queueStateKey = `party:${partyId}:queue`;
+        await redis.set(queueStateKey, JSON.stringify({
+            status: 'idle',
+            startedAt: null,
+            matchType: null,
+            matchId: null,
+        }), 'EX', 14400); // 4 hour TTL
+
+        console.log(`[TeamMatchmaking] Party ${partyId} left queue - queue state reset to idle`);
         return { success: true };
 
     } catch (error: any) {
@@ -475,15 +660,36 @@ export async function checkTeamMatch(partyId: string): Promise<{
 }> {
     const session = await auth();
     if (!session?.user?.id) {
+        logQueueOperation('checkMatch', partyId, 'unknown', {
+            error: 'Not authenticated',
+            step: 'auth_check'
+        });
         return {
             status: { inQueue: false, phase: null, queueTimeMs: 0, currentEloRange: 0, partySize: 0, targetSize: 5, matchId: null },
             error: 'Not authenticated'
         };
     }
 
+    // Validate partyId parameter
+    if (!partyId || typeof partyId !== 'string') {
+        logQueueOperation('checkMatch', String(partyId), 'unknown', {
+            error: 'Invalid partyId parameter',
+            partyIdType: typeof partyId,
+            step: 'validation'
+        });
+        return {
+            status: { inQueue: false, phase: null, queueTimeMs: 0, currentEloRange: 0, partySize: 0, targetSize: 5, matchId: null },
+            error: 'Invalid party ID'
+        };
+    }
+
     try {
         const redis = await getRedis();
         if (!redis) {
+            logQueueOperation('checkMatch', partyId, 'unknown', {
+                error: 'Redis unavailable',
+                step: 'redis_connection'
+            });
             return {
                 status: { inQueue: false, phase: null, queueTimeMs: 0, currentEloRange: 0, partySize: 0, targetSize: 5, matchId: null },
                 error: 'Queue service unavailable'
@@ -494,6 +700,11 @@ export async function checkTeamMatch(partyId: string): Promise<{
         const matchData = await redis.get(`${TEAM_MATCH_PREFIX}${partyId}`);
         if (matchData) {
             const match = JSON.parse(matchData) as TeamMatchResult;
+            logQueueOperation('checkMatch', partyId, match.odTeam1.odMatchType, {
+                matchFound: true,
+                matchId: match.matchId,
+                step: 'existing_match'
+            });
             return {
                 status: {
                     inQueue: false,
@@ -511,17 +722,48 @@ export async function checkTeamMatch(partyId: string): Promise<{
         // Get queue entry
         const entryData = await redis.get(`${TEAM_QUEUE_PREFIX}entry:${partyId}`);
         if (!entryData) {
+            logQueueOperation('checkMatch', partyId, 'unknown', {
+                notInQueue: true,
+                step: 'queue_entry_check'
+            });
             return {
                 status: { inQueue: false, phase: null, queueTimeMs: 0, currentEloRange: 0, partySize: 0, targetSize: 5, matchId: null },
             };
         }
 
-        const entry = JSON.parse(entryData) as TeamQueueEntry;
+        let entry: TeamQueueEntry;
+        try {
+            entry = JSON.parse(entryData) as TeamQueueEntry;
+        } catch (parseError) {
+            logQueueOperation('checkMatch', partyId, 'unknown', {
+                error: 'Malformed queue entry data',
+                parseError: parseError instanceof Error ? parseError.message : String(parseError),
+                step: 'entry_parsing'
+            });
+            return {
+                status: { inQueue: false, phase: null, queueTimeMs: 0, currentEloRange: 0, partySize: 0, targetSize: 5, matchId: null },
+                error: 'Invalid queue data - please rejoin queue'
+            };
+        }
+
         const queueTimeMs = Date.now() - entry.odJoinedAt;
         const currentEloRange = calculateEloRange(queueTimeMs);
 
+        logQueueOperation('checkMatch', partyId, entry.odMatchType, {
+            queueTimeMs,
+            currentEloRange,
+            elo: entry.odElo,
+            step: 'queue_status_check'
+        });
+
         // Check if queue has timed out
         if (queueTimeMs > QUEUE_TIMEOUT_MS) {
+            logQueueOperation('checkMatch', partyId, entry.odMatchType, {
+                timeout: true,
+                queueTimeMs,
+                timeoutThreshold: QUEUE_TIMEOUT_MS,
+                step: 'timeout_check'
+            });
             await leaveTeamQueue(partyId);
             return {
                 status: { inQueue: false, phase: null, queueTimeMs: 0, currentEloRange: 0, partySize: entry.odMembers.length, targetSize: 5, matchId: null },
@@ -536,7 +778,20 @@ export async function checkTeamMatch(partyId: string): Promise<{
         const minElo = entry.odElo - currentEloRange;
         const maxElo = entry.odElo + currentEloRange;
         
+        logQueueOperation('checkMatch', partyId, entry.odMatchType, {
+            searchingForMatch: true,
+            eloRange: { min: minElo, max: maxElo },
+            queueKey,
+            step: 'matchmaking_search'
+        });
+        
         const candidates = await redis.zrangebyscore(queueKey, minElo, maxElo) as string[];
+        
+        logQueueOperation('checkMatch', partyId, entry.odMatchType, {
+            candidatesFound: candidates.length,
+            candidates: candidates.filter(c => c !== partyId), // Exclude self
+            step: 'candidates_found'
+        });
         
         // Find a match (exclude self)
         for (const candidatePartyId of candidates) {
@@ -546,6 +801,18 @@ export async function checkTeamMatch(partyId: string): Promise<{
             if (!candidateData) continue;
 
             const candidate = JSON.parse(candidateData) as TeamQueueEntry;
+
+            // Verify match type compatibility
+            if (candidate.odMatchType !== entry.odMatchType) {
+                logQueueOperation('checkMatch', partyId, entry.odMatchType, {
+                    matchTypeConflict: true,
+                    ourMatchType: entry.odMatchType,
+                    candidateMatchType: candidate.odMatchType,
+                    candidatePartyId,
+                    step: 'match_type_validation'
+                });
+                continue;
+            }
 
             // Verify ELO is in range from candidate's perspective
             const candidateQueueTime = Date.now() - candidate.odJoinedAt;
@@ -569,6 +836,15 @@ export async function checkTeamMatch(partyId: string): Promise<{
                     odTeam1: entry,
                     odTeam2: candidate,
                 };
+
+                logQueueOperation('checkMatch', partyId, entry.odMatchType, {
+                    matchFound: true,
+                    matchId,
+                    opponent: candidatePartyId,
+                    eloComparison: { our: entry.odElo, their: candidate.odElo },
+                    tierComparison: { our: entryTier, their: candidateTier },
+                    step: 'match_created'
+                });
 
                 // Store match for both parties
                 await redis.set(
@@ -601,10 +877,28 @@ export async function checkTeamMatch(partyId: string): Promise<{
                     },
                     match: matchResult,
                 };
+            } else {
+                logQueueOperation('checkMatch', partyId, entry.odMatchType, {
+                    candidateRejected: true,
+                    candidatePartyId,
+                    eloCompatible,
+                    tierCompatible,
+                    eloComparison: { our: entry.odElo, their: candidate.odElo, diff: Math.abs(candidate.odElo - entry.odElo) },
+                    tierComparison: { our: entryTier, their: candidateTier, diff: tierDiff },
+                    step: 'compatibility_check'
+                });
             }
         }
 
         // No match yet
+        logQueueOperation('checkMatch', partyId, entry.odMatchType, {
+            noMatchFound: true,
+            queueTimeMs,
+            currentEloRange,
+            candidatesChecked: candidates.length - 1, // Exclude self
+            step: 'no_match_found'
+        });
+        
         return {
             status: {
                 inQueue: true,
@@ -618,6 +912,11 @@ export async function checkTeamMatch(partyId: string): Promise<{
         };
 
     } catch (error: any) {
+        logQueueOperation('checkMatch', partyId, 'unknown', {
+            error: error.message,
+            stack: error.stack,
+            step: 'exception'
+        });
         console.error('[TeamMatchmaking] checkTeamMatch error:', error);
         return {
             status: { inQueue: false, phase: null, queueTimeMs: 0, currentEloRange: 0, partySize: 0, targetSize: 5, matchId: null },
@@ -716,13 +1015,41 @@ export async function getTeamQueueStatus(partyId: string): Promise<TeamQueueStat
 export async function getTeamQueueCount(
     matchType: 'ranked' | 'casual'
 ): Promise<number> {
+    // Validate match type
+    const matchTypeValidation = validateMatchType(matchType);
+    if (!matchTypeValidation.valid) {
+        logQueueOperation('getQueueCount', 'system', String(matchType), {
+            error: matchTypeValidation.error,
+            step: 'validation'
+        });
+        return 0;
+    }
+
     try {
         const redis = await getRedis();
-        if (!redis) return 0;
+        if (!redis) {
+            logQueueOperation('getQueueCount', 'system', matchType, {
+                error: 'Redis unavailable',
+                step: 'redis_connection'
+            });
+            return 0;
+        }
 
         const queueKey = `${TEAM_QUEUE_PREFIX}${matchType}:5v5`;
-        return await redis.zcard(queueKey);
+        const count = await redis.zcard(queueKey);
+        
+        logQueueOperation('getQueueCount', 'system', matchType, {
+            queueKey,
+            count,
+            step: 'count_retrieved'
+        });
+        
+        return count;
     } catch (error) {
+        logQueueOperation('getQueueCount', 'system', matchType, {
+            error: error instanceof Error ? error.message : String(error),
+            step: 'exception'
+        });
         console.error('[TeamMatchmaking] getTeamQueueCount error:', error);
         return 0;
     }
@@ -743,52 +1070,46 @@ export async function joinTeammateQueue(params: {
     if (!session?.user?.id) {
         return { success: false, error: 'Not authenticated' };
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:joinTeammateQueue:ENTRY',message:'joinTeammateQueue called - looking for HUMAN teammates only',data:{partyId:params.partyId,userId:session.user.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
 
     const db = getDatabase();
     const userId = session.user.id;
 
     try {
-        // Get party data
-        const party = db.prepare(`
-            SELECT p.id, p.leader_id, p.team_id,
-                   t.name as team_name, t.tag as team_tag
-            FROM parties p
-            LEFT JOIN teams t ON t.id = p.team_id
-            WHERE p.id = ?
-        `).get(params.partyId) as any;
+        // Get party data from Redis (primary source)
+        const partyData = await getParty(params.partyId);
 
-        if (!party) {
+        if (!partyData) {
             return { success: false, error: 'Party not found' };
         }
 
-        if (party.leader_id !== userId) {
+        const party = partyData.party;
+        const redisMembers = partyData.members;
+
+        if (party.leaderId !== userId) {
             return { success: false, error: 'Only the party leader can start teammate search' };
         }
 
-        // Get party members (including math_tiers for tier calculation)
-        const members = db.prepare(`
-            SELECT pm.user_id,
-                   u.name, u.level, u.equipped_items,
-                   u.arena_elo_5v5, u.math_tiers
-            FROM party_members pm
-            JOIN users u ON u.id = pm.user_id
-            WHERE pm.party_id = ?
-        `).all(params.partyId) as any[];
-
-        if (members.length >= 5) {
+        if (redisMembers.length >= 5) {
             return { success: false, error: 'Party already has 5 members - use regular queue' };
         }
 
-        if (members.length === 0) {
+        if (redisMembers.length === 0) {
             return { success: false, error: 'Party has no members' };
         }
 
-        // Auto-ready the leader when they start teammate search
-        db.prepare(`
-            UPDATE party_members SET is_ready = 1 
-            WHERE party_id = ? AND user_id = ?
-        `).run(params.partyId, party.leader_id);
-        console.log(`[TeamMatchmaking] Auto-readied leader ${party.leader_id} for teammate search`);
+        // Get user data from SQLite for tier calculation
+        const memberIds = redisMembers.map(m => m.odUserId);
+        const members = db.prepare(`
+            SELECT id as user_id, name, level, equipped_items,
+                   arena_elo_5v5, math_tiers
+            FROM users
+            WHERE id IN (${memberIds.map(() => '?').join(',')})
+        `).all(...memberIds) as any[];
+
+        console.log(`[TeamMatchmaking] Party ${params.partyId} has ${redisMembers.length} members, joining teammate search`);
 
         const slotsNeeded = 5 - members.length;
 
@@ -815,6 +1136,7 @@ export async function joinTeammateQueue(params: {
                     odTier: tier,
                     odLevel: m.level || 1,
                     odEquippedFrame: equipped.frame || null,
+                    odEquippedBanner: equipped.banner || null,
                     odEquippedTitle: equipped.title || null,
                 };
             })
@@ -860,6 +1182,9 @@ export async function joinTeammateQueue(params: {
         );
 
         console.log(`[TeamMatchmaking] Party ${params.partyId} (${members.length}/5) joined teammate queue`);
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:joinTeammateQueue:SUCCESS',message:'Joined teammate queue successfully',data:{partyId:params.partyId,memberCount:members.length,slotsNeeded,avgElo,queueKey:'team:teammates:5v5'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H3'})}).catch(()=>{});
+        // #endregion
         return { success: true };
 
     } catch (error: any) {
@@ -1057,6 +1382,9 @@ export async function checkForTeammates(partyId: string): Promise<{
         const maxElo = entry.odElo + currentEloRange;
 
         const candidates = await redis.zrangebyscore(queueKey, minElo, maxElo) as string[];
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:checkForTeammates:SEARCH',message:'Searching for teammate parties',data:{partyId,ourMemberCount:entry.odMembers.length,candidateCount:candidates.length,eloRange:{min:minElo,max:maxElo}},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
 
         // Find parties that together sum to exactly 5 players
         const partiesToMerge: TeammateQueueEntry[] = [entry];
@@ -1091,6 +1419,9 @@ export async function checkForTeammates(partyId: string): Promise<{
             }
         }
 
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:checkForTeammates:RESULT',message:'Teammate search result',data:{partyId,totalPlayersFound:totalPlayers,partiesToMergeCount:partiesToMerge.length,needsExactly5:true,willFormTeam:totalPlayers===5},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
+        // #endregion
         // Check if we have exactly 5 players
         if (totalPlayers === 5) {
             // Form the assembled team!
@@ -1518,9 +1849,54 @@ export async function getTeammateQueueStatus(partyId: string): Promise<TeamQueue
 
 export type BotDifficulty = 'easy' | 'medium' | 'hard' | 'impossible';
 
+// AI Teammate names - friendly, supportive names
+const AI_TEAMMATE_NAMES = [
+    'AlphaBot', 'BetaHelper', 'GammaGuard', 'DeltaDriver', 'EpsilonAce',
+    'ZetaZoom', 'ThetaThunder', 'IotaImpact', 'KappaCrush', 'LambdaLead',
+];
+
+const AI_TEAMMATE_TITLES = ['AI Ally', 'Bot Buddy', 'Auto Assist', 'Smart Support', 'Robo Relay'];
+const AI_TEAMMATE_FRAMES = ['hologram', 'circuit', 'neon', 'matrix', 'cyber'];
+const AI_TEAMMATE_BANNERS = ['matrices', 'synthwave', 'plasma', 'royal', 'caution'];
+
+/**
+ * Generate AI teammates to fill remaining slots
+ * Used when party has less than 5 human players in casual/AI matches
+ */
+function generateAITeammates(
+    matchId: string,
+    count: number,
+    targetElo: number,
+    startIndex: number
+): TeamQueueMember[] {
+    const teammates: TeamQueueMember[] = [];
+
+    for (let i = 0; i < count; i++) {
+        const nameIndex = (startIndex + i) % AI_TEAMMATE_NAMES.length;
+        teammates.push({
+            odUserId: `ai_teammate_${matchId}_${startIndex + i}`,
+            odUserName: AI_TEAMMATE_NAMES[nameIndex],
+            odElo: targetElo + Math.floor(Math.random() * 51) - 25, // Exactly ±25 range
+            odTier: DEFAULT_TIER,
+            odLevel: Math.floor(Math.random() * 30) + 20, // Level 20-50
+            odEquippedFrame: AI_TEAMMATE_FRAMES[Math.floor(Math.random() * AI_TEAMMATE_FRAMES.length)],
+            odEquippedBanner: AI_TEAMMATE_BANNERS[Math.floor(Math.random() * AI_TEAMMATE_BANNERS.length)],
+            odEquippedTitle: AI_TEAMMATE_TITLES[Math.floor(Math.random() * AI_TEAMMATE_TITLES.length)],
+            odPreferredOperation: null,
+            isAITeammate: true, // Flag to identify AI teammates
+        });
+    }
+
+    return teammates;
+}
+
 /**
  * Create an instant match against an AI team
  * Used for testing the 5v5 match flow and UI
+ * 
+ * For non-ranked (casual) matches:
+ * - Allows parties with less than 5 members
+ * - AI teammates fill the remaining slots
  */
 export async function createAITeamMatch(params: {
     partyId: string;
@@ -1531,49 +1907,80 @@ export async function createAITeamMatch(params: {
         return { success: false, error: 'Not authenticated' };
     }
 
+    console.log('[TeamMatchmaking] createAITeamMatch called with partyId:', params.partyId);
+
     const db = getDatabase();
     const userId = session.user.id;
+    const matchId = uuidv4();
 
     try {
-        // Get party data
-        const party = db.prepare(`
-            SELECT p.id, p.leader_id, p.igl_id, p.anchor_id, p.team_id,
-                   t.name as team_name, t.tag as team_tag
-            FROM parties p
-            LEFT JOIN teams t ON t.id = p.team_id
-            WHERE p.id = ?
-        `).get(params.partyId) as any;
-
-        if (!party) {
+        // Get party data from Redis (parties are stored in Redis, not SQLite)
+        const redisParty = await getParty(params.partyId);
+        
+        if (!redisParty) {
+            console.log('[TeamMatchmaking] Party not found in Redis:', params.partyId);
             return { success: false, error: 'Party not found' };
         }
 
+        // FullPartyData has: { party: PartyState, members: PartyMember[], ... }
+        const partyState = redisParty.party;
+        const partyMembers = redisParty.members;
+        
+        console.log('[TeamMatchmaking] Found party in Redis:', partyState.id, 'leader:', partyState.leaderId);
+
         // Verify user is party leader
-        if (party.leader_id !== userId) {
+        if (partyState.leaderId !== userId) {
             return { success: false, error: 'Only the party leader can start an AI match' };
         }
 
-        // Get party members
-        const members = db.prepare(`
-            SELECT pm.user_id, pm.is_ready, pm.preferred_operation,
-                   u.name, u.level, u.equipped_items,
-                   u.arena_elo_5v5
-            FROM party_members pm
-            JOIN users u ON u.id = pm.user_id
-            WHERE pm.party_id = ?
-        `).all(params.partyId) as any[];
+        // Get user details for each party member from SQLite
+        const memberIds = partyMembers.map(m => m.odUserId);
+        const membersFromDb = memberIds.length > 0 
+            ? db.prepare(`
+                SELECT id as user_id, name, level, equipped_items, arena_elo_5v5
+                FROM users
+                WHERE id IN (${memberIds.map(() => '?').join(',')})
+            `).all(...memberIds) as any[]
+            : [];
 
-        if (members.length < 5) {
-            return { success: false, error: 'Party must have 5 members to start an AI match' };
+        // Merge Redis member data with SQLite user details
+        const members = partyMembers.map(rm => {
+            const dbUser = membersFromDb.find(u => u.user_id === rm.odUserId);
+            return {
+                user_id: rm.odUserId,
+                name: rm.odUserName || dbUser?.name || 'Unknown',
+                level: rm.odLevel || dbUser?.level || 1,
+                equipped_items: dbUser?.equipped_items || null,
+                arena_elo_5v5: rm.odElo || dbUser?.arena_elo_5v5 || 300,
+                preferred_operation: rm.odPreferredOperation || null,
+                is_ready: rm.isReady || false,
+            };
+        });
+
+        // Require at least 1 human player
+        if (members.length < 1) {
+            return { success: false, error: 'Party must have at least 1 member' };
         }
 
-        // Get Leader, IGL and Anchor names
+        console.log('[TeamMatchmaking] Party has', members.length, 'members');
+
+        // Get Leader, IGL and Anchor from Redis party data
+        const party = {
+            id: partyState.id,
+            leader_id: partyState.leaderId,
+            igl_id: partyState.iglId || null,
+            anchor_id: partyState.anchorId || null,
+            team_id: partyState.teamId || null,
+            team_name: partyState.teamName || null,
+            team_tag: partyState.teamTag || null,
+        };
+
         const leader = members.find(m => m.user_id === party.leader_id);
         const igl = members.find(m => m.user_id === party.igl_id);
         const anchor = members.find(m => m.user_id === party.anchor_id);
 
         // Build human team queue entry
-        const queueMembers: TeamQueueMember[] = members.map(m => {
+        const humanMembers: TeamQueueMember[] = members.map(m => {
             const equipped = m.equipped_items ? JSON.parse(m.equipped_items) : {};
             return {
                 odUserId: m.user_id,
@@ -1582,18 +1989,51 @@ export async function createAITeamMatch(params: {
                 odTier: DEFAULT_TIER, // Default tier for AI matches
                 odLevel: m.level || 1,
                 odEquippedFrame: equipped.frame || null,
+                odEquippedBanner: equipped.banner || null,
                 odEquippedTitle: equipped.title || null,
                 odPreferredOperation: m.preferred_operation || null,
+                isAITeammate: false,
             };
         });
 
-        // Calculate average ELO for the human team
+        // Calculate average ELO for the human members
         const avgElo = Math.round(
-            queueMembers.reduce((sum, m) => sum + m.odElo, 0) / queueMembers.length
+            humanMembers.reduce((sum, m) => sum + m.odElo, 0) / humanMembers.length
         );
+
+        // Fill remaining slots with AI teammates (for non-ranked matches)
+        const slotsToFill = 5 - humanMembers.length;
+        let queueMembers: TeamQueueMember[] = [...humanMembers];
+        
+        if (slotsToFill > 0) {
+            const aiTeammates = generateAITeammates(matchId, slotsToFill, avgElo, humanMembers.length);
+            queueMembers = [...humanMembers, ...aiTeammates];
+            console.log(`[TeamMatchmaking] Added ${slotsToFill} AI teammates to party ${params.partyId}`);
+        }
 
         // Calculate average tier
         const avgTier = calculateTeamAvgTier(queueMembers);
+
+        // If no IGL assigned and we have AI teammates, pick the leader as IGL
+        // If no Anchor assigned, pick first non-IGL human, or first AI teammate
+        let iglId = party.igl_id || party.leader_id;
+        let anchorId = party.anchor_id;
+        
+        if (!anchorId) {
+            // Find first human that isn't the IGL
+            const nonIglHuman = humanMembers.find(m => m.odUserId !== iglId);
+            if (nonIglHuman) {
+                anchorId = nonIglHuman.odUserId;
+            } else if (queueMembers.length > 1) {
+                // If only 1 human (the IGL), use first AI teammate as anchor
+                anchorId = queueMembers.find(m => m.odUserId !== iglId)?.odUserId || queueMembers[1].odUserId;
+            } else {
+                anchorId = iglId; // Solo player is both IGL and anchor
+            }
+        }
+        
+        const anchorMember = queueMembers.find(m => m.odUserId === anchorId);
+        const iglMember = queueMembers.find(m => m.odUserId === iglId);
 
         const humanTeam: TeamQueueEntry = {
             odPartyId: params.partyId,
@@ -1606,16 +2046,17 @@ export async function createAITeamMatch(params: {
             odAvgTier: avgTier,
             odMode: '5v5',
             odMatchType: 'casual', // AI matches are casual
-            odIglId: party.igl_id || party.leader_id,
-            odIglName: igl?.name || 'Unknown',
-            odAnchorId: party.anchor_id || members[0]?.user_id,
-            odAnchorName: anchor?.name || 'Unknown',
+            odIglId: iglId,
+            odIglName: iglMember?.odUserName || 'Unknown',
+            odAnchorId: anchorId,
+            odAnchorName: anchorMember?.odUserName || 'Unknown',
             odMembers: queueMembers,
             odJoinedAt: Date.now(),
+            hasAITeammates: slotsToFill > 0, // Flag for server
+            humanMemberCount: humanMembers.length,
         };
 
-        // Generate match ID
-        const matchId = uuidv4();
+        // matchId already generated at the start of the function
 
         // Generate AI team - this will be created on the server side
         // We store the match config in Redis for the server to pick up
@@ -1629,13 +2070,15 @@ export async function createAITeamMatch(params: {
             matchId,
             humanTeam,
             isAIMatch: true,
+            hasAITeammates: slotsToFill > 0,
+            humanMemberCount: humanMembers.length,
             aiDifficulty: params.difficulty || 'medium',
             targetElo: avgElo,
             createdAt: Date.now(),
         };
 
         await redis.set(
-            `${TEAM_MATCH_PREFIX}setup:${matchId}`,
+            `${TEAM_MATCH_SETUP_PREFIX}${matchId}`,
             JSON.stringify(matchSetup),
             'EX', 300 // 5 minute expiry
         );
@@ -1652,7 +2095,7 @@ export async function createAITeamMatch(params: {
             'EX', 300
         );
 
-        console.log(`[TeamMatchmaking] AI Match created: ${matchId} for party ${params.partyId} (difficulty: ${params.difficulty || 'medium'})`);
+        console.log(`[TeamMatchmaking] AI Match created: ${matchId} for party ${params.partyId} (difficulty: ${params.difficulty || 'medium'}, humans: ${humanMembers.length}, AI teammates: ${slotsToFill})`);
         return { success: true, matchId };
 
     } catch (error: any) {
@@ -1669,7 +2112,7 @@ export async function isAIMatch(matchId: string): Promise<boolean> {
         const redis = await getRedis();
         if (!redis) return false;
 
-        const setupData = await redis.get(`${TEAM_MATCH_PREFIX}setup:${matchId}`);
+        const setupData = await redis.get(`${TEAM_MATCH_SETUP_PREFIX}${matchId}`);
         if (!setupData) return false;
 
         const setup = JSON.parse(setupData);
@@ -1694,7 +2137,7 @@ export async function getAIMatchSetup(matchId: string): Promise<{
         const redis = await getRedis();
         if (!redis) return null;
 
-        const setupData = await redis.get(`${TEAM_MATCH_PREFIX}setup:${matchId}`);
+        const setupData = await redis.get(`${TEAM_MATCH_SETUP_PREFIX}${matchId}`);
         if (!setupData) return null;
 
         return JSON.parse(setupData);

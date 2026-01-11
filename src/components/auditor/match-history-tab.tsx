@@ -1,8 +1,9 @@
 'use client';
 
 /**
- * Match History Tab - Displays last 10 matches with expandable reasoning cards
+ * Match History Tab - Displays solo (1v1) and team (5v5) matches
  * Part of the FlashAuditor panel
+ * Data is fetched from PostgreSQL (source of truth for arena data)
  */
 
 import { useState, useEffect } from 'react';
@@ -26,9 +27,15 @@ import {
     WifiOff,
     AlertTriangle,
     Coins,
+    Users,
+    Crown,
+    Anchor,
+    User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getMatchHistory, type MatchHistoryEntry, type MatchReasoning, type MatchFactor } from '@/lib/actions/matchmaking';
+import { getCombinedMatchHistory, type MatchHistoryEntry, type MatchReasoning, type MatchFactor } from '@/lib/actions/matchmaking';
+
+type MatchFilter = 'all' | 'solo' | 'team';
 
 // =============================================================================
 // OPERATION LABELS
@@ -119,6 +126,7 @@ function MatchCard({ match }: { match: MatchHistoryEntry }) {
     const quality = match.matchReasoning ? getQualityLabel(match.matchReasoning.qualityScore) : null;
     const opIcon = OPERATION_ICONS[match.operation] || '?';
     const connectionStyle = getConnectionQualityStyle(match.connectionQuality);
+    const isTeamMatch = match.matchType === 'team';
 
     return (
         <motion.div
@@ -138,6 +146,36 @@ function MatchCard({ match }: { match: MatchHistoryEntry }) {
             )}
                 onClick={() => setIsExpanded(!isExpanded)}
         >
+            {/* Match Type Badge */}
+            <div className={cn(
+                "px-3 py-1 flex items-center gap-2 border-b",
+                isTeamMatch 
+                    ? "bg-cyan-500/10 border-cyan-500/20" 
+                    : "bg-purple-500/10 border-purple-500/20"
+            )}>
+                {isTeamMatch ? (
+                    <>
+                        <Users className="w-3 h-3 text-cyan-400" />
+                        <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">5v5 Team</span>
+                        {match.wasIgl && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-amber-400">
+                                <Crown className="w-3 h-3" /> IGL
+                            </span>
+                        )}
+                        {match.wasAnchor && (
+                            <span className="flex items-center gap-0.5 text-[10px] text-cyan-400">
+                                <Anchor className="w-3 h-3" /> Anchor
+                            </span>
+                        )}
+                    </>
+                ) : (
+                    <>
+                        <User className="w-3 h-3 text-purple-400" />
+                        <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">1v1 Duel</span>
+                    </>
+                )}
+            </div>
+
             {/* Void Warning Banner */}
             {match.isVoid && (
                 <div className="px-3 py-2 bg-orange-500/20 border-b border-orange-500/30 flex items-center gap-2">
@@ -174,9 +212,15 @@ function MatchCard({ match }: { match: MatchHistoryEntry }) {
                     {/* Match Info */}
                     <div className="text-left min-w-0">
                         <div className="flex items-center gap-2">
-                            <span className="font-bold text-foreground truncate">
-                                vs {match.opponentName}
-                            </span>
+                            {isTeamMatch ? (
+                                <span className="font-bold text-foreground truncate">
+                                    {match.myTeamName} vs {match.opponentTeamName}
+                                </span>
+                            ) : (
+                                <span className="font-bold text-foreground truncate">
+                                    vs {match.opponentName}
+                                </span>
+                            )}
                             {match.isAiMatch && (
                                 <Bot className="w-3 h-3 text-purple-400 shrink-0" />
                             )}
@@ -184,6 +228,12 @@ function MatchCard({ match }: { match: MatchHistoryEntry }) {
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span className="font-mono">{opIcon}</span>
                             <span className="font-bold">{match.playerScore} - {match.opponentScore}</span>
+                            {isTeamMatch && match.myPlayerScore !== undefined && (
+                                <>
+                                    <span>•</span>
+                                    <span className="text-primary">You: {match.myPlayerScore}</span>
+                                </>
+                            )}
                             <span>•</span>
                             <span>{match.timeAgo}</span>
                         </div>
@@ -356,7 +406,10 @@ function MatchCard({ match }: { match: MatchHistoryEntry }) {
 // =============================================================================
 
 export function MatchHistoryTab() {
-    const [matches, setMatches] = useState<MatchHistoryEntry[]>([]);
+    const [allMatches, setAllMatches] = useState<MatchHistoryEntry[]>([]);
+    const [soloMatches, setSoloMatches] = useState<MatchHistoryEntry[]>([]);
+    const [teamMatches, setTeamMatches] = useState<MatchHistoryEntry[]>([]);
+    const [filter, setFilter] = useState<MatchFilter>('all');
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -365,11 +418,13 @@ export function MatchHistoryTab() {
             setIsLoading(true);
             setError(null);
             try {
-                const result = await getMatchHistory(10);
+                const result = await getCombinedMatchHistory(15);
                 if (result.error) {
                     setError(result.error);
                 } else {
-                    setMatches(result.matches);
+                    setAllMatches(result.allMatches);
+                    setSoloMatches(result.soloMatches);
+                    setTeamMatches(result.teamMatches);
                 }
             } catch (err) {
                 setError('Failed to load match history');
@@ -381,6 +436,13 @@ export function MatchHistoryTab() {
 
         loadHistory();
     }, []);
+
+    // Get matches based on current filter
+    const displayedMatches = filter === 'all' 
+        ? allMatches 
+        : filter === 'solo' 
+            ? soloMatches 
+            : teamMatches;
 
     if (isLoading) {
         return (
@@ -399,7 +461,7 @@ export function MatchHistoryTab() {
         );
     }
 
-    if (matches.length === 0) {
+    if (allMatches.length === 0) {
         return (
             <div className="text-center py-20 text-muted-foreground">
                 <Swords className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -409,20 +471,59 @@ export function MatchHistoryTab() {
         );
     }
 
-    // Calculate stats
-    const wins = matches.filter(m => m.isWin && !m.isDraw).length;
-    const losses = matches.filter(m => !m.isWin && !m.isDraw).length;
-    const draws = matches.filter(m => m.isDraw).length;
-    const totalEloChange = matches.reduce((sum, m) => sum + m.eloChange, 0);
-    const totalCoins = matches.reduce((sum, m) => sum + (m.coinsEarned || 0), 0);
-    const voidedMatches = matches.filter(m => m.isVoid).length;
-    const avgQuality = matches
+    // Calculate stats based on displayed matches
+    const wins = displayedMatches.filter(m => m.isWin && !m.isDraw).length;
+    const losses = displayedMatches.filter(m => !m.isWin && !m.isDraw).length;
+    const draws = displayedMatches.filter(m => m.isDraw).length;
+    const totalEloChange = displayedMatches.reduce((sum, m) => sum + m.eloChange, 0);
+    const totalCoins = displayedMatches.reduce((sum, m) => sum + (m.coinsEarned || 0), 0);
+    const voidedMatches = displayedMatches.filter(m => m.isVoid).length;
+    const avgQuality = displayedMatches
         .filter(m => m.matchReasoning)
         .reduce((sum, m) => sum + (m.matchReasoning?.qualityScore || 0), 0) / 
-        (matches.filter(m => m.matchReasoning).length || 1);
+        (displayedMatches.filter(m => m.matchReasoning).length || 1);
 
     return (
         <div className="space-y-4">
+            {/* Match Type Filter */}
+            <div className="flex items-center gap-2 p-1 rounded-lg bg-foreground/5 border border-[var(--glass-border)]">
+                <button
+                    onClick={() => setFilter('all')}
+                    className={cn(
+                        "flex-1 py-2 px-3 rounded-md text-xs font-bold uppercase tracking-wider transition-all",
+                        filter === 'all' 
+                            ? "bg-primary text-primary-foreground" 
+                            : "text-muted-foreground hover:bg-foreground/5"
+                    )}
+                >
+                    All ({allMatches.length})
+                </button>
+                <button
+                    onClick={() => setFilter('solo')}
+                    className={cn(
+                        "flex-1 py-2 px-3 rounded-md text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1",
+                        filter === 'solo' 
+                            ? "bg-purple-500 text-white" 
+                            : "text-muted-foreground hover:bg-foreground/5"
+                    )}
+                >
+                    <User className="w-3 h-3" />
+                    1v1 ({soloMatches.length})
+                </button>
+                <button
+                    onClick={() => setFilter('team')}
+                    className={cn(
+                        "flex-1 py-2 px-3 rounded-md text-xs font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1",
+                        filter === 'team' 
+                            ? "bg-cyan-500 text-white" 
+                            : "text-muted-foreground hover:bg-foreground/5"
+                    )}
+                >
+                    <Users className="w-3 h-3" />
+                    5v5 ({teamMatches.length})
+                </button>
+            </div>
+
             {/* Summary Stats */}
             <div className="grid grid-cols-4 gap-2">
                 <div className="p-3 rounded-xl bg-foreground/5 border border-[var(--glass-border)] text-center">
@@ -478,12 +579,30 @@ export function MatchHistoryTab() {
             {/* Match List Header */}
             <div className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-wider">
                 <History className="w-4 h-4" />
-                <span>Last {matches.length} Matches</span>
+                <span>
+                    {filter === 'all' && `Last ${displayedMatches.length} Matches`}
+                    {filter === 'solo' && `${displayedMatches.length} Solo Matches`}
+                    {filter === 'team' && `${displayedMatches.length} Team Matches`}
+                </span>
             </div>
+
+            {/* Empty State for Filtered View */}
+            {displayedMatches.length === 0 && (
+                <div className="text-center py-10 text-muted-foreground">
+                    <Swords className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                    <p className="font-bold text-sm">
+                        No {filter === 'solo' ? '1v1' : filter === 'team' ? '5v5' : ''} matches yet
+                    </p>
+                    <p className="text-xs mt-1">
+                        {filter === 'solo' && 'Play solo arena matches to see them here'}
+                        {filter === 'team' && 'Play team arena matches to see them here'}
+                    </p>
+                </div>
+            )}
 
             {/* Match Cards */}
             <div className="space-y-2">
-                {matches.map((match, index) => (
+                {displayedMatches.map((match) => (
                     <MatchCard key={match.id} match={match} />
                 ))}
             </div>

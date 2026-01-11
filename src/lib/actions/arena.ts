@@ -162,6 +162,170 @@ export async function getArenaEligibilityData() {
 }
 
 /**
+ * Check if a specific user is eligible for arena play
+ * Used for party eligibility checks when queuing
+ */
+export async function checkUserArenaEligibility(userId: string): Promise<{
+    isEligible: boolean;
+    reason?: string;
+    details: {
+        hasEnoughPractice: boolean;
+        meetsAgeRequirement: boolean;
+        hasVerifiedEmail: boolean;
+        totalSessions: number;
+        requiredSessions: number;
+        userAge: number | null;
+        requiredAge: number;
+    };
+}> {
+    const db = getDatabase();
+    
+    // Requirements
+    const MIN_SESSIONS = 1;
+    const MIN_AGE = 13;
+    
+    // Get user data
+    let user;
+    try {
+        user = db.prepare(`
+            SELECT id, name, role, is_admin, dob, email_verified 
+            FROM users WHERE id = ?
+        `).get(userId) as any;
+    } catch (error: any) {
+        // Handle missing dob column
+        if (error.message?.includes('no such column: dob')) {
+            user = db.prepare(`
+                SELECT id, name, role, is_admin, email_verified 
+                FROM users WHERE id = ?
+            `).get(userId) as any;
+        } else {
+            throw error;
+        }
+    }
+    
+    if (!user) {
+        return {
+            isEligible: false,
+            reason: 'User not found',
+            details: {
+                hasEnoughPractice: false,
+                meetsAgeRequirement: false,
+                hasVerifiedEmail: false,
+                totalSessions: 0,
+                requiredSessions: MIN_SESSIONS,
+                userAge: null,
+                requiredAge: MIN_AGE,
+            }
+        };
+    }
+    
+    // Admin/moderator bypass
+    const isAdmin = user.role === 'admin' || user.role === 'super_admin' || 
+                    user.role === 'moderator' || user.is_admin;
+    
+    if (isAdmin) {
+        return {
+            isEligible: true,
+            details: {
+                hasEnoughPractice: true,
+                meetsAgeRequirement: true,
+                hasVerifiedEmail: true,
+                totalSessions: 999,
+                requiredSessions: MIN_SESSIONS,
+                userAge: 99,
+                requiredAge: MIN_AGE,
+            }
+        };
+    }
+    
+    // Count practice sessions
+    const sessionCount = db.prepare(
+        "SELECT COUNT(*) as count FROM practice_sessions WHERE user_id = ?"
+    ).get(userId) as any;
+    const totalSessions = sessionCount?.count || 0;
+    const hasEnoughPractice = totalSessions >= MIN_SESSIONS;
+    
+    // Check age
+    let userAge: number | null = null;
+    if (user?.dob) {
+        const [year, month, day] = user.dob.split('-').map(Number);
+        const birthDate = new Date(year, month - 1, day);
+        const today = new Date();
+        userAge = today.getFullYear() - birthDate.getFullYear();
+        const m = today.getMonth() - birthDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            userAge--;
+        }
+    }
+    const meetsAgeRequirement = userAge !== null && userAge >= MIN_AGE;
+    
+    // Check email verification (new requirement)
+    const hasVerifiedEmail = !!user.email_verified;
+    
+    // Determine eligibility
+    const isEligible = hasEnoughPractice && meetsAgeRequirement && hasVerifiedEmail;
+    
+    // Build reason if not eligible
+    let reason: string | undefined;
+    if (!isEligible) {
+        const issues = [];
+        if (!hasVerifiedEmail) issues.push('email not verified');
+        if (!meetsAgeRequirement) issues.push('age requirement not met');
+        if (!hasEnoughPractice) issues.push(`needs ${MIN_SESSIONS - totalSessions} more practice session(s)`);
+        reason = issues.join(', ');
+    }
+    
+    return {
+        isEligible,
+        reason,
+        details: {
+            hasEnoughPractice,
+            meetsAgeRequirement,
+            hasVerifiedEmail,
+            totalSessions,
+            requiredSessions: MIN_SESSIONS,
+            userAge,
+            requiredAge: MIN_AGE,
+        }
+    };
+}
+
+/**
+ * Check arena eligibility for all members of a party
+ * Returns list of ineligible members with reasons
+ */
+export async function checkPartyArenaEligibility(memberIds: string[]): Promise<{
+    allEligible: boolean;
+    ineligibleMembers: Array<{
+        userId: string;
+        userName?: string;
+        reason: string;
+    }>;
+}> {
+    const db = getDatabase();
+    const ineligibleMembers: Array<{ userId: string; userName?: string; reason: string }> = [];
+    
+    for (const memberId of memberIds) {
+        const eligibility = await checkUserArenaEligibility(memberId);
+        
+        if (!eligibility.isEligible) {
+            // Get user name for display
+            const user = db.prepare('SELECT name FROM users WHERE id = ?').get(memberId) as any;
+            ineligibleMembers.push({
+                userId: memberId,
+                userName: user?.name,
+                reason: eligibility.reason || 'Does not meet arena requirements'
+            });
+        }
+    }
+    
+    return {
+        allEligible: ineligibleMembers.length === 0,
+        ineligibleMembers
+    };
+}
+
+/**
  * Get full matchmaking data for queue join
  */
 export async function getMatchmakingData() {

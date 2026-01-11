@@ -32,8 +32,9 @@ async function getRedis() {
 
     try {
         const Redis = (await import('ioredis')).default;
+        // IMPORTANT: Must match server-redis.js default ('localhost') for local development
         redisClient = new Redis({
-            host: process.env.REDIS_HOST || 'redis',
+            host: process.env.REDIS_HOST || 'localhost',
             port: parseInt(process.env.REDIS_PORT || '6379'),
             maxRetriesPerRequest: 3,
         });
@@ -1849,15 +1850,30 @@ export async function getMatchEmojis(matchId: string) {
 
 // =============================================================================
 // MATCH HISTORY - For FlashAuditor Match History Tab
+// PostgreSQL is the source of truth for all arena match data
 // =============================================================================
 
 /**
  * Match history entry for display in FlashAuditor
+ * Supports both solo (1v1) and team (5v5) matches
  */
 export interface MatchHistoryEntry {
     id: string;
+    // Match type
+    matchType: 'solo' | 'team';
+    // Solo match fields
     opponentName: string;
     opponentId: string;
+    // Team match fields (optional)
+    myTeamName?: string;
+    opponentTeamName?: string;
+    myTeamScore?: number;
+    opponentTeamScore?: number;
+    teammates?: { name: string; score: number; isIgl?: boolean; isAnchor?: boolean }[];
+    wasIgl?: boolean;
+    wasAnchor?: boolean;
+    myPlayerScore?: number;
+    // Common fields
     isWin: boolean;
     isDraw?: boolean;
     playerScore: number;
@@ -1903,7 +1919,7 @@ function getTimeAgo(dateString: string): string {
 }
 
 /**
- * Get match history for the current user
+ * Get solo (1v1) match history for the current user from PostgreSQL
  * Returns the last N matches with reasoning for FlashAuditor display
  */
 export async function getMatchHistory(limit: number = 10): Promise<{
@@ -1918,101 +1934,214 @@ export async function getMatchHistory(limit: number = 10): Promise<{
     const userId = (session.user as any).id;
 
     try {
+        // Import PostgreSQL arena functions
+        const { getPlayerDuelHistory } = await import("@/lib/arena/arena-db");
         const { getDatabase } = await import("@/lib/db");
         const db = getDatabase();
 
-        // Get matches where user was winner or loser, ordered by most recent
-        const matches = db.prepare(`
-            SELECT 
-                am.id,
-                am.winner_id,
-                am.loser_id,
-                am.winner_score,
-                am.loser_score,
-                am.winner_elo_change,
-                am.loser_elo_change,
-                am.operation,
-                am.mode,
-                am.match_reasoning,
-                am.created_at,
-                am.connection_quality,
-                am.is_void,
-                am.void_reason,
-                am.winner_coins,
-                am.loser_coins,
-                CASE 
-                    WHEN am.winner_id = ? THEN am.loser_id 
-                    ELSE am.winner_id 
-                END as opponent_id,
-                CASE 
-                    WHEN am.winner_id = ? THEN loser.name 
-                    ELSE winner.name 
-                END as opponent_name
-            FROM arena_matches am
-            LEFT JOIN users winner ON winner.id = am.winner_id
-            LEFT JOIN users loser ON loser.id = am.loser_id
-            WHERE am.winner_id = ? OR am.loser_id = ?
-            ORDER BY am.created_at DESC
-            LIMIT ?
-        `).all(userId, userId, userId, userId, limit) as any[];
+        // Get solo matches from PostgreSQL (source of truth)
+        console.log(`[MatchHistory] Fetching solo matches for user ${userId}`);
+        const matches = await getPlayerDuelHistory(userId, limit);
+        console.log(`[MatchHistory] Found ${matches?.length || 0} solo matches`);
 
-        const historyEntries: MatchHistoryEntry[] = matches.map(match => {
-            // Check for draw: same score means draw
-            const isDraw = match.winner_score === match.loser_score;
-            const isWin = !isDraw && match.winner_id === userId;
-            const isLoss = !isDraw && match.loser_id === userId;
-            const isAiMatch = match.opponent_id?.startsWith('ai-') || match.opponent_id?.startsWith('ai_bot_') || false;
+        if (!matches || matches.length === 0) {
+            return { matches: [] };
+        }
+
+        // Get user names from SQLite for display (PostgreSQL only has usernames, not full names)
+        const userNameCache: Record<string, string> = {};
+        const getUserName = (odUserId: string, fallbackName: string): string => {
+            if (userNameCache[odUserId]) return userNameCache[odUserId];
+            if (odUserId?.startsWith('ai-') || odUserId?.startsWith('ai_bot_')) {
+                return 'AI Opponent';
+            }
+            try {
+                const user = db.prepare('SELECT name FROM users WHERE id = ?').get(odUserId) as any;
+                const name = user?.name || fallbackName || 'Unknown';
+                userNameCache[odUserId] = name;
+                return name;
+            } catch {
+                return fallbackName || 'Unknown';
+            }
+        };
+
+        const historyEntries: MatchHistoryEntry[] = matches.map((match: any) => {
+            const isPlayer1 = match.player1_id === userId;
+            const isWin = match.winner_id === userId;
+            const isDraw = match.is_draw === true || match.player1_score === match.player2_score;
+            
+            const opponentId = isPlayer1 ? match.player2_id : match.player1_id;
+            const opponentName = getUserName(opponentId, isPlayer1 ? match.player2_name : match.player1_name);
+            const isAiMatch = opponentId?.startsWith('ai-') || opponentId?.startsWith('ai_bot_') || match.is_ai_match === true;
             
             // Parse match reasoning if available
             let matchReasoning: MatchReasoning | null = null;
             if (match.match_reasoning) {
                 try {
-                    matchReasoning = JSON.parse(match.match_reasoning);
+                    matchReasoning = typeof match.match_reasoning === 'string' 
+                        ? JSON.parse(match.match_reasoning) 
+                        : match.match_reasoning;
                 } catch (e) {
                     console.warn('[MatchHistory] Failed to parse match_reasoning:', e);
                 }
             }
 
-            // For draws, both players see the same score
-            // For non-draws, show correct score based on win/loss
-            const playerScore = isDraw 
-                ? match.winner_score 
-                : (match.winner_id === userId ? match.winner_score : match.loser_score);
-            const opponentScore = isDraw 
-                ? match.loser_score 
-                : (match.winner_id === userId ? match.loser_score : match.winner_score);
-
-            // Determine coins earned based on win/loss
-            const coinsEarned = isWin 
-                ? (match.winner_coins || 0) 
-                : (match.loser_coins || 0);
+            const playerScore = isPlayer1 ? match.player1_score : match.player2_score;
+            const opponentScore = isPlayer1 ? match.player2_score : match.player1_score;
+            const eloChange = isPlayer1 ? (match.player1_elo_change || 0) : (match.player2_elo_change || 0);
 
             return {
                 id: match.id,
-                opponentName: match.opponent_name || (isAiMatch ? 'AI Opponent' : 'Unknown'),
-                opponentId: match.opponent_id || '',
-                isWin,
+                matchType: 'solo' as const,
+                opponentName,
+                opponentId: opponentId || '',
+                isWin: !isDraw && isWin,
                 isDraw,
-                playerScore,
-                opponentScore,
-                eloChange: isDraw ? 0 : (isWin ? (match.winner_elo_change || 0) : (match.loser_elo_change || 0)),
+                playerScore: playerScore || 0,
+                opponentScore: opponentScore || 0,
+                eloChange: isDraw ? 0 : eloChange,
                 operation: match.operation || 'mixed',
                 mode: match.mode || '1v1',
                 isAiMatch,
                 matchReasoning,
                 createdAt: match.created_at,
                 timeAgo: getTimeAgo(match.created_at),
-                // Connection quality and match integrity
                 connectionQuality: match.connection_quality || 'GREEN',
-                isVoid: match.is_void === 1,
+                isVoid: match.is_void === true,
                 voidReason: match.void_reason || undefined,
-                coinsEarned,
+                coinsEarned: isWin ? (match.winner_coins || 0) : (match.loser_coins || 0),
             };
         });
 
         return { matches: historyEntries };
     } catch (error) {
-        console.error('[MatchHistory] Error fetching match history:', error);
+        console.error('[MatchHistory] Error fetching solo match history from PostgreSQL:', error);
         return { matches: [], error: 'Failed to fetch match history' };
     }
+}
+
+/**
+ * Get team (5v5) match history for the current user from PostgreSQL
+ * Returns the last N team matches for FlashAuditor display
+ */
+export async function getTeamMatchHistoryForUser(limit: number = 10): Promise<{
+    matches: MatchHistoryEntry[];
+    error?: string;
+}> {
+    const session = await auth();
+    if (!session?.user) {
+        return { matches: [], error: 'Unauthorized' };
+    }
+
+    const userId = (session.user as any).id;
+
+    try {
+        // Import PostgreSQL arena functions
+        const { getPlayerTeamHistory } = await import("@/lib/arena/arena-db");
+        const { getDatabase } = await import("@/lib/db");
+        const db = getDatabase();
+
+        // Get team matches from PostgreSQL (source of truth)
+        console.log(`[MatchHistory] Fetching team matches for user ${userId}`);
+        const matches = await getPlayerTeamHistory(userId, limit);
+        console.log(`[MatchHistory] Found ${matches?.length || 0} team matches`);
+
+        if (!matches || matches.length === 0) {
+            return { matches: [] };
+        }
+
+        // Get user names from SQLite for display
+        const userNameCache: Record<string, string> = {};
+        const getUserName = (odUserId: string): string => {
+            if (userNameCache[odUserId]) return userNameCache[odUserId];
+            if (odUserId?.startsWith('ai_bot_')) return 'AI Bot';
+            try {
+                const user = db.prepare('SELECT name FROM users WHERE id = ?').get(odUserId) as any;
+                const name = user?.name || 'Unknown';
+                userNameCache[odUserId] = name;
+                return name;
+            } catch {
+                return 'Unknown';
+            }
+        };
+
+        const historyEntries: MatchHistoryEntry[] = matches.map((match: any) => {
+            const isTeam1 = match.team_number === 1;
+            const myTeamScore = isTeam1 ? match.team1_score : match.team2_score;
+            const opponentTeamScore = isTeam1 ? match.team2_score : match.team1_score;
+            const isWin = match.winner_team === match.team_number;
+            const isDraw = match.winner_team === 0 || match.winner_team === null || match.team1_score === match.team2_score;
+            const isAiMatch = match.is_ai_match === true || 
+                              match.team1_name?.includes('AI') || 
+                              match.team2_name?.includes('AI');
+
+            const myTeamName = isTeam1 ? match.team1_name : match.team2_name;
+            const opponentTeamName = isTeam1 ? match.team2_name : match.team1_name;
+
+            return {
+                id: match.id,
+                matchType: 'team' as const,
+                // For team matches, use team names instead of opponent name
+                opponentName: opponentTeamName || 'Opponent Team',
+                opponentId: '',
+                myTeamName: myTeamName || 'My Team',
+                opponentTeamName: opponentTeamName || 'Opponent Team',
+                myTeamScore,
+                opponentTeamScore,
+                wasIgl: match.is_igl === true,
+                wasAnchor: match.is_anchor === true,
+                myPlayerScore: match.player_score || 0,
+                isWin: !isDraw && isWin,
+                isDraw,
+                playerScore: myTeamScore || 0,
+                opponentScore: opponentTeamScore || 0,
+                eloChange: isDraw ? 0 : (match.player_elo_change || 0),
+                operation: match.operation || 'mixed',
+                mode: '5v5',
+                isAiMatch,
+                matchReasoning: null, // Team matches don't have the same reasoning structure
+                createdAt: match.created_at,
+                timeAgo: getTimeAgo(match.created_at),
+                connectionQuality: match.connection_quality || 'GREEN',
+                isVoid: match.is_void === true || match.is_forfeit === true,
+                voidReason: match.is_forfeit ? 'Forfeit' : undefined,
+                coinsEarned: 0, // TODO: Add coin rewards for team matches
+            };
+        });
+
+        return { matches: historyEntries };
+    } catch (error) {
+        console.error('[MatchHistory] Error fetching team match history from PostgreSQL:', error);
+        return { matches: [], error: 'Failed to fetch team match history' };
+    }
+}
+
+/**
+ * Get combined match history (solo + team) for the current user
+ * Returns matches from both modes sorted by date, from PostgreSQL
+ */
+export async function getCombinedMatchHistory(limit: number = 10): Promise<{
+    soloMatches: MatchHistoryEntry[];
+    teamMatches: MatchHistoryEntry[];
+    allMatches: MatchHistoryEntry[];
+    error?: string;
+}> {
+    const [soloResult, teamResult] = await Promise.all([
+        getMatchHistory(limit),
+        getTeamMatchHistoryForUser(limit),
+    ]);
+
+    // Combine and sort by date
+    const allMatches = [
+        ...(soloResult.matches || []),
+        ...(teamResult.matches || []),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+     .slice(0, limit);
+
+    return {
+        soloMatches: soloResult.matches || [],
+        teamMatches: teamResult.matches || [],
+        allMatches,
+        error: soloResult.error || teamResult.error,
+    };
 }

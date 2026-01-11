@@ -504,7 +504,7 @@ export function SocialPanel() {
                                         <Users className="text-primary" size={20} />
                                     </div>
                                     <div>
-                                        <h2 className="font-black text-lg uppercase tracking-tight">Social</h2>
+                                        <h2 className="font-black text-lg uppercase tracking-tight">FlashSocial</h2>
                                         <div className="text-[10px] text-muted-foreground uppercase tracking-widest">
                                             {stats.friendsOnline} online • {Math.floor(stats.friendsTotal)} friends
                                         </div>

@@ -40,6 +40,7 @@ import {
     type RoundMVP,
     type RoundInsight,
 } from '@/components/arena/teams/match';
+import { soundEngine } from '@/lib/sound-engine';
 
 interface TeamMatchClientProps {
     matchId: string;
@@ -61,6 +62,7 @@ interface PlayerState {
     total: number;
     streak: number;
     maxStreak: number;
+    totalAnswerTimeMs: number; // For calculating average response time
     isActive: boolean;
     isComplete: boolean;
     isIgl: boolean;
@@ -271,6 +273,9 @@ export function TeamMatchClient({
         slotNumber: number;
     }>({ isVisible: false, outgoingPlayer: null, incomingPlayer: null, slotNumber: 0 });
     const previousSlotRef = useRef<number | null>(null);
+
+    // "Your turn starting" indicator for slot 1 players (no previous handoff)
+    const [yourTurnStarting, setYourTurnStarting] = useState(false);
     
     // Strategy phase state (slot assignment before match starts)
     const [strategyPhase, setStrategyPhase] = useState<StrategyPhaseState | null>(null);
@@ -604,11 +609,17 @@ export function TeamMatchClient({
 
         socket.on('pre_match_countdown_tick', (data: { remainingMs: number }) => {
             setPreMatchCountdownMs(data.remainingMs);
+            // Play countdown tick sounds for last 5 seconds
+            const secs = Math.ceil(data.remainingMs / 1000);
+            if (secs <= 5 && secs > 0) {
+                soundEngine.playCountdownTickIntense(secs);
+            }
         });
 
         // STRATEGY PHASE: IGL slot assignment before match starts
         socket.on('strategy_phase_start', (data) => {
             console.log('[TeamMatch] Strategy phase started:', data);
+            soundEngine.playGo();
             // #region agent log
             fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:strategy_phase_start',message:'Strategy phase started',data:{durationMs:data.durationMs,myTeamSlots:Object.keys(data.team1Slots || data.team2Slots || {}).length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'STRATEGY'})}).catch(()=>{});
             // #endregion
@@ -797,33 +808,53 @@ export function TeamMatchClient({
             fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:answer_result',message:'H3A/H3B: answer result and questionsInSlot',data:{userId:data.userId,isCorrect:data.isCorrect,questionsInSlot:data.questionsInSlot,teamId:data.teamId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3A,H3B'})}).catch(()=>{});
             // #endregion
             if (data.userId === currentUserId) {
+                // Play correct/incorrect sound for own answer
+                if (data.isCorrect) {
+                    soundEngine.playCorrect();
+                    // Check for streak milestones
+                    if (data.newStreak === 3) soundEngine.playStreakMilestone(3);
+                    else if (data.newStreak === 5) soundEngine.playStreakMilestone(5);
+                    else if (data.newStreak === 10) soundEngine.playStreakMilestone(10);
+                } else {
+                    soundEngine.playIncorrect();
+                }
+
                 setLastAnswerResult({
                     isCorrect: data.isCorrect,
                     pointsEarned: data.pointsEarned,
                     answerTimeMs: Date.now(), // TODO: Get actual time from server
                 });
                 setCurrentInput('');
-                
+
                 // Clear result after a delay
-                setTimeout(() => setLastAnswerResult(null), 1500);
+                setTimeout(() => setLastAnswerResult(null), 600);
             } else if (myTeam && data.teamId === myTeam.teamId && data.userId !== currentUserId) {
-                // Teammate answer result - show it to spectating teammates
+                // Teammate answer result - play sound for correct/incorrect
+                if (data.isCorrect) {
+                    soundEngine.playTeammateCorrect();
+                } else {
+                    // Play a subtle incorrect sound for teammate miss
+                    soundEngine.playIncorrect();
+                }
+
+                // Teammate answer result - show it to all teammates (including active player)
                 setTeammateLastAnswerResult({
                     isCorrect: data.isCorrect,
                     pointsEarned: data.pointsEarned,
                     answerTimeMs: Date.now(),
                 });
-                // Clear after delay
-                setTimeout(() => setTeammateLastAnswerResult(null), 1500);
+                // Clear after delay - longer so it's more noticeable
+                setTimeout(() => setTeammateLastAnswerResult(null), 2500);
             } else if (opponentTeam && data.teamId === opponentTeam.teamId) {
                 setOpponentLastResult({
                     isCorrect: data.isCorrect,
                     pointsEarned: data.pointsEarned,
                 });
-                setTimeout(() => setOpponentLastResult(null), 1500);
+                // Longer timeout so it's more noticeable
+                setTimeout(() => setOpponentLastResult(null), 2500);
             }
             
-            // Update scores and team-specific questionsInSlot
+            // Update scores, questionsInSlot, AND track correct/total/answerTime for halftime stats
             setMatchState(prev => {
                 if (!prev) return prev;
                 const newState = JSON.parse(JSON.stringify(prev));
@@ -834,6 +865,16 @@ export function TeamMatchClient({
                 if (team.players[data.userId]) {
                     team.players[data.userId].score = data.newPlayerScore;
                     team.players[data.userId].streak = data.newStreak;
+                    // Track correct/total for accuracy calculation (halftime stats)
+                    team.players[data.userId].total = (team.players[data.userId].total || 0) + 1;
+                    if (data.isCorrect) {
+                        team.players[data.userId].correct = (team.players[data.userId].correct || 0) + 1;
+                    }
+                    // Track answer time for avg speed calculation (works for ALL players, including opponents)
+                    if (data.answerTimeMs) {
+                        team.players[data.userId].totalAnswerTimeMs = 
+                            (team.players[data.userId].totalAnswerTimeMs || 0) + data.answerTimeMs;
+                    }
                 }
                 return newState;
             });
@@ -842,6 +883,28 @@ export function TeamMatchClient({
         socket.on('teammate_answer', (data) => {
             console.log('[TeamMatch] Teammate answer:', data);
             setTeammateTyping(null);
+            
+            // Track answer time for average speed calculation (used in halftime stats)
+            if (data.answerTimeMs && data.userId) {
+                setMatchState(prev => {
+                    if (!prev) return prev;
+                    const newState = JSON.parse(JSON.stringify(prev));
+                    
+                    // Find which team the user is on
+                    const team = newState.team1.players[data.userId] 
+                        ? newState.team1 
+                        : newState.team2.players[data.userId] 
+                            ? newState.team2 
+                            : null;
+                    
+                    if (team && team.players[data.userId]) {
+                        team.players[data.userId].totalAnswerTimeMs = 
+                            (team.players[data.userId].totalAnswerTimeMs || 0) + data.answerTimeMs;
+                    }
+                    
+                    return newState;
+                });
+            }
         });
 
         socket.on('slot_change', (data) => {
@@ -940,10 +1003,15 @@ export function TeamMatchClient({
 
         socket.on('round_break', (data) => {
             console.log('[TeamMatch] Round break:', data);
-            setBreakCountdownMs(data.breakDurationMs || 10000); // Default 10 seconds
+            soundEngine.playRoundEnd();
+            const breakDuration = data.breakDurationMs || 10000; // Default 10 seconds
+            setBreakCountdownMs(breakDuration);
+            // Set phaseInitialDuration directly for correct TacticalBreakPanel countdown
+            setPhaseInitialDuration(breakDuration);
             setMatchState(prev => {
                 if (!prev) return prev;
-                return { ...prev, phase: 'break' };
+                // Update relayClockMs to break duration so phaseInitialDuration captures the correct value
+                return { ...prev, phase: 'break', relayClockMs: breakDuration };
             });
         });
 
@@ -959,24 +1027,34 @@ export function TeamMatchClient({
         // Handle timeout called by IGL
         socket.on('timeout_called', (data) => {
             console.log('[TeamMatch] Timeout called:', data);
+            soundEngine.playTimeout();
             // Use the server's calculated total duration if available, otherwise add extension
             if (data.newBreakDurationMs) {
                 setBreakCountdownMs(data.newBreakDurationMs);
+                // Also update phaseInitialDuration so the countdown timer shows the new extended duration
+                setPhaseInitialDuration(data.newBreakDurationMs);
             } else {
                 setBreakCountdownMs(prev => prev + (data.extensionMs || 60000));
+                // Update phaseInitialDuration with the new extended duration
+                setPhaseInitialDuration(prev => prev + (data.extensionMs || 60000));
             }
             setTimeoutsRemaining(data.timeoutsRemaining ?? 1);
         });
 
         socket.on('halftime', (data) => {
             console.log('[TeamMatch] Halftime:', data);
+            soundEngine.playHalftime();
             // #region agent log
             fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:halftime',message:'H5: halftime event received on client',data:{team1Score:data.team1Score,team2Score:data.team2Score,halftimeDurationMs:data.halftimeDurationMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
             // #endregion
-            setBreakCountdownMs(data.halftimeDurationMs || 120000); // Default 2 minutes
+            const halftimeDuration = data.halftimeDurationMs || 120000; // Default 2 minutes
+            setBreakCountdownMs(halftimeDuration);
+            // IMPORTANT: Also set phaseInitialDuration directly since the useEffect depends on relayClockMs
+            setPhaseInitialDuration(halftimeDuration);
             setMatchState(prev => {
                 if (!prev) return prev;
-                return { ...prev, phase: 'halftime' };
+                // Update relayClockMs to halftime duration so phaseInitialDuration captures the correct value
+                return { ...prev, phase: 'halftime', relayClockMs: halftimeDuration };
             });
         });
 
@@ -998,10 +1076,11 @@ export function TeamMatchClient({
         // Double Call-In activated by IGL
         socket.on('double_callin_activated', (data) => {
             console.log('[TeamMatch] Double Call-In Activated:', data);
+            soundEngine.playDoubleCallin();
             // #region agent log
             fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:double_callin_activated',message:'Double Call-In event received',data:{anchorName:data.anchorName,targetSlot:data.targetSlot,benchedPlayerName:data.benchedPlayerName,forRound:data.forRound},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DC1'})}).catch(()=>{});
             // #endregion
-            
+
             // Update the appropriate half's usage state
             if (data.half === 1) {
                 setUsedDoubleCallinHalf1(true);
@@ -1062,8 +1141,26 @@ export function TeamMatchClient({
             // #region agent log
             fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:round_start',message:'H7/H8: round_start event received on client',data:{round:data.round,half:data.half,currentSlot:data.currentSlot},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7,H8'})}).catch(()=>{});
             // #endregion
+
+            // Check if current user is the slot 1 player - must check BEFORE state update
             setMatchState(prev => {
                 if (!prev) return prev;
+
+                // Find the user's team and check if they're slot 1
+                const myTeamKey = prev.team1.players[currentUserId] ? 'team1' : 'team2';
+                const myTeam = prev[myTeamKey];
+                const myPlayer = myTeam?.players[currentUserId];
+
+                // If user is the slot 1 player (addition), show "your turn" indicator FIRST
+                if (myPlayer?.slot?.toLowerCase() === 'addition') {
+                    // Use setTimeout to ensure this runs after state update completes
+                    setTimeout(() => {
+                        soundEngine.playYourTurn();
+                        setYourTurnStarting(true);
+                        setTimeout(() => setYourTurnStarting(false), 2000);
+                    }, 0);
+                }
+
                 // Reset BOTH team slots to 1 for the new round
                 const newState = JSON.parse(JSON.stringify(prev));
                 newState.phase = 'active';
@@ -1096,15 +1193,27 @@ export function TeamMatchClient({
 
         socket.on('match_end', (data) => {
             console.log('[TeamMatch] Match ended:', data);
+
+            // Determine win/lose and play appropriate sound
             setMatchState(prev => {
                 if (!prev) return prev;
+                const myTeam = prev.team1.players[currentUserId] ? prev.team1 : prev.team2;
+                const opTeam = prev.team1.players[currentUserId] ? prev.team2 : prev.team1;
+                if (myTeam.score > opTeam.score) {
+                    soundEngine.playVictory();
+                } else if (myTeam.score < opTeam.score) {
+                    soundEngine.playDefeat();
+                } else {
+                    // Tie - play a more neutral sound
+                    soundEngine.playRoundEnd();
+                }
                 return { ...prev, phase: 'post_match' };
             });
-            
-            // Navigate to results after brief delay
+
+            // Navigate to results after delay (5s to ensure PostgreSQL has saved the match)
             setTimeout(() => {
                 router.push(`/arena/teams/results/${matchId}`);
-            }, 3000);
+            }, 5000);
         });
 
         // Quit vote handlers
@@ -1224,10 +1333,12 @@ export function TeamMatchClient({
                 setPhaseInitialDuration(matchState.relayClockMs || 0);
             }
             
-            // Show round start countdown when entering round_countdown phase
+            // Show round start countdown ONLY when phase is exactly 'round_countdown'
+            // Do NOT show during break/halftime even if showRoundCountdown state is stale
             if (matchState.phase === 'round_countdown') {
                 setShowRoundCountdown(true);
-            } else {
+            } else if (matchState.phase === 'break' || matchState.phase === 'halftime' || matchState.phase === 'active') {
+                // Explicitly hide during break, halftime, and active phases
                 setShowRoundCountdown(false);
             }
         }
@@ -1243,27 +1354,51 @@ export function TeamMatchClient({
         if (previousSlotRef.current !== null && previousSlotRef.current !== currentSlot && currentSlot > 1) {
             // Get outgoing and incoming player info
             const players = Object.values(myTeam.players);
-            const outgoingPlayerData = players.find(p => p.slot?.toLowerCase().includes(SLOT_LABELS[previousSlotRef.current - 1]?.toLowerCase()));
-            const incomingPlayerData = players.find(p => p.slot?.toLowerCase().includes(SLOT_LABELS[currentSlot - 1]?.toLowerCase()));
-            
-            if (outgoingPlayerData && incomingPlayerData) {
+
+            // Find the incoming player by their assigned slot (the slot that's NOW active)
+            const incomingSlotOp = operations[currentSlot - 1];
+            const incomingPlayerData = players.find(p => p.slot?.toLowerCase() === incomingSlotOp);
+
+            // Find the outgoing player by their assigned slot (the slot that just finished)
+            const outgoingSlotOp = operations[previousSlotRef.current - 1];
+            const outgoingPlayerData = players.find(p => p.slot?.toLowerCase() === outgoingSlotOp);
+
+            // Use the slot position to determine the operation label
+            const outgoingSlotLabel = SLOT_LABELS[previousSlotRef.current - 1] || 'Unknown';
+            const incomingSlotLabel = SLOT_LABELS[currentSlot - 1] || 'Unknown';
+
+            // Check if the current user is the incoming player (their slot matches the new current slot)
+            const isIncomingCurrentUser = incomingPlayerData?.odUserId === currentUserId;
+
+            if (outgoingPlayerData || incomingPlayerData) {
+                // Play relay handoff sound
+                soundEngine.playRelayHandoff();
+
+                // If current user is the incoming player, show "YOUR TURN!" indicator
+                // This takes priority and prevents race condition with QuestionAnswerCard
+                if (isIncomingCurrentUser) {
+                    soundEngine.playYourTurn();
+                    setYourTurnStarting(true);
+                    setTimeout(() => setYourTurnStarting(false), 2000);
+                }
+
                 setRelayHandoff({
                     isVisible: true,
                     outgoingPlayer: {
-                        name: outgoingPlayerData.odName,
-                        operation: outgoingPlayerData.slot || 'Unknown',
-                        questionsAnswered: outgoingPlayerData.total || 5,
-                        correctAnswers: outgoingPlayerData.correct || 0,
-                        slotScore: outgoingPlayerData.score || 0,
+                        name: outgoingPlayerData?.odName || 'Teammate',
+                        operation: outgoingSlotLabel,
+                        questionsAnswered: outgoingPlayerData?.total || 5,
+                        correctAnswers: outgoingPlayerData?.correct || 0,
+                        slotScore: outgoingPlayerData?.score || 0,
                     },
                     incomingPlayer: {
-                        name: incomingPlayerData.odName,
-                        operation: incomingPlayerData.slot || 'Unknown',
-                        isCurrentUser: incomingPlayerData.odUserId === currentUserId,
+                        name: incomingPlayerData?.odName || 'Teammate',
+                        operation: incomingSlotLabel,
+                        isCurrentUser: isIncomingCurrentUser,
                     },
                     slotNumber: previousSlotRef.current,
                 });
-                
+
                 // Auto-hide after animation completes (2.5s - quick READY-SET-GO)
                 setTimeout(() => {
                     setRelayHandoff(prev => ({ ...prev, isVisible: false }));
@@ -1299,7 +1434,7 @@ export function TeamMatchClient({
                 correctAnswer: undefined,
             });
             // Clear result after delay
-            setTimeout(() => setLastAnswerResult(null), 1500);
+            setTimeout(() => setLastAnswerResult(null), 600);
             setCurrentInput('');
             return;
         }
@@ -1396,6 +1531,7 @@ export function TeamMatchClient({
                 isAnchor: player?.isAnchor || false,
                 slot: op,
                 isActive: !!player?.odUserId,
+                isCurrentUser: userId === currentUserId,
             };
         }) : [];
         
@@ -1421,6 +1557,17 @@ export function TeamMatchClient({
         return (
             <VSScreenBackground variant="versus">
                 <div className="h-screen overflow-hidden no-scrollbar flex flex-col">
+                    {/* Leave Button - Top Left Corner */}
+                    <button
+                        onClick={() => setShowQuitConfirm(true)}
+                        className="fixed top-4 left-4 z-50 px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30
+                                   text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/50
+                                   transition-all inline-flex items-center gap-2 text-sm backdrop-blur-sm"
+                    >
+                        <ArrowLeft className="w-3 h-3" />
+                        Leave Match
+                    </button>
+
                     {/* Header - MATCH STARTS IN countdown */}
                     <motion.div
                         initial={{ opacity: 0, y: -30 }}
@@ -1430,18 +1577,33 @@ export function TeamMatchClient({
                         <h1 className="text-xl md:text-2xl font-black italic text-white/90 tracking-wide mb-1">
                             MATCH STARTS IN...
                         </h1>
-                        {preMatchCountdownMs !== null ? (
-                            <motion.div
-                                key={Math.ceil(preMatchCountdownMs / 1000)}
-                                initial={{ scale: 1.3, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                className="relative"
-                            >
-                                <span className="text-4xl md:text-5xl font-black text-white drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]">
-                                    {Math.ceil(preMatchCountdownMs / 1000)}
-                                </span>
-                            </motion.div>
-                        ) : (
+                        {preMatchCountdownMs !== null ? (() => {
+                            const secs = Math.ceil(preMatchCountdownMs / 1000);
+                            const isUrgent = secs <= 3;
+                            const isMedium = secs <= 5 && secs > 3;
+                            const textColor = isUrgent ? 'text-orange-400' : isMedium ? 'text-amber-300' : 'text-white';
+                            const shadowColor = isUrgent ? 'drop-shadow-[0_0_40px_rgba(249,115,22,0.8)]' : isMedium ? 'drop-shadow-[0_0_35px_rgba(251,191,36,0.6)]' : 'drop-shadow-[0_0_30px_rgba(255,255,255,0.5)]';
+                            return (
+                                <motion.div
+                                    key={secs}
+                                    initial={{ scale: 1.3, opacity: 0 }}
+                                    animate={{ scale: isUrgent ? [1, 1.15, 1] : 1, opacity: 1 }}
+                                    transition={isUrgent ? { scale: { duration: 0.4, repeat: Infinity } } : {}}
+                                    className="relative"
+                                >
+                                    {isUrgent && (
+                                        <motion.div
+                                            className="absolute inset-0 blur-2xl bg-orange-500/40 rounded-full"
+                                            animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0.7, 0.4] }}
+                                            transition={{ duration: 0.4, repeat: Infinity }}
+                                        />
+                                    )}
+                                    <span className={`relative text-4xl md:text-5xl font-black ${textColor} ${shadowColor}`}>
+                                        {secs}
+                                    </span>
+                                </motion.div>
+                            );
+                        })() : (
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
@@ -1554,16 +1716,6 @@ export function TeamMatchClient({
                             </motion.div>
                         )}
 
-                        {/* Leave Button */}
-                        <button
-                            onClick={() => setShowQuitConfirm(true)}
-                            className="px-4 py-2 rounded-lg bg-rose-500/10 border border-rose-500/30
-                                       text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/50
-                                       transition-all inline-flex items-center gap-2 text-sm"
-                        >
-                            <ArrowLeft className="w-3 h-3" />
-                            Leave Match
-                        </button>
                     </div>
                 </div>
                 
@@ -1737,6 +1889,7 @@ export function TeamMatchClient({
                                         slot={slotOp}
                                         showSlot={true}
                                         isActive={selectedSlotPlayer === playerId}
+                                        isCurrentUser={playerId === currentUserId}
                                         onClick={isIGL ? () => setSelectedSlotPlayer(prev => prev === playerId ? null : playerId) : undefined}
                                         variant="minimal"
                                         index={idx}
@@ -2070,11 +2223,29 @@ export function TeamMatchClient({
                     <div className="grid grid-cols-12 gap-6">
                         {/* Teammate/My Turn View */}
                         <div className="col-span-8">
-                            {/* Relay Handoff Animation - Only shown to the incoming player */}
-                            {relayHandoff.isVisible && 
-                             relayHandoff.outgoingPlayer && 
-                             relayHandoff.incomingPlayer && 
+                            {/* "Your Turn Starting" indicator for slot 1 players */}
+                            {yourTurnStarting ? (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 1.1 }}
+                                    className="bg-gradient-to-b from-violet-950/80 to-slate-900/90
+                                               rounded-2xl border-2 border-emerald-500/50 p-8 text-center"
+                                >
+                                    <motion.div
+                                        animate={{ scale: [1, 1.1, 1] }}
+                                        transition={{ duration: 0.5, repeat: Infinity }}
+                                        className="text-5xl font-black text-emerald-400 mb-4"
+                                    >
+                                        YOUR TURN!
+                                    </motion.div>
+                                    <p className="text-white/60">Get ready to answer...</p>
+                                </motion.div>
+                            ) : relayHandoff.isVisible &&
+                             relayHandoff.outgoingPlayer &&
+                             relayHandoff.incomingPlayer &&
                              relayHandoff.incomingPlayer.isCurrentUser ? (
+                                /* Relay Handoff Animation - Only shown to the incoming player */
                                 <RelayHandoff
                                     isVisible={true}
                                     outgoingPlayer={relayHandoff.outgoingPlayer}
@@ -2084,26 +2255,69 @@ export function TeamMatchClient({
                                 />
                             ) : isMyTurn && myPlayerQuestion ? (
                                 /* Active Player Input - Enhanced Question Card */
-                                <QuestionAnswerCard
-                                    question={myPlayerQuestion.question}
-                                    operation={myPlayerQuestion.operation || 'mixed'}
-                                    questionNumber={Math.min((myTeam?.questionsInSlot || 0) + 1, 5)}
-                                    totalQuestions={5}
-                                    slotLabel={myPlayer.slot || 'Mixed'}
-                                    streak={myPlayer.streak || 0}
-                                    slotScore={myPlayer.score || 0}
-                                    isIgl={myPlayer.isIgl}
-                                    isAnchor={myPlayer.isAnchor}
-                                    playerName={myPlayer.odName}
-                                    onSubmit={handleSubmit}
-                                    onInputChange={handleInputChange}
-                                    lastResult={lastAnswerResult ? {
-                                        isCorrect: lastAnswerResult.isCorrect,
-                                        pointsEarned: lastAnswerResult.pointsEarned,
-                                        correctAnswer: lastAnswerResult.correctAnswer,
-                                        newStreak: myPlayer.streak || 0,
-                                    } : null}
-                                />
+                                <div className="relative">
+                                    <QuestionAnswerCard
+                                        question={myPlayerQuestion.question}
+                                        operation={myPlayerQuestion.operation || 'mixed'}
+                                        questionNumber={Math.min((myTeam?.questionsInSlot || 0) + 1, 5)}
+                                        totalQuestions={5}
+                                        slotLabel={SLOT_LABELS[(myTeam?.currentSlot || 1) - 1] || 'Mixed'}
+                                        streak={myPlayer.streak || 0}
+                                        slotScore={myPlayer.score || 0}
+                                        isIgl={myPlayer.isIgl}
+                                        isAnchor={myPlayer.isAnchor}
+                                        playerName={myPlayer.odName}
+                                        onSubmit={handleSubmit}
+                                        onInputChange={handleInputChange}
+                                        lastResult={lastAnswerResult ? {
+                                            isCorrect: lastAnswerResult.isCorrect,
+                                            pointsEarned: lastAnswerResult.pointsEarned,
+                                            correctAnswer: lastAnswerResult.correctAnswer,
+                                            newStreak: myPlayer.streak || 0,
+                                        } : null}
+                                    />
+                                    {/* Teammate answer indicator - shows when teammate answers during your turn */}
+                                    <AnimatePresence>
+                                        {teammateLastAnswerResult && (
+                                            <motion.div
+                                                initial={{ opacity: 0, x: 50, scale: 0.8 }}
+                                                animate={{
+                                                    opacity: 1,
+                                                    x: 0,
+                                                    scale: 1,
+                                                    // Shake animation for incorrect answers
+                                                    ...(teammateLastAnswerResult.isCorrect ? {} : {
+                                                        x: [0, -5, 5, -5, 5, 0]
+                                                    })
+                                                }}
+                                                exit={{ opacity: 0, x: 50, scale: 0.8 }}
+                                                transition={{ duration: 0.3 }}
+                                                className={cn(
+                                                    "absolute top-4 right-4 px-5 py-3 rounded-xl flex items-center gap-3 z-20 shadow-lg",
+                                                    teammateLastAnswerResult.isCorrect
+                                                        ? "bg-emerald-500/30 border-2 border-emerald-500/60"
+                                                        : "bg-rose-500/30 border-2 border-rose-500/60"
+                                                )}
+                                            >
+                                                <div className={cn(
+                                                    "w-8 h-8 rounded-full flex items-center justify-center",
+                                                    teammateLastAnswerResult.isCorrect ? "bg-emerald-500" : "bg-rose-500"
+                                                )}>
+                                                    {teammateLastAnswerResult.isCorrect
+                                                        ? <Check className="w-5 h-5 text-white" />
+                                                        : <X className="w-5 h-5 text-white" />
+                                                    }
+                                                </div>
+                                                <span className={cn(
+                                                    "text-base font-bold",
+                                                    teammateLastAnswerResult.isCorrect ? "text-emerald-400" : "text-rose-400"
+                                                )}>
+                                                    Teammate {teammateLastAnswerResult.isCorrect ? '+' + teammateLastAnswerResult.pointsEarned : 'MISSED!'}
+                                                </span>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
                             ) : activeTeammateId && myTeam?.players[activeTeammateId] ? (
                                 /* Teammate Spectator View */
                                 <TeammateSpectatorView
@@ -2610,7 +2824,8 @@ export function TeamMatchClient({
                 )}
 
                 {/* Break Phase - Enhanced with MVP and insights */}
-                {matchState.phase === 'break' && myTeam && opponentTeam && (
+                {/* Hide when round countdown is showing to prevent overlap */}
+                {matchState.phase === 'break' && !showRoundCountdown && myTeam && opponentTeam && (
                     <TacticalBreakPanel
                         durationMs={phaseInitialDuration || 20000}
                         completedRound={matchState.round}
@@ -2675,7 +2890,8 @@ export function TeamMatchClient({
                 )}
 
                 {/* Halftime Phase - Enhanced with player stats */}
-                {matchState.phase === 'halftime' && myTeam && opponentTeam && (
+                {/* Hide when round countdown is showing to prevent overlap */}
+                {matchState.phase === 'halftime' && !showRoundCountdown && myTeam && opponentTeam && (
                     <HalftimePanel
                         durationMs={phaseInitialDuration || 30000}
                         myTeamName={myTeam.teamName}
@@ -2689,10 +2905,13 @@ export function TeamMatchClient({
                             isAnchor: p.isAnchor,
                             isCurrentUser: p.odUserId === currentUserId,
                             operation: p.slot,
-                            questionsAnswered: p.total,
-                            correctAnswers: p.correct,
+                            questionsAnswered: p.total || 0,
+                            correctAnswers: p.correct || 0,
                             accuracy: p.total > 0 ? (p.correct / p.total) * 100 : 0,
-                            avgResponseTime: 2.5, // TODO: Track actual response times
+                            // Calculate average response time in seconds from tracked milliseconds
+                            avgResponseTime: p.total > 0 && p.totalAnswerTimeMs 
+                                ? (p.totalAnswerTimeMs / p.total) / 1000 
+                                : 0,
                             score: p.score,
                             streak: p.streak,
                         }))}
@@ -2703,10 +2922,13 @@ export function TeamMatchClient({
                             isAnchor: p.isAnchor,
                             isCurrentUser: false,
                             operation: p.slot,
-                            questionsAnswered: p.total,
-                            correctAnswers: p.correct,
+                            questionsAnswered: p.total || 0,
+                            correctAnswers: p.correct || 0,
                             accuracy: p.total > 0 ? (p.correct / p.total) * 100 : 0,
-                            avgResponseTime: 2.5,
+                            // Calculate average response time in seconds from tracked milliseconds
+                            avgResponseTime: p.total > 0 && p.totalAnswerTimeMs 
+                                ? (p.totalAnswerTimeMs / p.total) / 1000 
+                                : 0,
                             score: p.score,
                             streak: p.streak,
                         }))}
@@ -3011,8 +3233,9 @@ export function TeamMatchClient({
                 )}
             </AnimatePresence>
 
-            {/* Round Start Countdown (5-4-3-2-1-GO!) */}
-            {(showRoundCountdown || matchState.phase === 'round_countdown') && (
+            {/* Round Start Countdown (5-4-3-2-1-GO!) - only show when phase is round_countdown, NOT during break/halftime */}
+            {(showRoundCountdown || matchState.phase === 'round_countdown') &&
+             matchState.phase !== 'break' && matchState.phase !== 'halftime' && (
                 <RoundStartCountdown
                     key={`countdown-${matchState.round}-${matchState.half}`}
                     round={matchState.round || 1}

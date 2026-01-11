@@ -6,6 +6,12 @@ export const authConfig = {
     pages: {
         signIn: "/auth/login",
     },
+    // NOTE: When behind a reverse proxy (nginx) that terminates SSL:
+    // - External connection: Browser → Nginx (HTTPS)
+    // - Internal connection: Nginx → App (HTTP)
+    // We do NOT use __Secure- or __Host- cookie prefixes because the app
+    // sees HTTP connections internally. The cookies will still be secure
+    // because nginx serves them over HTTPS to the browser.
     callbacks: {
         authorized({ auth, request: { nextUrl } }) {
             const isLoggedIn = !!auth?.user;
@@ -17,27 +23,38 @@ export const authConfig = {
             return true;
         },
         redirect({ url, baseUrl }) {
-            // Fix localhost redirect issue - always use relative paths or NEXTAUTH_URL
-            const nextAuthUrl = process.env.NEXTAUTH_URL || baseUrl;
-
-            // If URL contains localhost, replace with proper base URL
-            if (url.includes('localhost')) {
-                const urlPath = new URL(url).pathname;
-                return `${nextAuthUrl}${urlPath}`;
-            }
-
-            // If it's a relative URL, prepend the base URL
+            // Simple redirect logic - avoid complex URL manipulation that can cause loops
+            // When behind a reverse proxy, trust the URLs as they come
+            
+            // Handle relative URLs
             if (url.startsWith('/')) {
-                return `${nextAuthUrl}${url}`;
-            }
-
-            // If it's the same origin, allow it
-            if (url.startsWith(nextAuthUrl)) {
                 return url;
             }
-
-            // Default to dashboard
-            return `${nextAuthUrl}/dashboard`;
+            
+            // Allow same-origin redirects
+            try {
+                const urlObj = new URL(url);
+                const baseObj = new URL(baseUrl);
+                
+                // Allow if same origin as baseUrl
+                if (urlObj.origin === baseObj.origin) {
+                    return url;
+                }
+                
+                // Allow if matches NEXTAUTH_URL
+                const nextAuthUrl = process.env.NEXTAUTH_URL;
+                if (nextAuthUrl) {
+                    const nextAuthObj = new URL(nextAuthUrl);
+                    if (urlObj.origin === nextAuthObj.origin) {
+                        return url;
+                    }
+                }
+            } catch {
+                // If URL parsing fails, use relative path
+            }
+            
+            // Default to dashboard (relative path to avoid domain issues)
+            return '/dashboard';
         },
     },
     trustHost: true,
