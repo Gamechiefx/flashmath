@@ -4,9 +4,11 @@
  * VS Screen Background
  * Dramatic background for pre-match and strategy screens
  * Inspired by fighting games, MOBAs, and competitive shooters
+ * Now with theme-aware colors and floating math symbols
  */
 
-import { motion } from 'framer-motion';
+import { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 interface VSScreenBackgroundProps {
@@ -15,6 +17,78 @@ interface VSScreenBackgroundProps {
     opponentColor?: string;
     className?: string;
     children?: React.ReactNode;
+    showFloatingNumbers?: boolean;
+}
+
+/**
+ * Floating Math Symbols Component
+ * Renders animated floating numbers and operators like the Arena mode selection
+ */
+function FloatingMathSymbols() {
+    const [mounted, setMounted] = useState(false);
+    const symbols = useMemo(() => ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '−', '×', '÷', '=', '%'], []);
+
+    // Generate deterministic positions and animation properties to avoid hydration mismatch
+    const particles = useMemo(() => {
+        return [...Array(25)].map((_, i) => {
+            // Deterministic pseudo-random values based on index
+            const leftRand = ((i * 37 + 13) % 100);
+            const topRand = ((i * 53 + 7) % 100);
+            const sizeRand = ((i * 19 + 3) % 24);
+            const delayRand = ((i * 23 + 11) % 20);
+            const durationRand = ((i * 29 + 5) % 10);
+            const opacityRand = ((i * 31 + 2) % 15) / 100;
+
+            return {
+                id: i,
+                symbol: symbols[i % symbols.length],
+                left: `${leftRand}%`,
+                top: `${topRand}%`,
+                fontSize: `${sizeRand + 16}px`,
+                delay: delayRand,
+                duration: durationRand + 15,
+                opacity: 0.1 + opacityRand,
+            };
+        });
+    }, [symbols]);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    if (!mounted) return null;
+
+    return (
+        <div className="absolute inset-0 pointer-events-none overflow-hidden select-none z-0">
+            {particles.map((particle) => (
+                <motion.div
+                    key={particle.id}
+                    className="absolute font-black"
+                    style={{
+                        left: particle.left,
+                        top: particle.top,
+                        fontSize: particle.fontSize,
+                        color: 'var(--primary)',
+                        opacity: 0,
+                        textShadow: '0 0 20px var(--accent-glow)',
+                    }}
+                    animate={{
+                        y: [0, -30, 0],
+                        opacity: [0, particle.opacity, 0],
+                        rotate: [0, 10, -10, 0],
+                    }}
+                    transition={{
+                        duration: particle.duration,
+                        delay: particle.delay,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                    }}
+                >
+                    {particle.symbol}
+                </motion.div>
+            ))}
+        </div>
+    );
 }
 
 export function VSScreenBackground({
@@ -23,11 +97,20 @@ export function VSScreenBackground({
     opponentColor = 'rose',
     className,
     children,
+    showFloatingNumbers = true,
 }: VSScreenBackgroundProps) {
     return (
-        <div data-testid={`vs-screen-background-${variant}`} className={cn("relative min-h-screen overflow-hidden", className)}>
-            {/* Base gradient */}
-            <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950" />
+        <div data-testid={`vs-screen-background-${variant}`} className={cn("relative h-screen overflow-hidden no-scrollbar", className)}>
+            {/* Base gradient - theme aware */}
+            <div
+                className="absolute inset-0"
+                style={{
+                    background: 'linear-gradient(to bottom, var(--background) 0%, hsl(var(--card)) 50%, var(--background) 100%)',
+                }}
+            />
+
+            {/* Floating Math Symbols - theme aware */}
+            {showFloatingNumbers && <FloatingMathSymbols />}
 
             {/* Dramatic diagonal split for VS screens */}
             {variant === 'versus' && (
@@ -76,11 +159,11 @@ export function VSScreenBackground({
                 </>
             )}
 
-            {/* Strategy phase - single team focus */}
+            {/* Strategy phase - single team focus - theme aware */}
             {variant === 'strategy' && (
                 <>
-                    {/* Radial glow from center - more visible */}
-                    <motion.div 
+                    {/* Radial glow from center - uses theme accent */}
+                    <motion.div
                         animate={{
                             opacity: [0.3, 0.5, 0.3],
                             scale: [1, 1.05, 1],
@@ -88,28 +171,27 @@ export function VSScreenBackground({
                         transition={{ duration: 4, repeat: Infinity }}
                         className="absolute inset-0"
                         style={{
-                            background: `radial-gradient(ellipse at center, 
-                                rgba(99, 102, 241, 0.4) 0%, 
-                                rgba(99, 102, 241, 0.15) 40%, 
+                            background: `radial-gradient(ellipse at center,
+                                var(--accent-glow) 0%,
                                 transparent 70%)`,
                         }}
                     />
-                    
-                    {/* Corner accents - brighter */}
-                    <motion.div 
-                        animate={{ opacity: [0.3, 0.6, 0.3] }}
+
+                    {/* Corner accents - uses theme primary */}
+                    <motion.div
+                        animate={{ opacity: [0.2, 0.4, 0.2] }}
                         transition={{ duration: 3, repeat: Infinity }}
                         className="absolute top-0 left-0 w-1/2 h-1/2"
                         style={{
-                            background: 'radial-gradient(ellipse at top left, rgba(6, 182, 212, 0.4) 0%, transparent 60%)',
+                            background: 'radial-gradient(ellipse at top left, var(--accent-glow) 0%, transparent 60%)',
                         }}
                     />
-                    <motion.div 
-                        animate={{ opacity: [0.3, 0.6, 0.3] }}
+                    <motion.div
+                        animate={{ opacity: [0.2, 0.4, 0.2] }}
                         transition={{ duration: 3, repeat: Infinity, delay: 1.5 }}
                         className="absolute bottom-0 right-0 w-1/2 h-1/2"
                         style={{
-                            background: 'radial-gradient(ellipse at bottom right, rgba(6, 182, 212, 0.4) 0%, transparent 60%)',
+                            background: 'radial-gradient(ellipse at bottom right, var(--accent-glow) 0%, transparent 60%)',
                         }}
                     />
                 </>
@@ -132,81 +214,82 @@ export function VSScreenBackground({
                 />
             )}
 
-            {/* Animated grid pattern - more visible */}
-            <motion.div 
-                animate={{ opacity: [0.05, 0.1, 0.05] }}
+            {/* Animated grid pattern - theme aware */}
+            <motion.div
+                animate={{ opacity: [0.03, 0.08, 0.03] }}
                 transition={{ duration: 4, repeat: Infinity }}
                 className="absolute inset-0"
                 style={{
                     backgroundImage: `
-                        linear-gradient(rgba(6, 182, 212, 0.2) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(6, 182, 212, 0.2) 1px, transparent 1px)
+                        linear-gradient(var(--primary) 1px, transparent 1px),
+                        linear-gradient(90deg, var(--primary) 1px, transparent 1px)
                     `,
                     backgroundSize: '60px 60px',
+                    opacity: 0.1,
                 }}
             />
 
-            {/* Perspective grid floor - more dramatic */}
-            <motion.div 
-                animate={{ opacity: [0.3, 0.5, 0.3] }}
+            {/* Perspective grid floor - theme aware */}
+            <motion.div
+                animate={{ opacity: [0.2, 0.35, 0.2] }}
                 transition={{ duration: 3, repeat: Infinity }}
                 className="absolute bottom-0 left-0 right-0 h-1/2"
                 style={{
-                    background: `
-                        linear-gradient(to top, rgba(6, 182, 212, 0.4), transparent 80%),
-                        repeating-linear-gradient(
-                            90deg,
-                            transparent,
-                            transparent 48px,
-                            rgba(6, 182, 212, 0.6) 48px,
-                            rgba(6, 182, 212, 0.6) 52px,
-                            transparent 52px
-                        )
-                    `,
+                    background: `linear-gradient(to top, var(--accent-glow), transparent 80%)`,
                     transform: 'perspective(400px) rotateX(65deg)',
                     transformOrigin: 'bottom',
                 }}
             />
 
-            {/* Floating particles - larger and more visible */}
+            {/* Floating particles - theme aware */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                {[...Array(30)].map((_, i) => (
-                    <motion.div
-                        key={i}
-                        className="absolute rounded-full"
-                        style={{
-                            width: `${2 + Math.random() * 4}px`,
-                            height: `${2 + Math.random() * 4}px`,
-                            background: i % 3 === 0 ? 'rgba(6, 182, 212, 0.8)' : 'rgba(255, 255, 255, 0.6)',
-                            boxShadow: i % 3 === 0 ? '0 0 10px rgba(6, 182, 212, 0.5)' : '0 0 6px rgba(255, 255, 255, 0.3)',
-                        }}
-                        initial={{
-                            x: `${Math.random() * 100}%`,
-                            y: '110%',
-                            opacity: 0,
-                        }}
-                        animate={{
-                            y: '-10%',
-                            opacity: [0, 0.8, 0],
-                        }}
-                        transition={{
-                            duration: 6 + Math.random() * 6,
-                            repeat: Infinity,
-                            delay: Math.random() * 3,
-                            ease: 'linear',
-                        }}
-                    />
-                ))}
+                {[...Array(20)].map((_, i) => {
+                    // Use deterministic pseudo-random values based on index to avoid hydration mismatch
+                    const sizeRand = ((i * 7 + 3) % 10) / 10; // 0-1 based on i
+                    const posRand = ((i * 13 + 5) % 100); // 0-99 based on i
+                    const durationRand = ((i * 11 + 2) % 8); // 0-7 based on i
+                    const delayRand = ((i * 17 + 1) % 5); // 0-4 based on i
+
+                    return (
+                        <motion.div
+                            key={i}
+                            className="absolute rounded-full"
+                            style={{
+                                width: `${2 + sizeRand * 3}px`,
+                                height: `${2 + sizeRand * 3}px`,
+                                background: i % 3 === 0 ? 'var(--primary)' : 'var(--foreground)',
+                                boxShadow: i % 3 === 0 ? '0 0 10px var(--accent-glow)' : '0 0 6px var(--foreground)',
+                                opacity: 0.4,
+                            }}
+                            initial={{
+                                x: `${posRand}%`,
+                                y: '110%',
+                                opacity: 0,
+                            }}
+                            animate={{
+                                y: '-10%',
+                                opacity: [0, 0.6, 0],
+                            }}
+                            transition={{
+                                duration: 8 + durationRand,
+                                repeat: Infinity,
+                                delay: delayRand,
+                                ease: 'linear',
+                            }}
+                        />
+                    );
+                })}
             </div>
 
-            {/* Horizontal scan line effect */}
+            {/* Horizontal scan line effect - theme aware */}
             <motion.div
                 animate={{ y: ['0%', '100%'] }}
                 transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
                 className="absolute left-0 right-0 h-px pointer-events-none"
                 style={{
-                    background: 'linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.5), transparent)',
-                    boxShadow: '0 0 20px rgba(6, 182, 212, 0.3)',
+                    background: 'linear-gradient(90deg, transparent, var(--primary), transparent)',
+                    boxShadow: '0 0 20px var(--accent-glow)',
+                    opacity: 0.5,
                 }}
             />
 
@@ -226,49 +309,65 @@ export function VSScreenBackground({
                 }}
             />
 
-            {/* Corner decorations - larger and animated */}
-            <motion.svg 
-                animate={{ opacity: [0.4, 0.8, 0.4] }}
+            {/* Corner decorations - theme aware (z-0 to stay behind header) */}
+            <motion.svg
+                animate={{ opacity: [0.3, 0.6, 0.3] }}
                 transition={{ duration: 2, repeat: Infinity }}
-                className="absolute top-0 left-0 w-40 h-40 text-cyan-500" 
+                className="absolute top-0 left-0 w-32 h-32 z-0"
+                style={{ color: 'var(--primary)' }}
                 viewBox="0 0 100 100"
             >
                 <path d="M0 0 L45 0 L45 4 L4 4 L4 45 L0 45 Z" fill="currentColor" opacity="0.6" />
                 <path d="M0 0 L25 0 L25 2 L2 2 L2 25 L0 25 Z" fill="currentColor" opacity="0.3" />
             </motion.svg>
-            <motion.svg 
-                animate={{ opacity: [0.4, 0.8, 0.4] }}
+            <motion.svg
+                animate={{ opacity: [0.3, 0.6, 0.3] }}
                 transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
-                className="absolute top-0 right-0 w-40 h-40 text-rose-500 rotate-90" 
+                className="absolute top-0 right-0 w-32 h-32 rotate-90 z-0"
+                style={{ color: 'var(--accent)' }}
                 viewBox="0 0 100 100"
             >
                 <path d="M0 0 L45 0 L45 4 L4 4 L4 45 L0 45 Z" fill="currentColor" opacity="0.6" />
                 <path d="M0 0 L25 0 L25 2 L2 2 L2 25 L0 25 Z" fill="currentColor" opacity="0.3" />
             </motion.svg>
-            <motion.svg 
-                animate={{ opacity: [0.4, 0.8, 0.4] }}
+            <motion.svg
+                animate={{ opacity: [0.3, 0.6, 0.3] }}
                 transition={{ duration: 2, repeat: Infinity, delay: 1 }}
-                className="absolute bottom-0 left-0 w-40 h-40 text-cyan-500 -rotate-90" 
+                className="absolute bottom-0 left-0 w-32 h-32 -rotate-90 z-0"
+                style={{ color: 'var(--primary)' }}
                 viewBox="0 0 100 100"
             >
                 <path d="M0 0 L45 0 L45 4 L4 4 L4 45 L0 45 Z" fill="currentColor" opacity="0.6" />
                 <path d="M0 0 L25 0 L25 2 L2 2 L2 25 L0 25 Z" fill="currentColor" opacity="0.3" />
             </motion.svg>
-            <motion.svg 
-                animate={{ opacity: [0.4, 0.8, 0.4] }}
+            <motion.svg
+                animate={{ opacity: [0.3, 0.6, 0.3] }}
                 transition={{ duration: 2, repeat: Infinity, delay: 1.5 }}
-                className="absolute bottom-0 right-0 w-40 h-40 text-rose-500 rotate-180" 
+                className="absolute bottom-0 right-0 w-32 h-32 rotate-180 z-0"
+                style={{ color: 'var(--accent)' }}
                 viewBox="0 0 100 100"
             >
                 <path d="M0 0 L45 0 L45 4 L4 4 L4 45 L0 45 Z" fill="currentColor" opacity="0.6" />
                 <path d="M0 0 L25 0 L25 2 L2 2 L2 25 L0 25 Z" fill="currentColor" opacity="0.3" />
             </motion.svg>
-            
-            {/* Edge glow lines */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-cyan-500/50 via-transparent to-rose-500/50" />
-            <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-cyan-500/50 via-transparent to-rose-500/50" />
-            <div className="absolute top-0 bottom-0 left-0 w-px bg-gradient-to-b from-cyan-500/50 via-transparent to-cyan-500/50" />
-            <div className="absolute top-0 bottom-0 right-0 w-px bg-gradient-to-b from-rose-500/50 via-transparent to-rose-500/50" />
+
+            {/* Edge glow lines - theme aware */}
+            <div
+                className="absolute top-0 left-0 right-0 h-px"
+                style={{ background: 'linear-gradient(to right, var(--primary), transparent 50%, var(--accent))', opacity: 0.5 }}
+            />
+            <div
+                className="absolute bottom-0 left-0 right-0 h-px"
+                style={{ background: 'linear-gradient(to right, var(--primary), transparent 50%, var(--accent))', opacity: 0.5 }}
+            />
+            <div
+                className="absolute top-0 bottom-0 left-0 w-px"
+                style={{ background: 'linear-gradient(to bottom, var(--primary), transparent 50%, var(--primary))', opacity: 0.5 }}
+            />
+            <div
+                className="absolute top-0 bottom-0 right-0 w-px"
+                style={{ background: 'linear-gradient(to bottom, var(--accent), transparent 50%, var(--accent))', opacity: 0.5 }}
+            />
 
             {/* Content */}
             <div className="relative z-10">
@@ -352,21 +451,24 @@ export function TeamBannerHeader({
     teamTag,
     isMyTeam = false,
     isAI = false,
+    align = 'center',
     className,
 }: {
     teamName: string;
     teamTag?: string;
     isMyTeam?: boolean;
     isAI?: boolean;
+    align?: 'left' | 'center' | 'right';
     className?: string;
 }) {
     const baseColor = isMyTeam ? 'cyan' : 'rose';
+    const alignClass = align === 'left' ? 'text-left' : align === 'right' ? 'text-right' : 'text-center';
     
     return (
         <motion.div
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className={cn("relative text-center", className)}
+            className={cn("relative", alignClass, className)}
         >
             {/* Background glow */}
             <div 

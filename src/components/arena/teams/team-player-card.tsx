@@ -11,9 +11,46 @@ import { motion } from 'framer-motion';
 import { Crown, Anchor, Check, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { UserAvatar } from '@/components/user-avatar';
+import { ITEMS, ItemType } from '@/lib/items';
 
-// Banner styles matching player-banner.tsx
-const BANNER_STYLES: Record<string, {
+/**
+ * Look up a title's display name from the ITEMS list
+ * Handles various formats: "title_math_tryhard", "title-math-tryhard", or raw display name
+ */
+function getTitleDisplayName(titleIdOrName: string): string {
+    if (!titleIdOrName || titleIdOrName === 'default' || titleIdOrName === 'Player') {
+        return 'FlashMath Player';
+    }
+
+    // If it already looks like a display name (no underscores or dashes), return it
+    if (!titleIdOrName.includes('_') && !titleIdOrName.includes('-')) {
+        return titleIdOrName;
+    }
+
+    // Normalize: convert dashes to underscores
+    const normalizedId = titleIdOrName.replace(/-/g, '_');
+
+    // Try to find the title in ITEMS
+    const titleItem = ITEMS.find(
+        item => item.type === ItemType.TITLE &&
+            (item.id === normalizedId || item.id === titleIdOrName)
+    );
+
+    if (titleItem) {
+        // Return the name or assetValue (both should be the display name)
+        return titleItem.name || titleItem.assetValue;
+    }
+
+    // Fallback: prettify the ID if not found
+    // "title_math_tryhard" -> "Math Tryhard"
+    return titleIdOrName
+        .replace(/^title[_-]?/i, '')
+        .replace(/[_-]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Banner styles matching player-banner.tsx - exported for use in other components
+export const BANNER_STYLES: Record<string, {
     background: string;
     border: string;
     glow: string;
@@ -112,6 +149,32 @@ const OPERATION_SYMBOLS: Record<string, string> = {
     mixed: '?',
 };
 
+/**
+ * Resolve banner ID to style key
+ * Handles formats: "banner_synthwave", "banner-synthwave", "synthwave", "default"
+ */
+function resolveBannerStyle(bannerId: string): string {
+    if (!bannerId || bannerId === 'default') return 'default';
+
+    // If it's already a valid style key, return it
+    if (BANNER_STYLES[bannerId]) return bannerId;
+
+    // Normalize: remove "banner_" or "banner-" prefix
+    let styleKey = bannerId
+        .replace(/^banner[_-]?/i, '')
+        .replace(/-/g, '_');
+
+    // Check if the resolved key exists
+    if (BANNER_STYLES[styleKey]) return styleKey;
+
+    // Try without underscores (synthwave vs synth_wave)
+    styleKey = styleKey.replace(/_/g, '');
+    if (BANNER_STYLES[styleKey]) return styleKey;
+
+    // Fallback to default
+    return 'default';
+}
+
 export function TeamPlayerCard({
     name,
     odUserId,
@@ -135,7 +198,9 @@ export function TeamPlayerCard({
     onClick,
     index = 0,
 }: TeamPlayerCardProps) {
-    const style = BANNER_STYLES[banner] || BANNER_STYLES.default;
+    // Resolve banner ID to style key
+    const resolvedBanner = resolveBannerStyle(banner);
+    const style = BANNER_STYLES[resolvedBanner] || BANNER_STYLES.default;
     const opSymbol = slot ? OPERATION_SYMBOLS[slot] || '?' : null;
 
     // Compact variant for inline displays
@@ -183,7 +248,7 @@ export function TeamPlayerCard({
                         {isIgl && <Crown className="w-3 h-3 text-amber-400 shrink-0" />}
                         {isAnchor && <Anchor className="w-3 h-3 text-purple-400 shrink-0" />}
                     </div>
-                    <span className="text-[10px] text-white/50 truncate block">{title}</span>
+                    <span className="text-[10px] text-white/50 truncate block">{getTitleDisplayName(title)}</span>
                 </div>
 
                 {/* Slot indicator */}
@@ -203,7 +268,7 @@ export function TeamPlayerCard({
         );
     }
 
-    // Minimal variant for small displays
+    // Minimal variant - compact tall cards matching screenshot design
     if (variant === 'minimal') {
         return (
             <motion.div
@@ -213,23 +278,85 @@ export function TeamPlayerCard({
                 transition={{ delay: index * 0.05 }}
                 onClick={onClick}
                 className={cn(
-                    "relative flex flex-col items-center gap-1 p-2 rounded-lg border overflow-hidden",
-                    "bg-gradient-to-b",
-                    style.background,
+                    "relative flex flex-col rounded-xl border-2 overflow-hidden",
+                    "w-full aspect-[3/4]",
                     style.border,
-                    onClick && "cursor-pointer hover:scale-105 transition-transform",
+                    style.glow,
+                    onClick && "cursor-pointer hover:scale-[1.02] transition-transform",
                     isActive && "ring-2 ring-primary",
                     className
                 )}
             >
-                <UserAvatar
-                    user={{ name, equipped_items: { frame } }}
-                    size="sm"
-                />
-                <span className={cn("text-xs font-bold truncate max-w-full", style.textColor)}>{name}</span>
-                <div className="flex gap-1">
-                    {isIgl && <Crown className="w-3 h-3 text-amber-400" />}
-                    {isAnchor && <Anchor className="w-3 h-3 text-purple-400" />}
+                {/* Background */}
+                <div className={cn("absolute inset-0 bg-gradient-to-b", style.background)} />
+
+                {/* Pattern overlay */}
+                {style.pattern && (
+                    <div
+                        className={cn("absolute inset-0 opacity-20", style.animationClass)}
+                        style={{
+                            backgroundImage: style.pattern,
+                            backgroundSize: style.patternSize || 'auto'
+                        }}
+                    />
+                )}
+
+                {/* Level badge - top left corner */}
+                <div className="absolute top-1.5 left-1.5 z-20">
+                    <div className="w-8 h-10 rounded-lg bg-black/70 border-2 border-white/30 flex flex-col items-center justify-center shadow-lg">
+                        <span className="text-[7px] font-black text-white/60 uppercase">LVL</span>
+                        <span className="text-base font-black text-white leading-none">{level}</span>
+                    </div>
+                </div>
+
+                {/* Role badges - top right corner */}
+                {(isIgl || isAnchor) && (
+                    <div className="absolute top-1.5 right-1.5 flex flex-col gap-1 z-20">
+                        {isIgl && (
+                            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 border-2 border-amber-300 flex items-center justify-center shadow-lg shadow-amber-500/40">
+                                <Crown className="w-4 h-4 text-white drop-shadow" />
+                            </div>
+                        )}
+                        {isAnchor && (
+                            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-400 to-purple-600 border-2 border-purple-300 flex items-center justify-center shadow-lg shadow-purple-500/40">
+                                <Anchor className="w-4 h-4 text-white drop-shadow" />
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Avatar - centered */}
+                <div className="flex-1 flex items-center justify-center relative z-10 pt-10">
+                    <div className={cn(
+                        "relative",
+                        isIgl && "ring-2 ring-amber-500 ring-offset-2 ring-offset-transparent rounded-full"
+                    )}>
+                        <UserAvatar
+                            user={{ name, equipped_items: { frame } }}
+                            size="xl"
+                        />
+                    </div>
+                </div>
+
+                {/* Slot indicator - below avatar */}
+                {showSlot && opSymbol && (
+                    <div className="flex justify-center -mt-1 mb-1 relative z-10">
+                        <div className="w-7 h-7 rounded-lg bg-primary/30 border-2 border-primary flex items-center justify-center text-base font-bold text-primary">
+                            {opSymbol}
+                        </div>
+                    </div>
+                )}
+
+                {/* Bottom info */}
+                <div className="relative z-10 bg-black/60 p-2.5 text-center border-t border-white/10">
+                    <p className={cn("font-bold text-sm uppercase truncate", style.textColor)}>{name}</p>
+                    <p className="text-[10px] text-white/60 truncate">{getTitleDisplayName(title)}</p>
+                    {rank && (
+                        <p className="text-[10px] text-white/40 flex items-center justify-center gap-1 mt-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            {rank} {division || ''}
+                        </p>
+                    )}
                 </div>
             </motion.div>
         );
@@ -275,15 +402,15 @@ export function TeamPlayerCard({
                 className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
             />
 
-            {/* Role Badges - Top Right */}
-            <div className="absolute top-3 right-3 flex gap-1.5 z-20">
+            {/* Role Badges - Top Right Corner - Large and visible */}
+            <div className="absolute top-3 right-3 flex flex-col gap-2 z-20">
                 {isIgl && (
                     <motion.div
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        className="w-8 h-8 rounded-lg bg-amber-500/30 border border-amber-500/50 flex items-center justify-center backdrop-blur-sm"
+                        className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 border-2 border-amber-300 flex items-center justify-center shadow-xl shadow-amber-500/60"
                     >
-                        <Crown className="w-4 h-4 text-amber-400" />
+                        <Crown className="w-7 h-7 text-white drop-shadow-lg" />
                     </motion.div>
                 )}
                 {isAnchor && (
@@ -291,22 +418,22 @@ export function TeamPlayerCard({
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         transition={{ delay: 0.1 }}
-                        className="w-8 h-8 rounded-lg bg-purple-500/30 border border-purple-500/50 flex items-center justify-center backdrop-blur-sm"
+                        className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600 border-2 border-purple-300 flex items-center justify-center shadow-xl shadow-purple-500/60"
                     >
-                        <Anchor className="w-4 h-4 text-purple-400" />
+                        <Anchor className="w-7 h-7 text-white drop-shadow-lg" />
                     </motion.div>
                 )}
             </div>
 
-            {/* Ready Check - Top Left */}
+            {/* Ready Check - Below Level Badge */}
             {isReady && (
                 <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="absolute top-3 left-3 z-20"
+                    className="absolute top-20 left-3 z-20"
                 >
-                    <div className="w-8 h-8 rounded-lg bg-emerald-500/30 border border-emerald-500/50 flex items-center justify-center backdrop-blur-sm">
-                        <Check className="w-4 h-4 text-emerald-400" />
+                    <div className="w-10 h-10 rounded-lg bg-emerald-500/40 border-2 border-emerald-400 flex items-center justify-center backdrop-blur-sm shadow-lg shadow-emerald-500/30">
+                        <Check className="w-5 h-5 text-emerald-300" />
                     </div>
                 </motion.div>
             )}
@@ -320,11 +447,11 @@ export function TeamPlayerCard({
                 />
             </div>
 
-            {/* Level Badge */}
-            <div className="absolute top-1/2 left-3 -translate-y-1/2 z-10">
-                <div className="w-10 h-14 rounded-lg bg-black/50 border border-white/10 flex flex-col items-center justify-center backdrop-blur-sm">
-                    <span className="text-[8px] font-black text-white/50 uppercase">LVL</span>
-                    <span className="text-lg font-black text-white leading-none">{level}</span>
+            {/* Level Badge - Top Left Corner */}
+            <div className="absolute top-3 left-3 z-20">
+                <div className="w-12 h-16 rounded-lg bg-black/70 border-2 border-white/20 flex flex-col items-center justify-center backdrop-blur-sm shadow-lg">
+                    <span className="text-[9px] font-black text-white/60 uppercase">LVL</span>
+                    <span className="text-2xl font-black text-white leading-none">{level}</span>
                 </div>
             </div>
 
@@ -365,7 +492,7 @@ export function TeamPlayerCard({
 
                 {/* Title */}
                 <p className="text-[10px] text-white/50 uppercase tracking-widest text-center truncate">
-                    {title}
+                    {getTitleDisplayName(title)}
                 </p>
 
                 {/* Rank */}

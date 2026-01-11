@@ -5,6 +5,7 @@
  * Opens the FlashAuditor slide-out panel from the left side
  */
 
+import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, AlertTriangle, Activity, TrendingDown } from 'lucide-react';
 import { useAuditor } from './auditor-provider';
@@ -12,6 +13,7 @@ import { cn } from '@/lib/utils';
 
 export function AuditorFab() {
     const { togglePanel, isPanelOpen, stats, hasWarning } = useAuditor();
+    const [isHovered, setIsHovered] = React.useState(false);
 
     // Don't show if panel is open
     if (isPanelOpen) return null;
@@ -25,7 +27,7 @@ export function AuditorFab() {
                 icon: Zap,
             };
         }
-        
+
         switch (stats.decay.phase) {
             case 'warning':
                 return {
@@ -69,14 +71,17 @@ export function AuditorFab() {
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            whileHover={{ scale: 1.1 }}
+            whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={togglePanel}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
             className={cn(
-                'fixed left-4 bottom-4 z-30 flex items-center gap-2 px-4 py-3 rounded-2xl',
+                'fixed left-4 bottom-4 z-30 flex items-center gap-2 rounded-2xl',
                 'shadow-lg backdrop-blur-sm border border-[var(--glass-border)]',
                 'transition-all duration-300 hover:shadow-2xl',
-                style.bg
+                style.bg,
+                isHovered ? 'px-4 py-3' : 'p-3'
             )}
         >
             {/* Pulse ring for warnings */}
@@ -87,7 +92,7 @@ export function AuditorFab() {
                     transition={{ duration: 1.5, repeat: Infinity }}
                 />
             )}
-            
+
             {/* Icon */}
             <motion.div
                 animate={style.pulse ? { rotate: [0, -10, 10, 0] } : {}}
@@ -95,13 +100,23 @@ export function AuditorFab() {
             >
                 <Icon className="w-5 h-5 text-primary-foreground" />
             </motion.div>
-            
-            {/* Confidence percentage */}
-            <div className="flex flex-col items-start">
-                <span className="text-xs text-primary-foreground/70 font-medium leading-none">Confidence</span>
-                <span className="text-lg font-black text-primary-foreground leading-none">{confidencePercent}%</span>
-            </div>
-            
+
+            {/* Confidence percentage - only show on hover */}
+            <AnimatePresence>
+                {isHovered && (
+                    <motion.div
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: 'auto' }}
+                        exit={{ opacity: 0, width: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="flex flex-col items-start overflow-hidden"
+                    >
+                        <span className="text-xs text-primary-foreground/70 font-medium leading-none whitespace-nowrap">Confidence</span>
+                        <span className="text-lg font-black text-primary-foreground leading-none">{confidencePercent}%</span>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Warning badge */}
             {hasWarning && (
                 <motion.div
@@ -147,4 +162,3 @@ export function AuditorFabCompact() {
         </motion.button>
     );
 }
-
