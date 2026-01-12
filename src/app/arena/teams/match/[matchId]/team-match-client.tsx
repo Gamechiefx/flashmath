@@ -10,8 +10,9 @@ import { MockMatchSimulator, type MatchPhase } from '@/lib/arena/mock-match-stat
 import {
     Clock, Crown, Anchor, Zap, Check, X,
     Pause, Play, AlertCircle, Trophy, LogOut, ArrowLeft, Target,
-    Maximize, Minimize
+    Maximize, Minimize, ChevronLeft, ChevronRight, Star, Home
 } from 'lucide-react';
+import Link from 'next/link';
 import {
     TeammateSpectatorView,
     OpponentStatusPanel,
@@ -207,6 +208,25 @@ export function TeamMatchClient({
     const inputRef = useRef<HTMLInputElement>(null);
     const mockSimulatorRef = useRef<MockMatchSimulator | null>(null);
     const myTeamIdRef = useRef<string | null>(null); // To avoid stale closures in socket handlers
+    const finalMatchStateRef = useRef<MatchState | null>(null); // Preserve state after match ends
+
+    // Try to restore final state from sessionStorage on mount (handles page refreshes during post_match)
+    useEffect(() => {
+        if (typeof window !== 'undefined' && !finalMatchStateRef.current) {
+            const stored = sessionStorage.getItem(`match_results_${matchId}`);
+            if (stored) {
+                try {
+                    const parsed = JSON.parse(stored);
+                    if (parsed.phase === 'post_match') {
+                        console.log('[TeamMatch] Restored final state from sessionStorage');
+                        finalMatchStateRef.current = parsed;
+                    }
+                } catch (e) {
+                    console.error('[TeamMatch] Failed to parse stored match state');
+                }
+            }
+        }
+    }, [matchId]);
     
     // Check if this is demo mode (supports both ?demo=true and ?demoMode=true)
     const isDemoMode = (searchParams.get('demo') === 'true' || searchParams.get('demoMode') === 'true') && 
@@ -236,6 +256,8 @@ export function TeamMatchClient({
     } | null>(null);
     const [showQuitConfirm, setShowQuitConfirm] = useState(false);
     const [isLeaving, setIsLeaving] = useState(false);
+    const [resultsPage, setResultsPage] = useState(0); // 0 = winner, 1 = loser
+    const [selectedPlayerStats, setSelectedPlayerStats] = useState<PlayerState | null>(null);
     
     // Quit vote state
     const [quitVote, setQuitVote] = useState<{
@@ -596,6 +618,13 @@ export function TeamMatchClient({
             // #region agent log
             fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:match_state',message:'H1A/H2A: match_state received',data:{phase:state.phase,gameClockMs:state.gameClockMs,relayClockMs:state.relayClockMs,currentSlot:state.currentSlot,questionsInSlot:state.questionsInSlot,round:state.round,half:state.half},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1A,H2A'})}).catch(()=>{});
             // #endregion
+
+            // If we're already in post_match, don't update state (preserve results screen)
+            if (finalMatchStateRef.current?.phase === 'post_match') {
+                console.log('[TeamMatch] Ignoring match_state update - already in post_match');
+                return;
+            }
+
             // Store myTeamId in ref to avoid stale closures in other handlers
             myTeamIdRef.current = state.isMyTeam;
             setMatchState(state);
@@ -769,11 +798,12 @@ export function TeamMatchClient({
                 for (const playerId of Object.keys(team.players)) {
                     team.players[playerId].isActive = false;
                 }
-                
+
                 // Then set the active player and their question
                 const player = team.players[data.activePlayerId];
                 if (player) {
                     player.isActive = true;
+                    player.isComplete = false; // Reset complete flag when player becomes active again
                     player.currentQuestion = {
                         question: data.questionText,
                         operation: data.operation,
@@ -875,6 +905,14 @@ export function TeamMatchClient({
                         team.players[data.userId].totalAnswerTimeMs = 
                             (team.players[data.userId].totalAnswerTimeMs || 0) + data.answerTimeMs;
                     }
+                    
+                    // If this was the 5th question (slot complete), clear the player's active state
+                    // This prevents showing the question input while waiting for slot transition
+                    if (data.questionsInSlot >= 5) {
+                        team.players[data.userId].isActive = false;
+                        team.players[data.userId].currentQuestion = null;
+                        team.players[data.userId].isComplete = true;
+                    }
                 }
                 return newState;
             });
@@ -919,9 +957,17 @@ export function TeamMatchClient({
                 if (data.teamId === newState.team1.teamId) {
                     newState.team1.currentSlot = data.currentSlot;
                     newState.team1.questionsInSlot = 0; // Reset questions for new slot
+                    // Reset isComplete for all players on this team when slot changes
+                    for (const playerId of Object.keys(newState.team1.players)) {
+                        newState.team1.players[playerId].isComplete = false;
+                    }
                 } else if (data.teamId === newState.team2.teamId) {
                     newState.team2.currentSlot = data.currentSlot;
                     newState.team2.questionsInSlot = 0; // Reset questions for new slot
+                    // Reset isComplete for all players on this team when slot changes
+                    for (const playerId of Object.keys(newState.team2.players)) {
+                        newState.team2.players[playerId].isComplete = false;
+                    }
                 }
                 // Also update match-level for backwards compatibility
                 newState.currentSlot = data.currentSlot;
@@ -973,32 +1019,16 @@ export function TeamMatchClient({
         }) => {
             console.log('[TeamMatch] Handoff countdown:', data);
             
-            // Show RelayHandoff UI if this is for the current user
+            // Show non-blocking "YOUR TURN" notification if this is for the current user
             const isMyTurn = data.nextPlayerId === currentUserId;
             
-            if (isMyTurn && data.previousPlayerId && data.previousPlayerStats) {
-                setRelayHandoff({
-                    isVisible: true,
-                    outgoingPlayer: {
-                        name: data.previousPlayerName || 'Teammate',
-                        operation: SLOT_LABELS[data.slotNumber - 2] || 'Unknown', // Previous slot
-                        questionsAnswered: data.previousPlayerStats.total || 5,
-                        correctAnswers: data.previousPlayerStats.correct || 0,
-                        slotScore: data.previousPlayerStats.score || 0,
-                    },
-                    incomingPlayer: {
-                        name: data.nextPlayerName,
-                        operation: data.operation,
-                        isCurrentUser: true,
-                    },
-                    slotNumber: data.slotNumber - 1,
-                });
-                
-                // Auto-hide after countdown completes
-                setTimeout(() => {
-                    setRelayHandoff(prev => ({ ...prev, isVisible: false }));
-                }, data.countdownMs || 2500);
+            if (isMyTurn) {
+                // Play sound and show brief notification - doesn't block input
+                soundEngine.playYourTurn();
+                setYourTurnStarting(true);
+                setTimeout(() => setYourTurnStarting(false), 1500);
             }
+            // NOTE: Removed blocking RelayHandoff animation
         });
 
         socket.on('round_break', (data) => {
@@ -1010,8 +1040,16 @@ export function TeamMatchClient({
             setPhaseInitialDuration(breakDuration);
             setMatchState(prev => {
                 if (!prev) return prev;
+                const newState = JSON.parse(JSON.stringify(prev));
+                // Clear isActive for all players during break (no one is answering)
+                for (const playerId of Object.keys(newState.team1.players)) {
+                    newState.team1.players[playerId].isActive = false;
+                }
+                for (const playerId of Object.keys(newState.team2.players)) {
+                    newState.team2.players[playerId].isActive = false;
+                }
                 // Update relayClockMs to break duration so phaseInitialDuration captures the correct value
-                return { ...prev, phase: 'break', relayClockMs: breakDuration };
+                return { ...newState, phase: 'break', relayClockMs: breakDuration };
             });
         });
 
@@ -1053,8 +1091,16 @@ export function TeamMatchClient({
             setPhaseInitialDuration(halftimeDuration);
             setMatchState(prev => {
                 if (!prev) return prev;
+                const newState = JSON.parse(JSON.stringify(prev));
+                // Clear isActive for all players during halftime (no one is answering)
+                for (const playerId of Object.keys(newState.team1.players)) {
+                    newState.team1.players[playerId].isActive = false;
+                }
+                for (const playerId of Object.keys(newState.team2.players)) {
+                    newState.team2.players[playerId].isActive = false;
+                }
                 // Update relayClockMs to halftime duration so phaseInitialDuration captures the correct value
-                return { ...prev, phase: 'halftime', relayClockMs: halftimeDuration };
+                return { ...newState, phase: 'halftime', relayClockMs: halftimeDuration };
             });
         });
 
@@ -1197,8 +1243,9 @@ export function TeamMatchClient({
             // Determine win/lose and play appropriate sound
             setMatchState(prev => {
                 if (!prev) return prev;
-                const myTeam = prev.team1.players[currentUserId] ? prev.team1 : prev.team2;
-                const opTeam = prev.team1.players[currentUserId] ? prev.team2 : prev.team1;
+                const newState = JSON.parse(JSON.stringify(prev));
+                const myTeam = newState.team1.players[currentUserId] ? newState.team1 : newState.team2;
+                const opTeam = newState.team1.players[currentUserId] ? newState.team2 : newState.team1;
                 if (myTeam.score > opTeam.score) {
                     soundEngine.playVictory();
                 } else if (myTeam.score < opTeam.score) {
@@ -1207,13 +1254,27 @@ export function TeamMatchClient({
                     // Tie - play a more neutral sound
                     soundEngine.playRoundEnd();
                 }
-                return { ...prev, phase: 'post_match' };
+                // Clear isActive for all players (match is over)
+                for (const playerId of Object.keys(newState.team1.players)) {
+                    newState.team1.players[playerId].isActive = false;
+                }
+                for (const playerId of Object.keys(newState.team2.players)) {
+                    newState.team2.players[playerId].isActive = false;
+                }
+                const finalState = { ...newState, phase: 'post_match' as const };
+                // Save final state to ref so it's preserved even if server cleans up
+                finalMatchStateRef.current = finalState;
+                // Also save to sessionStorage for extra persistence
+                try {
+                    sessionStorage.setItem(`match_results_${matchId}`, JSON.stringify(finalState));
+                    console.log('[TeamMatch] Saved final state to sessionStorage');
+                } catch (e) {
+                    console.error('[TeamMatch] Failed to save to sessionStorage');
+                }
+                return finalState;
             });
 
-            // Navigate to results after delay (5s to ensure PostgreSQL has saved the match)
-            setTimeout(() => {
-                router.push(`/arena/teams/results/${matchId}`);
-            }, 5000);
+            // Results are now shown inline - no redirect needed
         });
 
         // Quit vote handlers
@@ -1245,12 +1306,16 @@ export function TeamMatchClient({
                 if (!prev) return prev;
                 return { ...prev, active: false, result: data.result };
             });
-            
+
             if (data.result === 'quit') {
-                // Team voted to quit - everyone on this team leaves
-                console.log('[TeamMatch] Quit vote passed - redirecting all team members to setup');
+                // Team voted to quit - DO NOT redirect here
+                // The server will send team_forfeit event which sets phase to post_match
+                // Results will be shown inline, user clicks "Back to Arena" to leave
+                console.log('[TeamMatch] Quit vote passed - waiting for team_forfeit event to show results inline');
+                // Clear the vote UI after a moment
                 setTimeout(() => {
-                    router.push('/arena/teams/setup?mode=5v5&fromVote=true');
+                    setQuitVote(null);
+                    setHasVoted(false);
                 }, 2000);
             } else {
                 // Vote failed - clear after showing result
@@ -1264,17 +1329,21 @@ export function TeamMatchClient({
         // Handle team forfeit (sent to ALL players in match, including opponent team)
         socket.on('team_forfeit', (data) => {
             console.log('[TeamMatch] Team forfeit:', data);
-            // Show forfeit notification and redirect after delay
+            // Show forfeit notification - results shown inline, no redirect
             setMatchState(prev => {
                 if (!prev) return prev;
-                return { ...prev, phase: 'post_match', forfeitedBy: data.forfeitingTeamId };
+                const finalState = { ...prev, phase: 'post_match' as const, forfeitedBy: data.forfeitingTeamId };
+                // Save final state to ref and sessionStorage
+                finalMatchStateRef.current = finalState;
+                try {
+                    sessionStorage.setItem(`match_results_${matchId}`, JSON.stringify(finalState));
+                    console.log('[TeamMatch] Saved forfeit state to sessionStorage');
+                } catch (e) {
+                    console.error('[TeamMatch] Failed to save forfeit state to sessionStorage');
+                }
+                return finalState;
             });
-            
-            // Redirect faster for instant leave (solo human with AI)
-            const redirectDelay = data.instantLeave ? 2000 : 5000;
-            setTimeout(() => {
-                router.push('/arena/teams/setup?mode=5v5&fromForfeit=true');
-            }, redirectDelay);
+            // No redirect - results shown inline, user clicks "Back to Arena" when ready
         });
 
         socket.on('disconnect', () => {
@@ -1370,40 +1439,18 @@ export function TeamMatchClient({
             // Check if the current user is the incoming player (their slot matches the new current slot)
             const isIncomingCurrentUser = incomingPlayerData?.odUserId === currentUserId;
 
-            if (outgoingPlayerData || incomingPlayerData) {
-                // Play relay handoff sound
+            // If current user is the incoming player, show brief "YOUR TURN!" notification
+            // This is non-blocking - the QuestionAnswerCard shows immediately
+            if (isIncomingCurrentUser) {
+                soundEngine.playYourTurn();
+                setYourTurnStarting(true);
+                // Short notification duration - doesn't block input
+                setTimeout(() => setYourTurnStarting(false), 1500);
+            } else if (outgoingPlayerData || incomingPlayerData) {
+                // Play sound for relay transitions (even when not your turn)
                 soundEngine.playRelayHandoff();
-
-                // If current user is the incoming player, show "YOUR TURN!" indicator
-                // This takes priority and prevents race condition with QuestionAnswerCard
-                if (isIncomingCurrentUser) {
-                    soundEngine.playYourTurn();
-                    setYourTurnStarting(true);
-                    setTimeout(() => setYourTurnStarting(false), 2000);
-                }
-
-                setRelayHandoff({
-                    isVisible: true,
-                    outgoingPlayer: {
-                        name: outgoingPlayerData?.odName || 'Teammate',
-                        operation: outgoingSlotLabel,
-                        questionsAnswered: outgoingPlayerData?.total || 5,
-                        correctAnswers: outgoingPlayerData?.correct || 0,
-                        slotScore: outgoingPlayerData?.score || 0,
-                    },
-                    incomingPlayer: {
-                        name: incomingPlayerData?.odName || 'Teammate',
-                        operation: incomingSlotLabel,
-                        isCurrentUser: isIncomingCurrentUser,
-                    },
-                    slotNumber: previousSlotRef.current,
-                });
-
-                // Auto-hide after animation completes (2.5s - quick READY-SET-GO)
-                setTimeout(() => {
-                    setRelayHandoff(prev => ({ ...prev, isVisible: false }));
-                }, 2500);
             }
+            // NOTE: Removed RelayHandoff animation - input is now immediately available
         }
         
         previousSlotRef.current = currentSlot;
@@ -1479,23 +1526,41 @@ export function TeamMatchClient({
         }
     }, [isMyTurn]);
 
-    // Loading state
-    if (!connected || !matchState) {
+    // Use the effective match state - prefer stored final state if we're in post_match
+    // This ensures results screen stays visible even after server cleanup
+    const effectiveMatchState = matchState || finalMatchStateRef.current;
+
+    // Debug logging for post-match state preservation
+    if (typeof window !== 'undefined' && (matchState?.phase === 'post_match' || finalMatchStateRef.current?.phase === 'post_match')) {
+        console.log('[TeamMatch] Post-match state check:', {
+            connected,
+            hasMatchState: !!matchState,
+            matchPhase: matchState?.phase,
+            hasFinalRef: !!finalMatchStateRef.current,
+            finalRefPhase: finalMatchStateRef.current?.phase,
+            hasEffective: !!effectiveMatchState,
+        });
+    }
+
+    // Loading state - but not if we have final results stored
+    if ((!connected || !effectiveMatchState) && !finalMatchStateRef.current) {
+        console.log('[TeamMatch] Showing loading screen - no final state stored');
+        console.log('[TeamMatch] State:', { connected, effectiveMatchState: !!effectiveMatchState, finalRef: !!finalMatchStateRef.current });
         return (
             <div className="h-screen overflow-hidden no-scrollbar bg-slate-900 flex items-center justify-center">
                 <div className="text-center">
                     <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                        className="w-16 h-16 mx-auto mb-4 border-4 border-primary/30 
+                        className="w-16 h-16 mx-auto mb-4 border-4 border-primary/30
                                    border-t-primary rounded-full"
                     />
                     <p className="text-white/60 mb-6">Connecting to match...</p>
-                    
+
                     {/* Cancel / Back button for when stuck connecting */}
                     <button
                         onClick={() => router.push('/arena/teams/setup?mode=5v5&fromQueue=true')}
-                        className="px-6 py-2 rounded-lg bg-white/5 hover:bg-white/10 
+                        className="px-6 py-2 rounded-lg bg-white/5 hover:bg-white/10
                                    border border-white/10 text-white/60 hover:text-white/80
                                    font-medium transition-colors flex items-center gap-2 mx-auto"
                     >
@@ -1506,9 +1571,22 @@ export function TeamMatchClient({
             </div>
         );
     }
-    
+
+    // If we have final state but no current state (server cleaned up), use final state
+    const displayMatchState = effectiveMatchState!;
+
+    // Derive team states from displayMatchState for consistent rendering
+    const renderedMyTeam = displayMatchState.team1.players[currentUserId]
+        ? displayMatchState.team1
+        : displayMatchState.team2.players[currentUserId]
+            ? displayMatchState.team2
+            : null;
+    const renderedOpponentTeam = renderedMyTeam === displayMatchState.team1
+        ? displayMatchState.team2
+        : displayMatchState.team1;
+
     // Pre-match waiting state
-    if (matchState.phase === 'pre_match') {
+    if (displayMatchState.phase === 'pre_match') {
         // Count connected players
         const team1Connected = Object.values(matchState.team1.players).filter(p => p.odUserId).length;
         const team2Connected = Object.values(matchState.team2.players).filter(p => p.odUserId).length;
@@ -2223,39 +2301,31 @@ export function TeamMatchClient({
                     <div className="grid grid-cols-12 gap-6">
                         {/* Teammate/My Turn View */}
                         <div className="col-span-8">
-                            {/* "Your Turn Starting" indicator for slot 1 players */}
-                            {yourTurnStarting ? (
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 1.1 }}
-                                    className="bg-gradient-to-b from-violet-950/80 to-slate-900/90
-                                               rounded-2xl border-2 border-emerald-500/50 p-8 text-center"
-                                >
-                                    <motion.div
-                                        animate={{ scale: [1, 1.1, 1] }}
-                                        transition={{ duration: 0.5, repeat: Infinity }}
-                                        className="text-5xl font-black text-emerald-400 mb-4"
-                                    >
-                                        YOUR TURN!
-                                    </motion.div>
-                                    <p className="text-white/60">Get ready to answer...</p>
-                                </motion.div>
-                            ) : relayHandoff.isVisible &&
-                             relayHandoff.outgoingPlayer &&
-                             relayHandoff.incomingPlayer &&
-                             relayHandoff.incomingPlayer.isCurrentUser ? (
-                                /* Relay Handoff Animation - Only shown to the incoming player */
-                                <RelayHandoff
-                                    isVisible={true}
-                                    outgoingPlayer={relayHandoff.outgoingPlayer}
-                                    incomingPlayer={relayHandoff.incomingPlayer}
-                                    slotNumber={relayHandoff.slotNumber}
-                                    onComplete={() => setRelayHandoff(prev => ({ ...prev, isVisible: false }))}
-                                />
-                            ) : isMyTurn && myPlayerQuestion ? (
-                                /* Active Player Input - Enhanced Question Card */
+                            {/* Active Player Input - Show immediately when it's user's turn */}
+                            {isMyTurn && myPlayerQuestion ? (
                                 <div className="relative">
+                                    {/* Non-blocking "YOUR TURN" notification overlay */}
+                                    <AnimatePresence>
+                                        {yourTurnStarting && (
+                                            <motion.div
+                                                initial={{ opacity: 0, y: -20, scale: 0.9 }}
+                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                exit={{ opacity: 0, y: -20, scale: 0.9 }}
+                                                className="absolute -top-16 left-1/2 -translate-x-1/2 z-30
+                                                           px-6 py-3 rounded-full
+                                                           bg-emerald-500/90 border-2 border-emerald-400
+                                                           shadow-lg shadow-emerald-500/30"
+                                            >
+                                                <motion.span
+                                                    animate={{ scale: [1, 1.05, 1] }}
+                                                    transition={{ duration: 0.4, repeat: 3 }}
+                                                    className="text-xl font-black text-white tracking-wider"
+                                                >
+                                                    🎯 YOUR TURN!
+                                                </motion.span>
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
                                     <QuestionAnswerCard
                                         question={myPlayerQuestion.question}
                                         operation={myPlayerQuestion.operation || 'mixed'}
@@ -2318,6 +2388,30 @@ export function TeamMatchClient({
                                         )}
                                     </AnimatePresence>
                                 </div>
+                            ) : myPlayer?.isComplete ? (
+                                /* Player completed their slot - waiting for next teammate */
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="bg-gradient-to-b from-emerald-900/30 to-slate-900/90 
+                                               rounded-2xl border-2 border-emerald-500/30 p-8 text-center"
+                                >
+                                    <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: "spring", bounce: 0.5 }}
+                                        className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/20 
+                                                   flex items-center justify-center"
+                                    >
+                                        <Check className="w-8 h-8 text-emerald-400" />
+                                    </motion.div>
+                                    <h3 className="text-2xl font-black text-emerald-400 mb-2">SLOT COMPLETE!</h3>
+                                    <p className="text-white/60">Great job! Waiting for next teammate...</p>
+                                    <div className="mt-4 flex items-center justify-center gap-2 text-sm text-white/40">
+                                        <span>Your score this slot:</span>
+                                        <span className="font-bold text-primary">+{myPlayer.score}</span>
+                                    </div>
+                                </motion.div>
                             ) : activeTeammateId && myTeam?.players[activeTeammateId] ? (
                                 /* Teammate Spectator View */
                                 <TeammateSpectatorView
@@ -2948,47 +3042,372 @@ export function TeamMatchClient({
                                 />
                 )}
 
-                {/* Post Match */}
-                {matchState.phase === 'post_match' && (
-                    <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="max-w-2xl mx-auto text-center py-12"
-                    >
-                        <Trophy className="w-20 h-20 text-amber-400 mx-auto mb-4" />
-                        <h2 className="text-4xl font-black mb-4">MATCH COMPLETE</h2>
-                        <p className="text-white/60 mb-8">
-                            Calculating results...
-                        </p>
-                        
-                        <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-                            <div className={cn(
-                                "p-6 rounded-xl border",
-                                (myTeam?.score || 0) > (opponentTeam?.score || 0)
-                                    ? "bg-emerald-500/10 border-emerald-500/30"
-                                    : "bg-white/5 border-white/10"
-                            )}>
-                                <p className="text-sm text-white/70 mb-2">{myTeam?.teamName}</p>
-                                <p className="text-4xl font-black">{myTeam?.score}</p>
-                                {(myTeam?.score || 0) > (opponentTeam?.score || 0) && (
-                                    <span className="text-emerald-400 text-sm font-bold">WINNER</span>
+                {/* Post Match - Full Results View */}
+                {displayMatchState.phase === 'post_match' && (() => {
+                    // Determine winner/loser - use displayMatchState to preserve results after server cleanup
+                    const team1Score = displayMatchState.team1.score;
+                    const team2Score = displayMatchState.team2.score;
+                    const team1Won = team1Score > team2Score;
+                    const isDraw = team1Score === team2Score;
+
+                    const winningTeam = team1Won ? displayMatchState.team1 : displayMatchState.team2;
+                    const losingTeam = team1Won ? displayMatchState.team2 : displayMatchState.team1;
+                    const userWon = myTeam && winningTeam.teamId === myTeam.teamId;
+
+                    // Sort players by score
+                    const sortPlayersByScore = (team: TeamState) =>
+                        Object.values(team.players).sort((a, b) => b.score - a.score);
+
+                    const winnerPlayers = sortPlayersByScore(winningTeam);
+                    const loserPlayers = sortPlayersByScore(losingTeam);
+
+                    // Calculate awards
+                    const getTeamAwards = (players: PlayerState[]) => {
+                        if (!players.length) return { mvp: null, fastest: null, bestStreak: null };
+                        const mvp = players[0]; // Already sorted by score
+                        const fastest = players.reduce((best, p) => {
+                            const avgTime = p.total > 0 ? p.totalAnswerTimeMs / p.total : Infinity;
+                            const bestAvg = best.total > 0 ? best.totalAnswerTimeMs / best.total : Infinity;
+                            return avgTime < bestAvg ? p : best;
+                        }, players[0]);
+                        const bestStreak = players.reduce((best, p) =>
+                            p.maxStreak > best.maxStreak ? p : best, players[0]);
+                        return { mvp, fastest, bestStreak };
+                    };
+
+                    const winnerAwards = getTeamAwards(winnerPlayers);
+                    const loserAwards = getTeamAwards(loserPlayers);
+
+                    // Banner card component
+                    const ResultPlayerCard = ({ player, isWinner, index }: { player: PlayerState; isWinner: boolean; index: number }) => {
+                        const bannerGradient = isWinner
+                            ? 'from-fuchsia-600/80 via-purple-600/60 to-slate-900'
+                            : 'from-rose-600/80 via-red-600/60 to-slate-900';
+                        const borderColor = isWinner ? 'border-emerald-500' : 'border-rose-500';
+                        const isCurrentUser = player.odUserId === currentUserId;
+                        const avgTime = player.total > 0 ? (player.totalAnswerTimeMs / player.total / 1000).toFixed(1) : 'N/A';
+
+                        return (
+                            <motion.div
+                                initial={{ y: 30, opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                transition={{ delay: index * 0.1 }}
+                                className={cn(
+                                    "relative flex flex-col rounded-xl overflow-hidden",
+                                    "bg-slate-900/90 border-2",
+                                    isCurrentUser ? "border-primary ring-2 ring-primary/30" : borderColor + "/40"
                                 )}
+                            >
+                                {/* Banner with equipped banner cosmetic */}
+                                <div
+                                    className={cn("h-16 bg-gradient-to-b relative", bannerGradient)}
+                                    style={player.odEquippedBanner && BANNER_STYLES[player.odEquippedBanner] ? {
+                                        background: BANNER_STYLES[player.odEquippedBanner].gradient
+                                    } : {}}
+                                >
+                                    {/* Role badges */}
+                                    <div className="absolute top-2 right-2 flex gap-1">
+                                        {player.isIgl && (
+                                            <div className="w-5 h-5 rounded bg-amber-500/30 backdrop-blur-sm flex items-center justify-center">
+                                                <Crown className="w-3 h-3 text-amber-400" />
+                                            </div>
+                                        )}
+                                        {player.isAnchor && (
+                                            <div className="w-5 h-5 rounded bg-purple-500/30 backdrop-blur-sm flex items-center justify-center">
+                                                <Anchor className="w-3 h-3 text-purple-400" />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Avatar with frame */}
+                                <div className="flex flex-col items-center -mt-8 px-3 pb-3">
+                                    <div className="relative mb-2">
+                                        <div className={cn(
+                                            "w-14 h-14 rounded-full flex items-center justify-center text-xl font-black",
+                                            "bg-slate-800 border-3",
+                                            player.odEquippedFrame ? `ring-2 ring-offset-2 ring-offset-slate-900` : "",
+                                            isWinner ? "border-emerald-500" : "border-rose-500"
+                                        )}>
+                                            {player.odName?.charAt(0)?.toUpperCase() || '?'}
+                                        </div>
+                                        {/* Score badge */}
+                                        <div className={cn(
+                                            "absolute -bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-xs font-bold",
+                                            "bg-slate-900 border",
+                                            isWinner ? "border-emerald-500/50 text-emerald-400" : "border-rose-500/50 text-rose-400"
+                                        )}>
+                                            {player.score}
+                                        </div>
+                                    </div>
+
+                                    {/* Player name */}
+                                    <p className="font-bold text-white text-sm text-center truncate w-full mt-1">
+                                        {player.odName}
+                                    </p>
+
+                                    {/* Title if equipped */}
+                                    {player.odEquippedTitle && (
+                                        <p className="text-[10px] text-primary/80 truncate w-full text-center">
+                                            {player.odEquippedTitle}
+                                        </p>
+                                    )}
+
+                                    {/* Slot/Role badge */}
+                                    <div className={cn(
+                                        "text-[10px] font-semibold px-2 py-0.5 rounded mt-1",
+                                        isWinner ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                                    )}>
+                                        {player.slot || (player.isAnchor ? 'Anchor' : player.isIgl ? 'IGL' : 'Player')}
+                                    </div>
+
+                                    {/* Stats button */}
+                                    <button
+                                        onClick={() => setSelectedPlayerStats(player)}
+                                        className="w-full mt-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10
+                                                   text-xs font-semibold text-white/70 hover:text-white transition-all uppercase tracking-wider"
+                                    >
+                                        Stats
+                                    </button>
+                                </div>
+                            </motion.div>
+                        );
+                    };
+
+                    // Award card component
+                    const AwardCard = ({ icon: Icon, title, player, value, color }: {
+                        icon: any; title: string; player: PlayerState; value: string;
+                        color: 'amber' | 'cyan' | 'orange'
+                    }) => {
+                        const colorClasses = {
+                            amber: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+                            cyan: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
+                            orange: 'bg-orange-500/10 border-orange-500/30 text-orange-400',
+                        };
+                        return (
+                            <motion.div
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className={cn("flex items-center gap-3 p-3 rounded-xl border", colorClasses[color])}
+                            >
+                                <div className={cn(
+                                    "w-10 h-10 rounded-lg flex items-center justify-center",
+                                    color === 'amber' && "bg-amber-500/20",
+                                    color === 'cyan' && "bg-cyan-500/20",
+                                    color === 'orange' && "bg-orange-500/20"
+                                )}>
+                                    <Icon className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs opacity-70">{title}</p>
+                                    <p className="font-bold text-white truncate">{player.odName}</p>
+                                </div>
+                                <p className="font-black text-lg">{value}</p>
+                            </motion.div>
+                        );
+                    };
+
+                    const currentTeamData = resultsPage === 0 ? winningTeam : losingTeam;
+                    const currentPlayers = resultsPage === 0 ? winnerPlayers : loserPlayers;
+                    const currentAwards = resultsPage === 0 ? winnerAwards : loserAwards;
+                    const isCurrentPageWinner = resultsPage === 0;
+
+                    return (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="w-full max-w-5xl mx-auto"
+                        >
+                            {/* Header */}
+                            <div className="text-center mb-6">
+                                <h1 className="text-3xl font-black text-white mb-2">Match Results</h1>
+                                <div className={cn(
+                                    "inline-flex items-center gap-2 px-4 py-2 rounded-full",
+                                    userWon ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                                )}>
+                                    {userWon ? <Trophy className="w-5 h-5" /> : <Target className="w-5 h-5" />}
+                                    <span className="font-bold">{isDraw ? 'DRAW' : userWon ? 'VICTORY' : 'DEFEAT'}</span>
+                                </div>
                             </div>
-                            <div className={cn(
-                                "p-6 rounded-xl border",
-                                (opponentTeam?.score || 0) > (myTeam?.score || 0)
-                                    ? "bg-emerald-500/10 border-emerald-500/30"
-                                    : "bg-white/5 border-white/10"
-                            )}>
-                                <p className="text-sm text-white/70 mb-2">{opponentTeam?.teamName}</p>
-                                <p className="text-4xl font-black">{opponentTeam?.score}</p>
-                                {(opponentTeam?.score || 0) > (myTeam?.score || 0) && (
-                                    <span className="text-emerald-400 text-sm font-bold">WINNER</span>
-                                )}
+
+                            {/* Navigation arrows */}
+                            {!isDraw && (
+                                <>
+                                    <button
+                                        onClick={() => setResultsPage(0)}
+                                        disabled={resultsPage === 0}
+                                        className={cn(
+                                            "fixed left-4 top-1/2 -translate-y-1/2 z-40 p-3 rounded-full",
+                                            "bg-black/40 border border-white/10 transition-all",
+                                            resultsPage === 0 ? "opacity-30 cursor-not-allowed" : "hover:bg-white/10 hover:border-white/30"
+                                        )}
+                                    >
+                                        <ChevronLeft className="w-6 h-6" />
+                                    </button>
+                                    <button
+                                        onClick={() => setResultsPage(1)}
+                                        disabled={resultsPage === 1}
+                                        className={cn(
+                                            "fixed right-4 top-1/2 -translate-y-1/2 z-40 p-3 rounded-full",
+                                            "bg-black/40 border border-white/10 transition-all",
+                                            resultsPage === 1 ? "opacity-30 cursor-not-allowed" : "hover:bg-white/10 hover:border-white/30"
+                                        )}
+                                    >
+                                        <ChevronRight className="w-6 h-6" />
+                                    </button>
+                                </>
+                            )}
+
+                            {/* Results content */}
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={`results-page-${resultsPage}`}
+                                    initial={{ x: resultsPage === 0 ? -100 : 100, opacity: 0 }}
+                                    animate={{ x: 0, opacity: 1 }}
+                                    exit={{ x: resultsPage === 0 ? 100 : -100, opacity: 0 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="w-full"
+                                >
+                                    <div className={cn(
+                                        "relative rounded-2xl overflow-hidden border-2",
+                                        isCurrentPageWinner
+                                            ? "border-emerald-500/30 bg-gradient-to-b from-fuchsia-900/20 via-slate-900/90 to-slate-900"
+                                            : "border-rose-500/30 bg-gradient-to-b from-rose-900/20 via-slate-900/90 to-slate-900"
+                                    )}>
+                                        {/* Team header */}
+                                        <div className={cn(
+                                            "relative p-4 border-b flex items-center justify-between",
+                                            isCurrentPageWinner
+                                                ? "border-emerald-500/20 bg-gradient-to-r from-fuchsia-600/20 via-purple-600/20 to-fuchsia-600/20"
+                                                : "border-rose-500/20 bg-gradient-to-r from-rose-600/20 via-red-600/20 to-rose-600/20"
+                                        )}>
+                                            <div className="flex items-center gap-3">
+                                                {isCurrentPageWinner ? (
+                                                    <Trophy className="w-6 h-6 text-amber-400" />
+                                                ) : (
+                                                    <Target className="w-6 h-6 text-rose-400" />
+                                                )}
+                                                <div>
+                                                    <p className={cn(
+                                                        "text-xs uppercase tracking-wider",
+                                                        isCurrentPageWinner ? "text-emerald-400/70" : "text-rose-400/70"
+                                                    )}>
+                                                        {isCurrentPageWinner ? 'Winner' : 'Defeated'}
+                                                    </p>
+                                                    <p className="font-bold text-lg">
+                                                        {currentTeamData.teamTag ? `[${currentTeamData.teamTag}] ` : ''}{currentTeamData.teamName}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className={cn(
+                                                    "text-3xl font-black",
+                                                    isCurrentPageWinner ? "text-emerald-400" : "text-rose-400"
+                                                )}>
+                                                    {currentTeamData.score}
+                                                </p>
+                                                <p className="text-xs text-white/50">points</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Player cards */}
+                                        <div className="relative p-6">
+                                            <div className="grid grid-cols-5 gap-3">
+                                                {currentPlayers.map((player, idx) => (
+                                                    <ResultPlayerCard
+                                                        key={player.odUserId}
+                                                        player={player}
+                                                        isWinner={isCurrentPageWinner}
+                                                        index={idx}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Awards */}
+                                        <div className="relative px-6 pb-6">
+                                            <p className="text-sm text-white/50 mb-3 text-center">Team Awards</p>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                {currentAwards.mvp && (
+                                                    <AwardCard
+                                                        icon={Star}
+                                                        title="MVP"
+                                                        player={currentAwards.mvp}
+                                                        value={`${currentAwards.mvp.score} pts`}
+                                                        color="amber"
+                                                    />
+                                                )}
+                                                {currentAwards.fastest && currentAwards.fastest.total > 0 && (
+                                                    <AwardCard
+                                                        icon={Clock}
+                                                        title="Fastest"
+                                                        player={currentAwards.fastest}
+                                                        value={`${(currentAwards.fastest.totalAnswerTimeMs / currentAwards.fastest.total / 1000).toFixed(1)}s`}
+                                                        color="cyan"
+                                                    />
+                                                )}
+                                                {currentAwards.bestStreak && currentAwards.bestStreak.maxStreak > 0 && (
+                                                    <AwardCard
+                                                        icon={Zap}
+                                                        title="Best Streak"
+                                                        player={currentAwards.bestStreak}
+                                                        value={`${currentAwards.bestStreak.maxStreak}x`}
+                                                        color="orange"
+                                                    />
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            </AnimatePresence>
+
+                            {/* Page indicator */}
+                            {!isDraw && (
+                                <div className="flex items-center justify-center gap-2 mt-6">
+                                    {[0, 1].map(i => (
+                                        <button
+                                            key={i}
+                                            onClick={() => setResultsPage(i)}
+                                            className={cn(
+                                                "w-2.5 h-2.5 rounded-full transition-all",
+                                                resultsPage === i ? "bg-primary w-8" : "bg-white/30 hover:bg-white/50"
+                                            )}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Actions */}
+                            <div className="flex flex-col items-center gap-3 mt-8">
+                                <button
+                                    onClick={() => {
+                                        // Clear stored match state before navigating
+                                        sessionStorage.removeItem(`match_results_${matchId}`);
+                                        finalMatchStateRef.current = null;
+                                        router.push('/arena/modes');
+                                    }}
+                                    className="w-full max-w-xs py-4 rounded-xl bg-primary hover:bg-primary/80
+                                               text-black font-bold text-center transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <Home className="w-5 h-5" />
+                                    Back to Arena
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        // Clear stored match state before navigating
+                                        sessionStorage.removeItem(`match_results_${matchId}`);
+                                        finalMatchStateRef.current = null;
+                                        router.push('/arena/teams/setup?mode=5v5');
+                                    }}
+                                    className="w-full max-w-xs py-3 rounded-xl bg-white/10 hover:bg-white/20
+                                               text-white font-semibold text-center transition-colors"
+                                >
+                                    Play Again
+                                </button>
                             </div>
-                        </div>
-                    </motion.div>
-                )}
+                        </motion.div>
+                    );
+                })()}
 
             </div>
             
@@ -3290,7 +3709,105 @@ export function TeamMatchClient({
                     }
                 }}
             />
-            
+
+            {/* Player Stats Modal for Post-Match Results */}
+            <AnimatePresence>
+                {selectedPlayerStats && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+                        onClick={() => setSelectedPlayerStats(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="bg-slate-900 border border-white/20 rounded-2xl p-6 max-w-md w-full mx-4"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            {/* Header */}
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div
+                                        className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-600
+                                                   flex items-center justify-center text-xl font-black text-white"
+                                        style={selectedPlayerStats.odEquippedBanner && BANNER_STYLES[selectedPlayerStats.odEquippedBanner] ? {
+                                            background: BANNER_STYLES[selectedPlayerStats.odEquippedBanner].gradient
+                                        } : {}}
+                                    >
+                                        {selectedPlayerStats.odName?.charAt(0) || '?'}
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-lg">{selectedPlayerStats.odName}</h3>
+                                        <p className="text-sm text-white/50">
+                                            {selectedPlayerStats.slot || (selectedPlayerStats.isAnchor ? 'Anchor' : selectedPlayerStats.isIgl ? 'IGL' : 'Player')}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setSelectedPlayerStats(null)}
+                                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Stats grid */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                    <p className="text-3xl font-black text-primary">
+                                        {selectedPlayerStats.score}
+                                    </p>
+                                    <p className="text-xs text-white/50">Points Scored</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                    <p className="text-3xl font-black text-emerald-400">
+                                        {selectedPlayerStats.total > 0
+                                            ? Math.round((selectedPlayerStats.correct / selectedPlayerStats.total) * 100)
+                                            : 0}%
+                                    </p>
+                                    <p className="text-xs text-white/50">Accuracy</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                    <p className="text-3xl font-black text-cyan-400">
+                                        {selectedPlayerStats.total > 0
+                                            ? (selectedPlayerStats.totalAnswerTimeMs / selectedPlayerStats.total / 1000).toFixed(2)
+                                            : 'N/A'}s
+                                    </p>
+                                    <p className="text-xs text-white/50">Avg Answer Time</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                    <p className="text-3xl font-black text-orange-400">
+                                        {selectedPlayerStats.maxStreak}
+                                    </p>
+                                    <p className="text-xs text-white/50">Best Streak</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                    <p className="text-3xl font-black text-white">
+                                        {selectedPlayerStats.correct}/{selectedPlayerStats.total}
+                                    </p>
+                                    <p className="text-xs text-white/50">Questions</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                        {selectedPlayerStats.isIgl && <Crown className="w-5 h-5 text-amber-400" />}
+                                        {selectedPlayerStats.isAnchor && <Anchor className="w-5 h-5 text-purple-400" />}
+                                        {!selectedPlayerStats.isIgl && !selectedPlayerStats.isAnchor && (
+                                            <Target className="w-5 h-5 text-white/50" />
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-white/50 mt-1">
+                                        {selectedPlayerStats.isIgl ? 'IGL' : selectedPlayerStats.isAnchor ? 'Anchor' : 'Player'}
+                                    </p>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Demo Mode Control Panel */}
             {isDemoMode && (
                 <div className="fixed top-4 left-4 right-4 z-50">

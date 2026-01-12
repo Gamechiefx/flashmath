@@ -11,17 +11,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { 
-    Users, Crown, Anchor, Check, ChevronRight, 
+import {
+    Users, Crown, Anchor, Check, ChevronRight,
     ArrowLeft, Loader2, AlertCircle, UserPlus, Search, Sparkles,
-    Zap, Shield
+    Zap, Shield, Maximize, Minimize, X
 } from 'lucide-react';
 import { 
     Party, PartyMember, PartyInvite,
     createParty, setPartyIGL, setPartyAnchor, 
     togglePartyReady, setPartyTargetMode, linkPartyToTeam,
-    getPartyData, updatePartyQueueStatus
+    getPartyData
 } from '@/lib/actions/social';
+import { updateQueueState } from '@/lib/party/party-redis';
 import { TeamWithElo } from '@/lib/actions/teams';
 import { createAITeamMatch, BotDifficulty } from '@/lib/actions/team-matchmaking';
 import { UserAvatar } from '@/components/user-avatar';
@@ -67,6 +68,43 @@ export function TeamSetupClient({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [step, setStep] = useState<'party' | 'roles' | 'ready'>('party');
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    
+    // Track if we should suppress the queue banner (when user just canceled)
+    // This starts as true if fromQueue is true, preventing the banner from flashing
+    const [suppressQueueBanner, setSuppressQueueBanner] = useState(fromQueue);
+
+    // Track fullscreen state changes
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        setIsFullscreen(!!document.fullscreenElement);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+        };
+    }, []);
+
+    // Toggle fullscreen
+    const toggleFullscreen = async () => {
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            } else {
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    await elem.requestFullscreen();
+                } else if ((elem as any).webkitRequestFullscreen) {
+                    await (elem as any).webkitRequestFullscreen();
+                }
+            }
+        } catch (err) {
+            console.log('[TeamSetup] Fullscreen toggle failed:', err);
+        }
+    };
     
     // #region agent log - H3: Track render count
     setupRenderCount++;
@@ -155,13 +193,44 @@ export function TeamSetupClient({
             // CRITICAL: After 5 seconds, unblock to allow following leader to NEW queues
             const unblockTimeout = setTimeout(() => {
                 blockAutoRedirect.current = false;
+                setSuppressQueueBanner(false); // Also lift the banner suppression
                 console.log('[TeamSetup] ⚠️ fromQueue block LIFTED after 5s grace period - can now follow new queues');
                 // #region agent log
                 fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:UNBLOCK_AFTER_GRACE',message:'Unblocked after 5s grace period',data:{fromQueue},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
                 // #endregion
             }, 5000);
-            
+
             return () => clearTimeout(unblockTimeout);
+        }
+        
+        // FIX: If fromQueue=true but queueStatus is NOT null, we have a STALE queue status
+        // This happens when returning from match page - the queue status was never cleared
+        // Clear it now to prevent the banner from showing
+        if (fromQueue && !initialQueueStatusWasNull.current && initialParty?.id) {
+            console.log('[TeamSetup] 🧹 STALE QUEUE STATUS DETECTED: fromQueue=true but queueStatus is not null');
+            console.log('[TeamSetup] Clearing stale queue status...');
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:STALE_QUEUE_CLEAR',message:'Clearing stale queue status on mount',data:{fromQueue,initialQueueStatus:initialParty?.queueStatus,partyId:initialParty?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FIX'})}).catch(()=>{});
+            // #endregion
+            
+            // Clear the stale queue status on the server
+            (async () => {
+                try {
+                    const { updatePartyQueueStatus } = await import('@/lib/actions/social');
+                    await updatePartyQueueStatus(initialParty.id, null);
+                    console.log('[TeamSetup] ✅ Stale queue status cleared');
+                    // Update local state to reflect the cleared status
+                    setParty(prev => prev ? { ...prev, queueStatus: null } : null);
+                    setSuppressQueueBanner(true); // Ensure banner stays hidden
+                } catch (err) {
+                    console.error('[TeamSetup] Failed to clear stale queue status:', err);
+                }
+            })();
+            
+            // Block auto-redirect and suppress banner since we're clearing stale state
+            blockAutoRedirect.current = true;
+            // Keep banner suppressed until we confirm the clear
+            return;
         }
         
         // Check sessionStorage for recent "just left queue" marker
@@ -190,6 +259,7 @@ export function TeamSetupClient({
         console.log('[TeamSetup] No blocking condition found, will unblock after 5s grace period');
         const timeout = setTimeout(() => {
             blockAutoRedirect.current = false;
+            setSuppressQueueBanner(false); // Also lift the banner suppression
             console.log('[TeamSetup] ⚠️ Auto-redirect block LIFTED after grace period');
         }, 5000);
         
@@ -211,18 +281,22 @@ export function TeamSetupClient({
         const interval = setInterval(async () => {
             pollCount++;
             const result = await getPartyData();
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:POLL_RESULT',message:'Party poll result',data:{pollCount,currentQueueStatus:party?.queueStatus,polledQueueStatus:result.party?.queueStatus,partyId:result.party?.id,blockAutoRedirect:blockAutoRedirect.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+            const prevStatus = party?.queueStatus;
+            const newStatus = result.party?.queueStatus;
+            const statusChanged = prevStatus !== newStatus;
+            
+            // #region agent log - Key: Track every poll result with change detection
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:POLL_RESULT',message:statusChanged ? '🔴 STATUS CHANGED' : 'Poll result',data:{pollCount,prevQueueStatus:prevStatus,newQueueStatus:newStatus,statusChanged,partyId:result.party?.id,blockAutoRedirect:blockAutoRedirect.current,suppressQueueBanner,fromQueue},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
             // #endregion
             if (result.party) {
-                if (result.party.queueStatus !== party?.queueStatus) {
-                    console.log(`[TeamSetup] Poll #${pollCount}: queueStatus changed from "${party?.queueStatus}" to "${result.party.queueStatus}"`);
+                if (statusChanged) {
+                    console.log(`[TeamSetup] 🔴 Poll #${pollCount}: queueStatus CHANGED from "${prevStatus}" to "${newStatus}"`);
                 }
                 setParty(result.party);
             }
         }, 2000); // Poll every 2 seconds
         return () => clearInterval(interval);
-    }, [party?.queueStatus]);
+    }, [party?.queueStatus, suppressQueueBanner, fromQueue]);
 
     // Auto-redirect when queue status is detected (but only after checks pass)
     useEffect(() => {
@@ -435,40 +509,106 @@ export function TeamSetupClient({
     };
 
     const handleStartQueue = async () => {
-        if (!party || !allReady || !hasIgl || !hasAnchor) return;
+        if (!party || !allReady || !hasIgl || !hasAnchor) {
+            console.log('[TeamSetup] handleStartQueue early return - conditions not met:', {
+                hasParty: !!party,
+                allReady,
+                hasIgl,
+                hasAnchor
+            });
+            return;
+        }
         console.log('[TeamSetup] === handleStartQueue CALLED ===');
-        console.log('[TeamSetup] partyId:', party.id, 'members:', party.members.length);
+        console.log('[TeamSetup] partyId:', party.id, 'members:', party.members.length, 'matchType:', matchType);
         
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:START_QUEUE',message:'Leader starting queue - finding opponents',data:{partyId:party.id,memberCount:party.members.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
+        setLoading(true);
+        
+        // #region agent log - HD: Track when handleStartQueue sets queue status
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:handleStartQueue',message:'handleStartQueue - SETTING QUEUE STATUS TO finding_opponents',data:{partyId:party.id,memberCount:party.members.length,matchType,callerFunc:'handleStartQueue'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
         
+        // FIX: Clear the fromQueue URL parameter to reset navigation state
+        // This prevents stale fromQueue=true from affecting future navigations
+        if (typeof window !== 'undefined' && window.location.search.includes('fromQueue=true')) {
+            const newUrl = window.location.pathname + '?mode=5v5';
+            window.history.replaceState({}, '', newUrl);
+            console.log('[TeamSetup] Cleared fromQueue parameter for new queue');
+        }
+        // Also clear sessionStorage marker since we're starting a new queue
+        sessionStorage.removeItem('flashmath_just_left_queue');
+        
         // Update queue status before navigating
-        const result = await updatePartyQueueStatus(party.id, 'finding_opponents');
-        console.log('[TeamSetup] updatePartyQueueStatus result:', result.success);
+        const result = await updateQueueState(party.id, currentUserId, 'finding_opponents', matchType);
+        console.log('[TeamSetup] updateQueueState result:', result.success);
         
         // Notify all party members via socket for real-time sync
-        if (result.success && result.partyMemberIds) {
-            console.log('[TeamSetup] Notifying party members via socket:', result.partyMemberIds);
+        if (result.success) {
+            console.log('[TeamSetup] Notifying party members via socket');
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_NOTIFY_START',message:'Sending socket notification for queue start',data:{partyId:party.id,memberIds:result.partyMemberIds,status:'finding_opponents'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_NOTIFY_START',message:'Sending socket notification for queue start',data:{partyId:party.id,status:'finding_opponents',matchType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
             // #endregion
-            notifyQueueStatusChange(result.partyMemberIds, 'finding_opponents', party.id);
+            const memberIds = party.members.map(m => m.odUserId);
+            notifyQueueStatusChange(memberIds, 'finding_opponents', party.id);
+        } else {
+            // Queue failed to start - don't navigate, show error
+            console.error('[TeamSetup] updateQueueState failed:', result.error);
+            return;
         }
-        
+
         console.log('[TeamSetup] Navigating to queue page');
         router.push(`/arena/teams/queue?partyId=${party.id}&phase=opponent`);
     };
     
     // ==========================================================================
-    // AI MATCH - For Testing
+    // MATCH TYPE SELECTION
     // ==========================================================================
+    type MatchType = 'ranked' | 'casual' | 'vs_ai';
+    const [matchType, setMatchType] = useState<MatchType>('ranked');
     const [aiDifficulty, setAIDifficulty] = useState<BotDifficulty>('medium');
     const [showAIOptions, setShowAIOptions] = useState(false);
     
+    // State for showing role selection before AI match (for partial parties with 2+ humans)
+    const [showRolesForAI, setShowRolesForAI] = useState(false);
+    
+    // For AI matches from the Ready step (full party with roles assigned)
     const handleStartAIMatch = async () => {
         if (!party || !allReady || !hasIgl || !hasAnchor) return;
-        console.log('[TeamSetup] === handleStartAIMatch CALLED ===');
+        console.log('[TeamSetup] === handleStartAIMatch CALLED (Ready Step) ===');
+        console.log('[TeamSetup] partyId:', party.id, 'difficulty:', aiDifficulty);
+        await startAIMatchInternal();
+    };
+
+    // For AI matches from the Party step (solo/partial party)
+    // If 2+ human players, always show role selection so leader can review/change
+    const handleStartAIMatchFromParty = async () => {
+        if (!party) return;
+        console.log('[TeamSetup] === handleStartAIMatchFromParty CALLED ===');
+        console.log('[TeamSetup] partyId:', party.id, 'difficulty:', aiDifficulty, 'memberCount:', party.members.length);
+        
+        // If there are 2+ human players, always show role selection
+        // This allows the leader to review and change roles before starting
+        if (party.members.length >= 2) {
+            console.log('[TeamSetup] Showing role selection for partial party (roles can be reviewed/changed)');
+            setShowRolesForAI(true);
+            return;
+        }
+        
+        // Solo player - no role selection needed, start directly
+        await startAIMatchInternal();
+    };
+    
+    // Proceed with AI match after roles are assigned
+    const handleConfirmRolesAndStartAI = async () => {
+        if (!party || !hasIgl || !hasAnchor) return;
+        console.log('[TeamSetup] === handleConfirmRolesAndStartAI CALLED ===');
+        setShowRolesForAI(false);
+        await startAIMatchInternal();
+    };
+
+    // Shared logic for starting AI matches
+    const startAIMatchInternal = async () => {
+        if (!party) return;
+        console.log('[TeamSetup] === startAIMatchInternal ===');
         console.log('[TeamSetup] partyId:', party.id, 'difficulty:', aiDifficulty);
         
         setLoading(true);
@@ -515,29 +655,98 @@ export function TeamSetupClient({
     };
 
     const handleFindTeammates = async () => {
-        if (!party || !isLeader) return;
+        if (!party || !isLeader) {
+            console.log('[TeamSetup] handleFindTeammates early return - conditions not met:', {
+                hasParty: !!party,
+                isLeader
+            });
+            return;
+        }
         console.log('[TeamSetup] === handleFindTeammates CALLED ===');
-        console.log('[TeamSetup] partyId:', party.id, 'currentSize:', party.members.length);
-        
+        console.log('[TeamSetup] partyId:', party.id, 'currentSize:', party.members.length, 'matchType:', matchType);
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:FIND_TEAMMATES',message:'Leader starting queue - finding teammates',data:{partyId:party.id,memberCount:party.members.length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:handleFindTeammates:ENTRY',message:'handleFindTeammates called',data:{partyId:party.id,memberCount:party.members.length,matchType,hasIgl:!!party.iglId,hasAnchor:!!party.anchorId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H5'})}).catch(()=>{});
         // #endregion
         
-        // Update queue status before navigating
-        const result = await updatePartyQueueStatus(party.id, 'finding_teammates');
-        console.log('[TeamSetup] updatePartyQueueStatus result:', result.success);
-        
-        // Notify all party members via socket for real-time sync
-        if (result.success && result.partyMemberIds) {
-            console.log('[TeamSetup] Notifying party members via socket:', result.partyMemberIds);
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_NOTIFY_TEAMMATES',message:'Sending socket notification for finding teammates',data:{partyId:party.id,memberIds:result.partyMemberIds,status:'finding_teammates'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
-            // #endregion
-            notifyQueueStatusChange(result.partyMemberIds, 'finding_teammates', party.id);
+        // FIX: Clear the fromQueue URL parameter to reset navigation state
+        // This prevents stale fromQueue=true from affecting future navigations
+        if (typeof window !== 'undefined' && window.location.search.includes('fromQueue=true')) {
+            const newUrl = window.location.pathname + '?mode=5v5';
+            window.history.replaceState({}, '', newUrl);
+            console.log('[TeamSetup] Cleared fromQueue parameter for new queue');
         }
+        // Also clear sessionStorage marker since we're starting a new queue
+        sessionStorage.removeItem('flashmath_just_left_queue');
         
-        console.log('[TeamSetup] Navigating to queue page');
-        router.push(`/arena/teams/queue?partyId=${party.id}&phase=teammates`);
+        setLoading(true);
+        setError(null);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:FIND_TEAMMATES',message:'Leader starting queue - finding teammates',data:{partyId:party.id,memberCount:party.members.length,matchType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
+        // #endregion
+        
+        try {
+                // FIX: For CASUAL mode with partial parties, skip teammate search and go directly
+                // to opponent search. AI teammates will be auto-filled by joinTeamQueue().
+                // This allows solo/partial casual parties to match against each other.
+                if (matchType === 'casual') {
+                    console.log('[TeamSetup] CASUAL mode: Skipping teammate search, going directly to opponent search with AI teammates');
+                    // #region agent log - HD: Track when setup page sets queue status
+                    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:CASUAL_SET_QUEUE',message:'CASUAL MODE - SETTING QUEUE STATUS TO finding_opponents',data:{partyId:party.id,memberCount:party.members.length,matchType,callerFunc:'handleFindTeammates'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+                    // #endregion
+                    
+                    // Update queue status to finding_opponents (not finding_teammates)
+                    const result = await updateQueueState(party.id, currentUserId, 'finding_opponents', matchType);
+                console.log('[TeamSetup] updateQueueState result:', result.success, 'error:', result.error);
+                
+                if (!result.success) {
+                    setError(result.error || 'Failed to start queue');
+                    setLoading(false);
+                    return;
+                }
+                
+                // Notify all party members via socket
+                const memberIds = party.members.map(m => m.odUserId);
+                notifyQueueStatusChange(memberIds, 'finding_opponents', party.id);
+                
+                // Navigate to queue with phase=opponent (AI teammates will be auto-added by joinTeamQueue)
+                // Reset loading state before navigation to prevent stuck button
+                setLoading(false);
+                router.push(`/arena/teams/queue?partyId=${party.id}&phase=opponent`);
+                return;
+            }
+            
+            // RANKED mode: Continue with teammate search to find human teammates
+            // Update queue status before navigating
+            const result = await updateQueueState(party.id, currentUserId, 'finding_teammates', matchType);
+            console.log('[TeamSetup] updateQueueState result:', result.success, 'error:', result.error);
+            
+            if (!result.success) {
+                setError(result.error || 'Failed to start queue');
+                setLoading(false);
+                return;
+            }
+            
+            // Notify all party members via socket for real-time sync
+            console.log('[TeamSetup] Notifying party members via socket');
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_NOTIFY_TEAMMATES',message:'Sending socket notification for finding teammates',data:{partyId:party.id,status:'finding_teammates',matchType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
+            // #endregion
+            const memberIds = party.members.map(m => m.odUserId);
+            notifyQueueStatusChange(memberIds, 'finding_teammates', party.id);
+            
+            console.log('[TeamSetup] Navigating to queue page');
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:handleFindTeammates:NAVIGATE',message:'About to navigate to queue page',data:{partyId:party.id,phase:'teammates',matchType,destination:`/arena/teams/queue?partyId=${party.id}&phase=teammates`},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H5'})}).catch(()=>{});
+            // #endregion
+            // Reset loading state before navigation to prevent stuck button
+            setLoading(false);
+            router.push(`/arena/teams/queue?partyId=${party.id}&phase=teammates`);
+        } catch (err: any) {
+            console.error('[TeamSetup] handleFindTeammates error:', err);
+            setError(err.message || 'An error occurred');
+            setLoading(false);
+        }
     };
 
     const handleLinkTeam = async (teamId: string) => {
@@ -552,47 +761,76 @@ export function TeamSetupClient({
     };
 
     return (
-        <VSScreenBackground variant="strategy" className="min-h-screen text-foreground">
-            {/* Header */}
-            <div className="border-b border-[var(--glass-border)] bg-black/40 backdrop-blur-xl sticky top-0 z-40">
-                <div className="max-w-4xl mx-auto px-6 py-4">
+        <VSScreenBackground variant="strategy" className="h-screen overflow-hidden no-scrollbar text-foreground">
+            {/* Header with entrance animation */}
+            <motion.div
+                initial={{ y: -50, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+                className="border-b border-[var(--glass-border)] bg-black/40 backdrop-blur-xl sticky top-0 z-40"
+            >
+                <div className="max-w-4xl mx-auto px-4 py-2">
                     <div className="flex items-center justify-between">
-                        <Link 
+                        <Link
                             href="/arena/modes"
                             className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
                         >
                             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
                             <span className="text-sm font-medium">Back to Modes</span>
                         </Link>
-                        
-                        <div className="flex items-center gap-2">
-                            <span className="px-3 py-1.5 rounded-full bg-primary/20 border border-primary/30 text-primary text-sm font-bold">
+
+                        <motion.div
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                            className="flex items-center gap-2"
+                        >
+                            <span className="px-3 py-1.5 rounded-full bg-primary/20 border border-primary/30 text-primary text-sm font-bold animate-pulse">
                                 {mode} Team Arena
                             </span>
-                        </div>
+                            <button
+                                onClick={toggleFullscreen}
+                                className="p-2 rounded-lg bg-white/5 border border-white/10 text-white/60 hover:text-primary hover:bg-primary/10 hover:border-primary/30 transition-all"
+                                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                            >
+                                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+                            </button>
+                        </motion.div>
                     </div>
                 </div>
-            </div>
+            </motion.div>
 
-            <div className="max-w-4xl mx-auto px-6 py-8">
-                {/* Progress Steps */}
-                <div className="flex items-center justify-center gap-1 mb-8">
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3, duration: 0.5 }}
+                className="max-w-4xl mx-auto px-4 py-3"
+            >
+                {/* Progress Steps with staggered entrance */}
+                <div className="flex items-center justify-center gap-1 mb-4">
                     {['party', 'roles', 'ready'].map((s, i) => {
                         const isComplete = i < ['party', 'roles', 'ready'].indexOf(step);
                         const isCurrent = step === s;
-                        
+
                         return (
-                            <div key={s} className="flex items-center">
+                            <motion.div
+                                key={s}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.4 + i * 0.1, type: 'spring', stiffness: 200 }}
+                                className="flex items-center"
+                            >
                                 <motion.div
                                     initial={false}
                                     animate={{
                                         scale: isCurrent ? 1.1 : 1,
                                         backgroundColor: isComplete ? 'var(--color-primary)' : isCurrent ? 'var(--color-accent)' : 'transparent',
                                     }}
+                                    whileHover={{ scale: 1.15 }}
                                     className={cn(
                                         "w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm border-2 transition-colors",
                                         isComplete && "border-primary text-primary-foreground",
-                                        isCurrent && "border-accent text-accent-foreground",
+                                        isCurrent && "border-accent text-accent-foreground shadow-lg shadow-accent/30",
                                         !isComplete && !isCurrent && "border-[var(--glass-border)] text-muted-foreground"
                                     )}
                                 >
@@ -605,24 +843,30 @@ export function TeamSetupClient({
                                     {s === 'party' ? 'Party' : s === 'roles' ? 'Roles' : 'Ready'}
                                 </span>
                                 {i < 2 && (
-                                    <div className={cn(
-                                        "w-8 h-0.5 mx-3",
-                                        isComplete ? "bg-primary" : "bg-[var(--glass-border)]"
-                                    )} />
+                                    <motion.div
+                                        initial={{ scaleX: 0 }}
+                                        animate={{ scaleX: 1 }}
+                                        transition={{ delay: 0.6 + i * 0.1, duration: 0.3 }}
+                                        className={cn(
+                                            "w-8 h-0.5 mx-3 origin-left",
+                                            isComplete ? "bg-primary" : "bg-[var(--glass-border)]"
+                                        )}
+                                    />
                                 )}
-                            </div>
+                            </motion.div>
                         );
                     })}
                 </div>
 
-                {/* Queue Notification Banner - shows briefly before auto-redirect */}
+                {/* Queue Notification Banner - shows briefly before auto-redirect
+                    IMPORTANT: Don't show if user just canceled/left queue (suppressQueueBanner) */}
                 <AnimatePresence>
-                    {party?.queueStatus && (
+                    {party?.queueStatus && !suppressQueueBanner && (
                         <motion.div
                             initial={{ opacity: 0, y: -10, height: 0 }}
                             animate={{ opacity: 1, y: 0, height: 'auto' }}
                             exit={{ opacity: 0, y: -10, height: 0 }}
-                            className="mb-6 p-4 rounded-xl bg-primary/10 border border-primary/30 
+                            className="mb-4 p-3 rounded-xl bg-primary/10 border border-primary/30
                                        flex items-center justify-between"
                         >
                             <div className="flex items-center gap-3">
@@ -656,7 +900,7 @@ export function TeamSetupClient({
                             initial={{ opacity: 0, y: -10, height: 0 }}
                             animate={{ opacity: 1, y: 0, height: 'auto' }}
                             exit={{ opacity: 0, y: -10, height: 0 }}
-                            className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 
+                            className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30
                                        flex items-center gap-3 text-red-400"
                         >
                             <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -665,18 +909,21 @@ export function TeamSetupClient({
                     )}
                 </AnimatePresence>
 
-                {/* Main Content Card */}
-                <motion.div 
+                {/* Main Content Card with dramatic entrance */}
+                <motion.div
                     layout
-                    className="glass rounded-2xl overflow-hidden"
+                    initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ delay: 0.6, duration: 0.5, type: 'spring', stiffness: 150 }}
+                    className="glass rounded-2xl overflow-hidden shadow-2xl"
                 >
                     {/* Step 1: Party Formation */}
                     {step === 'party' && (
-                        <div className="p-6">
+                        <div className="p-4">
                             {/* Header */}
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
                                         <Users className="w-5 h-5 text-primary" />
                                     </div>
                                     <div>
@@ -699,19 +946,19 @@ export function TeamSetupClient({
 
                             {!party ? (
                                 /* Create Party CTA */
-                                <motion.div 
+                                <motion.div
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    className="text-center py-12"
+                                    className="text-center py-8"
                                 >
-                                    <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 
+                                    <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20
                                                     flex items-center justify-center border border-[var(--glass-border)]">
-                                        <Users className="w-10 h-10 text-primary" />
+                                        <Users className="w-8 h-8 text-primary" />
                                     </div>
-                                    <h3 className="text-xl font-bold mb-2 text-card-foreground">
+                                    <h3 className="text-lg font-bold mb-2 text-card-foreground">
                                         Start a {mode} Party
                                     </h3>
-                                    <p className="text-muted-foreground text-sm mb-6 max-w-xs mx-auto">
+                                    <p className="text-muted-foreground text-sm mb-4 max-w-xs mx-auto">
                                         Create a party and invite up to {requiredSize - 1} friends to compete together
                                     </p>
                                     <button
@@ -719,7 +966,7 @@ export function TeamSetupClient({
                                         onClick={handleCreateParty}
                                         disabled={loading}
                                         className={cn(
-                                            "px-8 py-4 rounded-xl font-bold transition-all",
+                                            "px-6 py-3 rounded-xl font-bold transition-all",
                                             "bg-gradient-to-r from-primary to-accent text-primary-foreground",
                                             "hover:scale-105 hover:shadow-lg neon-glow",
                                             "disabled:opacity-50 disabled:hover:scale-100"
@@ -736,7 +983,7 @@ export function TeamSetupClient({
                                     </button>
                                 </motion.div>
                             ) : (
-                                <div className="space-y-3">
+                                <div className="space-y-2">
                                     {/* Party Members with Banners */}
                                     {party.members.map((member, index) => (
                                         <TeamPlayerCard
@@ -761,56 +1008,161 @@ export function TeamSetupClient({
                                         />
                                     ))}
                                     
-                                    {/* Empty Slots */}
-                                    {Array.from({ length: needsTeammates }).map((_, i) => (
-                                        <motion.div
-                                            key={`empty-${i}`}
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            transition={{ delay: (partySize + i) * 0.05 }}
-                                            className="flex items-center justify-center gap-2 p-3 rounded-xl
-                                                       border border-dashed border-[var(--glass-border)] 
-                                                       text-muted-foreground"
-                                        >
-                                            <UserPlus className="w-4 h-4" />
-                                            <span className="text-xs">Slot {partySize + i + 1}</span>
-                                        </motion.div>
-                                    ))}
+                                    {/* Empty Slots - Compact horizontal row */}
+                                    <div className="flex gap-2">
+                                        {Array.from({ length: needsTeammates }).map((_, i) => (
+                                            <motion.div
+                                                key={`empty-${i}`}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                transition={{ delay: (partySize + i) * 0.05 }}
+                                                className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg
+                                                           border border-dashed border-[var(--glass-border)]
+                                                           text-muted-foreground"
+                                            >
+                                                <UserPlus className="w-3 h-3" />
+                                                <span className="text-[10px]">Slot {partySize + i + 1}</span>
+                                            </motion.div>
+                                        ))}
+                                    </div>
 
-                                    {/* Find Teammates CTA */}
+                                    {/* Find Teammates CTA with Match Type Selection */}
                                     {hasPartialParty && isLeader && (
-                                        <motion.div 
+                                        <motion.div
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: 0.3 }}
-                                            className="mt-6 p-5 rounded-xl bg-gradient-to-br from-primary/10 via-transparent to-accent/10 
+                                            className="mt-2 p-2 rounded-lg bg-gradient-to-br from-primary/10 via-transparent to-accent/10
                                                        border border-primary/20 relative overflow-hidden"
                                         >
                                             {/* Glow effect */}
                                             <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-accent/5 blur-xl" />
-                                            
-                                            <div className="relative flex items-start gap-4">
-                                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent 
-                                                                flex items-center justify-center flex-shrink-0 shadow-lg">
-                                                    <Search className="w-6 h-6 text-primary-foreground" />
-                                                </div>
-                                                <div className="flex-1">
-                                                    <h3 className="font-bold text-card-foreground mb-1 flex items-center gap-2">
+
+                                            <div className="relative space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent
+                                                                    flex items-center justify-center flex-shrink-0">
+                                                        <Search className="w-4 h-4 text-primary-foreground" />
+                                                    </div>
+                                                    <h3 className="font-bold text-card-foreground text-sm flex items-center gap-1">
                                                         Need {needsTeammates} more player{needsTeammates > 1 ? 's' : ''}?
-                                                        <Sparkles className="w-4 h-4 text-accent" />
+                                                        <Sparkles className="w-3 h-3 text-accent" />
                                                     </h3>
-                                                    <p className="text-sm text-muted-foreground mb-4">
-                                                        Queue now and we'll match you with teammates of similar skill. 
-                                                        Choose roles together once the team is formed.
-                                                    </p>
+                                                </div>
+
+                                                {/* Match Type Selection for partial parties */}
+                                                <div className="p-2 rounded-lg bg-card/50 border border-[var(--glass-border)]">
+                                                    <p className="text-[10px] text-muted-foreground mb-1.5">Select Match Type:</p>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => setMatchType('ranked')}
+                                                            className={cn(
+                                                                "flex-1 p-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-1",
+                                                                matchType === 'ranked'
+                                                                    ? "bg-amber-500/20 border border-amber-500/50 text-amber-400"
+                                                                    : "bg-card/50 border border-transparent hover:border-amber-500/30 text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            <span className="text-base">🏆</span>
+                                                            <span>Ranked</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setMatchType('casual')}
+                                                            className={cn(
+                                                                "flex-1 p-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-1",
+                                                                matchType === 'casual'
+                                                                    ? "bg-emerald-500/20 border border-emerald-500/50 text-emerald-400"
+                                                                    : "bg-card/50 border border-transparent hover:border-emerald-500/30 text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            <span className="text-base">🎮</span>
+                                                            <span>Casual</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setMatchType('vs_ai');
+                                                                setShowAIOptions(true);
+                                                            }}
+                                                            className={cn(
+                                                                "flex-1 p-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-1",
+                                                                matchType === 'vs_ai'
+                                                                    ? "bg-cyan-500/20 border border-cyan-500/50 text-cyan-400"
+                                                                    : "bg-card/50 border border-transparent hover:border-cyan-500/30 text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            <span className="text-base">🤖</span>
+                                                            <span>VS AI</span>
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {/* AI difficulty + teammates info */}
+                                                    <AnimatePresence>
+                                                        {matchType === 'vs_ai' && (
+                                                            <motion.div
+                                                                initial={{ opacity: 0, height: 0 }}
+                                                                animate={{ opacity: 1, height: 'auto' }}
+                                                                exit={{ opacity: 0, height: 0 }}
+                                                                className="mt-3 pt-3 border-t border-[var(--glass-border)]"
+                                                            >
+                                                                <p className="text-[10px] text-muted-foreground mb-2">AI Difficulty:</p>
+                                                                <div className="flex gap-1">
+                                                                    {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => (
+                                                                        <button
+                                                                            key={diff}
+                                                                            onClick={() => setAIDifficulty(diff)}
+                                                                            className={cn(
+                                                                                "flex-1 py-1.5 rounded-md text-[10px] font-medium transition-all capitalize",
+                                                                                aiDifficulty === diff
+                                                                                    ? "bg-cyan-500 text-white"
+                                                                                    : "bg-card/50 text-muted-foreground hover:bg-card"
+                                                                            )}
+                                                                        >
+                                                                            {diff}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                                <p className="mt-2 text-xs text-cyan-400 flex items-center gap-1">
+                                                                    <Sparkles className="w-3 h-3" />
+                                                                    {needsTeammates} AI teammate{needsTeammates > 1 ? 's' : ''} will join your team
+                                                                </p>
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
+                                                
+                                                {/* Action Button */}
+                                                {matchType === 'vs_ai' ? (
+                                                    <button
+                                                        onClick={handleStartAIMatchFromParty}
+                                                        disabled={loading}
+                                                        className={cn(
+                                                            "w-full px-6 py-3 rounded-xl font-bold transition-all",
+                                                            "bg-gradient-to-r from-cyan-600 to-blue-600 text-white",
+                                                            "hover:scale-[1.02] hover:shadow-lg",
+                                                            "flex items-center justify-center gap-2",
+                                                            "disabled:opacity-50"
+                                                        )}
+                                                    >
+                                                        {loading ? (
+                                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                                        ) : (
+                                                            <>
+                                                                🤖 Start VS AI Match
+                                                                <span className="text-sm opacity-75">
+                                                                    (+{needsTeammates} AI teammates)
+                                                                </span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                ) : (
                                                     <button
                                                         onClick={handleFindTeammates}
                                                         disabled={loading}
                                                         className={cn(
-                                                            "px-6 py-3 rounded-xl font-bold transition-all",
+                                                            "w-full px-6 py-3 rounded-xl font-bold transition-all",
                                                             "bg-gradient-to-r from-primary to-accent text-primary-foreground",
-                                                            "hover:scale-105 hover:shadow-lg",
-                                                            "flex items-center gap-2",
+                                                            "hover:scale-[1.02] hover:shadow-lg",
+                                                            "flex items-center justify-center gap-2",
                                                             "disabled:opacity-50"
                                                         )}
                                                     >
@@ -823,10 +1175,13 @@ export function TeamSetupClient({
                                                                 <span className="ml-1 px-2 py-0.5 rounded-full bg-white/20 text-xs">
                                                                     {partySize}/{requiredSize}
                                                                 </span>
+                                                                {matchType === 'ranked' && (
+                                                                    <span className="text-xs opacity-75">🏆</span>
+                                                                )}
                                                             </>
                                                         )}
                                                     </button>
-                                                </div>
+                                                )}
                                             </div>
                                         </motion.div>
                                     )}
@@ -850,10 +1205,10 @@ export function TeamSetupClient({
 
                     {/* Step 2: Role Assignment */}
                     {step === 'roles' && party && (
-                        <div className="p-6">
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                                    <Shield className="w-5 h-5 text-accent" />
+                        <div className="p-4">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 rounded-xl bg-accent/20 flex items-center justify-center">
+                                    <Shield className="w-4 h-4 text-accent" />
                                 </div>
                                 <div>
                                     <h2 className="text-lg font-bold text-card-foreground">Assign Roles</h2>
@@ -863,14 +1218,14 @@ export function TeamSetupClient({
                                 </div>
                             </div>
 
-                            <div className="grid md:grid-cols-2 gap-6">
+                            <div className="grid md:grid-cols-2 gap-4">
                                 {/* IGL Selection */}
-                                <div className="p-4 rounded-xl bg-accent/5 border border-accent/20">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <Crown className="w-5 h-5 text-accent" />
+                                <div className="p-3 rounded-xl bg-accent/5 border border-accent/20">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Crown className="w-4 h-4 text-accent" />
                                         <h3 className="font-bold text-sm text-card-foreground">In-Game Leader</h3>
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground mb-4">
+                                    <p className="text-[10px] text-muted-foreground mb-3">
                                         Controls strategy, slot assignments, and timeouts
                                     </p>
                                     
@@ -898,12 +1253,12 @@ export function TeamSetupClient({
                                 </div>
 
                                 {/* Anchor Selection */}
-                                <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <Anchor className="w-5 h-5 text-primary" />
+                                <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Anchor className="w-4 h-4 text-primary" />
                                         <h3 className="font-bold text-sm text-card-foreground">Anchor</h3>
                                     </div>
-                                    <p className="text-[10px] text-muted-foreground mb-4">
+                                    <p className="text-[10px] text-muted-foreground mb-3">
                                         Can use Double Call-In and Final Round Solo abilities
                                     </p>
                                     
@@ -932,7 +1287,7 @@ export function TeamSetupClient({
                             </div>
 
                             {!isLeader && (
-                                <p className="text-center text-muted-foreground text-sm mt-6 flex items-center justify-center gap-2">
+                                <p className="text-center text-muted-foreground text-sm mt-4 flex items-center justify-center gap-2">
                                     <Loader2 className="w-4 h-4 animate-spin" />
                                     Waiting for party leader to assign roles...
                                 </p>
@@ -942,10 +1297,10 @@ export function TeamSetupClient({
 
                     {/* Step 3: Ready Check */}
                     {step === 'ready' && party && (
-                        <div className="p-6">
-                            <div className="flex items-center gap-3 mb-6">
-                                <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                                    <Check className="w-5 h-5 text-green-500" />
+                        <div className="p-4">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 rounded-xl bg-green-500/20 flex items-center justify-center">
+                                    <Check className="w-4 h-4 text-green-500" />
                                 </div>
                                 <div>
                                     <h2 className="text-lg font-bold text-card-foreground">Ready Check</h2>
@@ -955,7 +1310,101 @@ export function TeamSetupClient({
                                 </div>
                             </div>
 
-                            <div className="space-y-2 mb-8">
+                            {/* Match Type Selection */}
+                            {isLeader && (
+                                <div className="mb-4 p-3 rounded-xl glass border border-[var(--glass-border)]">
+                                    <p className="text-xs text-muted-foreground uppercase tracking-widest mb-2">
+                                        Match Type
+                                    </p>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {/* Ranked */}
+                                        <button
+                                            onClick={() => setMatchType('ranked')}
+                                            className={cn(
+                                                "p-3 rounded-xl border-2 transition-all text-center",
+                                                matchType === 'ranked'
+                                                    ? "border-amber-500 bg-amber-500/20"
+                                                    : "border-[var(--glass-border)] bg-card/50 hover:border-amber-500/50"
+                                            )}
+                                        >
+                                            <div className="text-xl mb-1">🏆</div>
+                                            <div className="font-bold text-sm text-card-foreground">Ranked</div>
+                                            <div className="text-[10px] text-muted-foreground">ELO affected</div>
+                                        </button>
+                                        
+                                        {/* Casual */}
+                                        <button
+                                            onClick={() => setMatchType('casual')}
+                                            className={cn(
+                                                "p-3 rounded-xl border-2 transition-all text-center",
+                                                matchType === 'casual'
+                                                    ? "border-emerald-500 bg-emerald-500/20"
+                                                    : "border-[var(--glass-border)] bg-card/50 hover:border-emerald-500/50"
+                                            )}
+                                        >
+                                            <div className="text-xl mb-1">🎮</div>
+                                            <div className="font-bold text-sm text-card-foreground">Casual</div>
+                                            <div className="text-[10px] text-muted-foreground">No ELO change</div>
+                                        </button>
+
+                                        {/* VS AI */}
+                                        <button
+                                            onClick={() => {
+                                                setMatchType('vs_ai');
+                                                setShowAIOptions(true);
+                                            }}
+                                            className={cn(
+                                                "p-3 rounded-xl border-2 transition-all text-center",
+                                                matchType === 'vs_ai'
+                                                    ? "border-cyan-500 bg-cyan-500/20"
+                                                    : "border-[var(--glass-border)] bg-card/50 hover:border-cyan-500/50"
+                                            )}
+                                        >
+                                            <div className="text-xl mb-1">🤖</div>
+                                            <div className="font-bold text-sm text-card-foreground">VS AI</div>
+                                            <div className="text-[10px] text-muted-foreground">Practice mode</div>
+                                        </button>
+                                    </div>
+
+                                    {/* AI difficulty selection */}
+                                    <AnimatePresence>
+                                        {matchType === 'vs_ai' && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                className="mt-3 pt-3 border-t border-[var(--glass-border)]"
+                                            >
+                                                <p className="text-xs text-muted-foreground mb-2">AI Difficulty:</p>
+                                                <div className="flex gap-2">
+                                                    {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => (
+                                                        <button
+                                                            key={diff}
+                                                            onClick={() => setAIDifficulty(diff)}
+                                                            className={cn(
+                                                                "flex-1 py-2 rounded-lg text-xs font-medium transition-all capitalize",
+                                                                aiDifficulty === diff
+                                                                    ? "bg-cyan-500 text-white"
+                                                                    : "bg-card/50 text-muted-foreground hover:bg-card"
+                                                            )}
+                                                        >
+                                                            {diff}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {partySize < requiredSize && (
+                                                    <p className="mt-2 text-xs text-cyan-400 flex items-center gap-1">
+                                                        <Sparkles className="w-3 h-3" />
+                                                        {requiredSize - partySize} AI teammate{requiredSize - partySize > 1 ? 's' : ''} will join your team
+                                                    </p>
+                                                )}
+                                            </motion.div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                            )}
+
+                            <div className="space-y-2 mb-4">
                                 {party.members.map((member, idx) => {
                                     const isReady = member.isReady || member.isLeader;
                                     return (
@@ -982,7 +1431,7 @@ export function TeamSetupClient({
                                 })}
                             </div>
 
-                            <div className="flex flex-col items-center gap-4">
+                            <div className="flex flex-col items-center gap-3">
                                 {!isLeader && (
                                     <button
                                         data-testid="ready-button"
@@ -1007,15 +1456,17 @@ export function TeamSetupClient({
 
                                 {isLeader && (
                                     <div className="flex flex-col items-center gap-3">
-                                        <div className="flex items-center gap-3">
+                                        {/* Dynamic action button based on match type */}
+                                        {matchType === 'vs_ai' ? (
+                                            /* VS AI - Start immediately */
                                             <button
-                                                data-testid="find-match-button"
-                                                onClick={handleStartQueue}
+                                                data-testid="start-ai-match"
+                                                onClick={handleStartAIMatch}
                                                 disabled={!allReady || loading}
                                                 className={cn(
                                                     "px-12 py-5 rounded-xl font-bold text-lg transition-all",
                                                     allReady
-                                                        ? "bg-gradient-to-r from-accent to-primary text-primary-foreground hover:scale-105 neon-glow"
+                                                        ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:scale-105 border-2 border-cyan-400/50"
                                                         : "bg-card text-muted-foreground cursor-not-allowed"
                                                 )}
                                             >
@@ -1023,83 +1474,53 @@ export function TeamSetupClient({
                                                     <Loader2 className="w-6 h-6 animate-spin" />
                                                 ) : allReady ? (
                                                     <span className="flex items-center gap-2">
-                                                        <Zap className="w-5 h-5" />
-                                                        Start Team Queue
+                                                        🤖 Start VS AI Match
+                                                        {partySize < requiredSize && (
+                                                            <span className="text-sm opacity-75">
+                                                                (+{requiredSize - partySize} AI teammates)
+                                                            </span>
+                                                        )}
                                                     </span>
                                                 ) : (
                                                     `Waiting (${readyCount}/${party.members.length})`
                                                 )}
                                             </button>
-                                            
-                                            {/* AI Match Button for Testing */}
+                                        ) : (
+                                            /* Ranked or Casual - Queue for opponents */
                                             <button
-                                                data-testid="vs-ai-button"
-                                                onClick={() => setShowAIOptions(!showAIOptions)}
+                                                data-testid="find-match-button"
+                                                onClick={handleStartQueue}
                                                 disabled={!allReady || loading}
                                                 className={cn(
-                                                    "px-6 py-5 rounded-xl font-bold text-lg transition-all",
+                                                    "px-12 py-5 rounded-xl font-bold text-lg transition-all",
                                                     allReady
-                                                        ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:scale-105 border-2 border-cyan-400/50"
+                                                        ? matchType === 'ranked'
+                                                            ? "bg-gradient-to-r from-amber-600 to-yellow-500 text-white hover:scale-105 neon-glow"
+                                                            : "bg-gradient-to-r from-emerald-600 to-teal-500 text-white hover:scale-105"
                                                         : "bg-card text-muted-foreground cursor-not-allowed"
                                                 )}
-                                                title="Play against AI bots (for testing)"
                                             >
-                                                <span className="flex items-center gap-2">
-                                                    🤖 VS AI
-                                                </span>
+                                                {loading ? (
+                                                    <Loader2 className="w-6 h-6 animate-spin" />
+                                                ) : allReady ? (
+                                                    <span className="flex items-center gap-2">
+                                                        {matchType === 'ranked' ? '🏆' : '🎮'}
+                                                        {matchType === 'ranked' ? 'Find Ranked Match' : 'Find Casual Match'}
+                                                    </span>
+                                                ) : (
+                                                    `Waiting (${readyCount}/${party.members.length})`
+                                                )}
                                             </button>
-                                        </div>
+                                        )}
                                         
-                                        {/* AI Options Panel */}
-                                        <AnimatePresence>
-                                            {showAIOptions && allReady && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, height: 0 }}
-                                                    animate={{ opacity: 1, height: 'auto' }}
-                                                    exit={{ opacity: 0, height: 0 }}
-                                                    className="w-full max-w-md"
-                                                >
-                                                    <div className="p-4 glass rounded-xl border border-cyan-500/30">
-                                                        <p className="text-xs text-muted-foreground mb-3 text-center">
-                                                            🧪 Test Mode: Play against AI bots
-                                                        </p>
-                                                        
-                                                        <div className="flex items-center justify-center gap-2 mb-4">
-                                                            {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => (
-                                                                <button
-                                                                    key={diff}
-                                                                    data-testid={`difficulty-${diff}`}
-                                                                    onClick={() => setAIDifficulty(diff)}
-                                                                    className={cn(
-                                                                        "px-3 py-2 rounded-lg text-sm font-medium transition-all capitalize",
-                                                                        aiDifficulty === diff
-                                                                            ? "bg-cyan-500 text-white"
-                                                                            : "bg-card/50 text-muted-foreground hover:bg-card"
-                                                                    )}
-                                                                >
-                                                                    {diff}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                        
-                                                        <button
-                                                            data-testid="start-ai-match"
-                                                            onClick={handleStartAIMatch}
-                                                            disabled={loading}
-                                                            className="w-full px-6 py-3 rounded-xl font-bold bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:scale-[1.02] transition-all"
-                                                        >
-                                                            {loading ? (
-                                                                <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                                                            ) : (
-                                                                <span className="flex items-center justify-center gap-2">
-                                                                    🤖 Start AI Match ({aiDifficulty})
-                                                                </span>
-                                                            )}
-                                                        </button>
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
+                                        {/* Match type summary */}
+                                        {allReady && (
+                                            <p className="text-xs text-muted-foreground">
+                                                {matchType === 'ranked' && 'Your team ELO will be affected by this match'}
+                                                {matchType === 'casual' && 'Practice match - no ELO changes'}
+                                                {matchType === 'vs_ai' && `Playing against ${aiDifficulty} AI opponents`}
+                                            </p>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -1137,7 +1558,170 @@ export function TeamSetupClient({
                         </div>
                     </motion.div>
                 )}
-            </div>
+            </motion.div>
+            
+            {/* Role Selection Modal for VS AI with Partial Party */}
+            <AnimatePresence>
+                {showRolesForAI && party && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+                        onClick={() => setShowRolesForAI(false)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }}
+                            animate={{ scale: 1, y: 0 }}
+                            exit={{ scale: 0.9, y: 20 }}
+                            className="bg-slate-900 border border-white/20 rounded-2xl p-6 max-w-lg w-full mx-4"
+                            onClick={e => e.stopPropagation()}
+                        >
+                            <div className="flex items-center justify-between mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
+                                        <Shield className="w-5 h-5 text-accent" />
+                                    </div>
+                                    <div>
+                                        <h3 className="font-bold text-lg text-white">
+                                            {hasIgl && hasAnchor ? 'Confirm Roles' : 'Assign Roles'}
+                                        </h3>
+                                        <p className="text-xs text-white/50">
+                                            {hasIgl && hasAnchor 
+                                                ? 'Click any player to change roles'
+                                                : 'Select IGL and Anchor before match'
+                                            }
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowRolesForAI(false)}
+                                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                                >
+                                    <X className="w-5 h-5 text-white/50" />
+                                </button>
+                            </div>
+                            
+                            {/* IGL Selection */}
+                            <div className="mb-6">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Crown className="w-4 h-4 text-amber-400" />
+                                    <h4 className="font-bold text-sm text-white">In-Game Leader (IGL)</h4>
+                                </div>
+                                <p className="text-xs text-white/50 mb-3">
+                                    Controls strategy, slot assignments, and timeouts
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {party.members.map((member) => (
+                                        <button
+                                            key={`igl-${member.odUserId}`}
+                                            onClick={() => handleSetIGL(member.odUserId)}
+                                            disabled={loading}
+                                            className={cn(
+                                                "p-3 rounded-lg flex items-center gap-3 text-sm transition-all border",
+                                                member.isIgl
+                                                    ? "bg-amber-500/20 border-amber-500/50 text-amber-400"
+                                                    : "bg-white/5 border-white/10 text-white hover:border-amber-500/30"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
+                                                member.isIgl ? "bg-amber-500/30" : "bg-white/10"
+                                            )}>
+                                                {member.odName?.charAt(0) || '?'}
+                                            </div>
+                                            <span className="font-medium truncate">{member.odName}</span>
+                                            <div className="flex items-center gap-1 ml-auto">
+                                                {member.isIgl && <Crown className="w-3 h-3 text-amber-400" />}
+                                                {member.isAnchor && <Anchor className="w-3 h-3 text-cyan-400" />}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            {/* Anchor Selection */}
+                            <div className="mb-6">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Anchor className="w-4 h-4 text-cyan-400" />
+                                    <h4 className="font-bold text-sm text-white">Anchor</h4>
+                                </div>
+                                <p className="text-xs text-white/50 mb-3">
+                                    Can be called in by IGL to take over any slot during breaks
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {party.members.map((member) => (
+                                        <button
+                                            key={`anchor-${member.odUserId}`}
+                                            onClick={() => handleSetAnchor(member.odUserId)}
+                                            disabled={loading}
+                                            className={cn(
+                                                "p-3 rounded-lg flex items-center gap-3 text-sm transition-all border",
+                                                member.isAnchor
+                                                    ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-400"
+                                                    : "bg-white/5 border-white/10 text-white hover:border-cyan-500/30"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold",
+                                                member.isAnchor ? "bg-cyan-500/30" : "bg-white/10"
+                                            )}>
+                                                {member.odName?.charAt(0) || '?'}
+                                            </div>
+                                            <span className="font-medium truncate">{member.odName}</span>
+                                            <div className="flex items-center gap-1 ml-auto">
+                                                {member.isIgl && <Crown className="w-3 h-3 text-amber-400" />}
+                                                {member.isAnchor && <Anchor className="w-3 h-3 text-cyan-400" />}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            {/* Action Buttons */}
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowRolesForAI(false)}
+                                    className="flex-1 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20
+                                               text-white font-semibold transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmRolesAndStartAI}
+                                    disabled={!hasIgl || !hasAnchor || loading}
+                                    className={cn(
+                                        "flex-1 px-4 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
+                                        hasIgl && hasAnchor
+                                            ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:scale-[1.02]"
+                                            : "bg-white/10 text-white/50 cursor-not-allowed"
+                                    )}
+                                >
+                                    {loading ? (
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                    ) : (
+                                        <>
+                                            🤖 Start Match
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            
+                            {/* Status indicator */}
+                            {(!hasIgl || !hasAnchor) && (
+                                <p className="mt-4 text-center text-xs text-amber-400">
+                                    {!hasIgl && !hasAnchor 
+                                        ? "Select both IGL and Anchor to continue"
+                                        : !hasIgl 
+                                            ? "Select an IGL to continue"
+                                            : "Select an Anchor to continue"
+                                    }
+                                </p>
+                            )}
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </VSScreenBackground>
     );
 }

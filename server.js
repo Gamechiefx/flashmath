@@ -2188,7 +2188,7 @@ app.prepare().then(async () => {
         TIMEOUTS_PER_TEAM: 2,
         POINTS_PER_CORRECT: 100,
         STREAK_BONUS: 5,                 // +5 per consecutive correct
-        HANDOFF_COUNTDOWN_MS: 3000,      // 3 second countdown before handoff
+        HANDOFF_COUNTDOWN_MS: 500,       // 0.5 second minimal delay before handoff
         ROUND_COUNTDOWN_MS: 6000,        // 5-4-3-2-1-GO countdown (6s total)
         TYPING_THROTTLE_MS: 50,          // Throttle typing updates
     };
@@ -5002,10 +5002,11 @@ app.prepare().then(async () => {
         const durationMs = Date.now() - match.startTime;
         recordTeamMatchToPostgres(match, winnerTeam, durationMs);
         
-        // Clean up after a delay (let clients receive the end event)
+        // Clean up after a delay - extended to 5 minutes so players can view results
+        // Players should manually leave by clicking "Back to Arena" or "Play Again"
         setTimeout(async () => {
             await removeTeamMatchState(match.matchId);
-        }, 30000);
+        }, 300000); // 5 minutes
     }
     
     /**
