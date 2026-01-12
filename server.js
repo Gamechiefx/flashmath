@@ -2861,15 +2861,17 @@ app.prepare().then(async () => {
             }
             
             // Broadcast updated slot assignments to own team
+            // Send the correct format: { operation: playerId } which is what team.slotAssignments contains
+            console.log(`[TeamMatch] Broadcasting slot assignments:`, team.slotAssignments);
             teamMatchNs.to(`team:${matchId}:${team.teamId}`).emit('slot_assignments_updated', {
-                slots: getTeamSlotAssignments(team),
+                slots: team.slotAssignments,
                 teamId: team.teamId,
             });
             
             // Also notify opponent team of the slot changes (so they see correct opponent display)
             const opponentTeam = team.teamId === match.team1.teamId ? match.team2 : match.team1;
             teamMatchNs.to(`team:${matchId}:${opponentTeam.teamId}`).emit('opponent_slots_updated', {
-                slots: getTeamSlotAssignments(team),
+                slots: team.slotAssignments,
                 teamId: team.teamId,
             });
         });

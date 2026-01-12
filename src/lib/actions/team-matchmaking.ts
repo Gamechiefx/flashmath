@@ -25,6 +25,7 @@ import {
     updateQueueState,
     setMatchFound,
     toggleReady as togglePartyReady,
+    refreshPartyTTL,
     type PartyState,
     type PartyMember,
 } from "@/lib/party/party-redis";
@@ -568,6 +569,10 @@ export async function joinTeamQueue(params: {
             step: 'completed'
         });
         console.log(`[TeamMatchmaking] Party ${params.partyId} joined queue: ELO=${matchElo}, AvgTier=${avgTier}`);
+        
+        // Refresh party TTL when joining queue to ensure party and user references stay valid
+        await refreshPartyTTL(params.partyId);
+        
         return { success: true };
 
     } catch (error: any) {
@@ -1185,6 +1190,10 @@ export async function joinTeammateQueue(params: {
         // #region agent log
         fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:joinTeammateQueue:SUCCESS',message:'Joined teammate queue successfully',data:{partyId:params.partyId,memberCount:members.length,slotsNeeded,avgElo,queueKey:'team:teammates:5v5'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H3'})}).catch(()=>{});
         // #endregion
+        
+        // Refresh party TTL when joining queue to ensure party and user references stay valid
+        await refreshPartyTTL(params.partyId);
+        
         return { success: true };
 
     } catch (error: any) {
@@ -2096,6 +2105,10 @@ export async function createAITeamMatch(params: {
         );
 
         console.log(`[TeamMatchmaking] AI Match created: ${matchId} for party ${params.partyId} (difficulty: ${params.difficulty || 'medium'}, humans: ${humanMembers.length}, AI teammates: ${slotsToFill})`);
+        
+        // Refresh party TTL when creating match to ensure party and user references stay valid
+        await refreshPartyTTL(params.partyId);
+        
         return { success: true, matchId };
 
     } catch (error: any) {
