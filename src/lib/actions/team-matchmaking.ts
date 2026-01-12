@@ -56,6 +56,9 @@ async function getRedis() {
 // TYPES
 // =============================================================================
 
+// Supported team match modes
+export type TeamMatchMode = '5v5' | '2v2';
+
 export interface TeamQueueEntry {
     odPartyId: string;
     odTeamId: string | null;        // Persistent team ID (null for temporary parties)
@@ -65,7 +68,7 @@ export interface TeamQueueEntry {
     odLeaderName: string;
     odElo: number;                  // Team ELO or avg member ELO
     odAvgTier: number;              // Average tier of all members (1-100, 100-tier system)
-    odMode: '5v5';
+    odMode: TeamMatchMode;          // '5v5' or '2v2'
     odMatchType: 'ranked' | 'casual';
     odIglId: string;
     odIglName: string;
@@ -116,20 +119,20 @@ export interface TeammateQueueEntry {
     odTeamId: string | null;
     odElo: number;
     odAvgTier: number;              // Average tier of current members (1-100)
-    odMode: '5v5';
+    odMode: TeamMatchMode;          // '5v5' or '2v2'
     odMembers: TeamQueueMember[];
     odJoinedAt: number;
-    odSlotsNeeded: number; // How many more players needed (1-4)
+    odSlotsNeeded: number; // How many more players needed (mode-dependent)
 }
 
 // Assembled team waiting for IGL selection
 export interface AssembledTeam {
     id: string;
     odPartyIds: string[];           // Original party IDs that were merged
-    odMembers: TeamQueueMember[];   // All 5 members
+    odMembers: TeamQueueMember[];   // All members (5 for 5v5, 2 for 2v2)
     odElo: number;                  // Average ELO of all members
     odAvgTier: number;              // Average tier of all members (1-100)
-    odMode: '5v5';
+    odMode: TeamMatchMode;          // '5v5' or '2v2'
     odIglId: string | null;
     odAnchorId: string | null;
     odIglVotes: Record<string, string[]>;   // userId -> voters
@@ -167,6 +170,19 @@ const IGL_SELECTION_TIMEOUT = 25;   // 25 seconds for IGL/Anchor selection
 // Tier matchmaking settings (100-tier system)
 const TEAM_TIER_RANGE = 25;         // ±25 tiers for team matching (slightly wider than 1v1)
 const DEFAULT_TIER = 50;            // Default tier if not available
+
+// Mode-specific team sizes
+const TEAM_MODE_SIZES: Record<TeamMatchMode, number> = {
+    '5v5': 5,
+    '2v2': 2,
+};
+
+/**
+ * Get the required team size for a mode
+ */
+function getTeamSizeForMode(mode: TeamMatchMode): number {
+    return TEAM_MODE_SIZES[mode] || 5;
+}
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -283,16 +299,20 @@ function logQueueOperation(
 
 /**
  * Join the team queue with a party
- * Requires full party (5 members) for ranked 5v5
+ * Requires full party for ranked matches (2 for 2v2, 5 for 5v5)
  */
 export async function joinTeamQueue(params: {
     partyId: string;
     matchType: 'ranked' | 'casual';
+    mode?: TeamMatchMode;  // Defaults to '5v5' for backwards compatibility
 }): Promise<{ success: boolean; error?: string }> {
+    const mode = params.mode || '5v5';
+    const requiredTeamSize = getTeamSizeForMode(mode);
+    
     // #region agent log - HB/HD: Track joinTeamQueue calls
     const fs = require('fs');
     try {
-        fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', JSON.stringify({location:'team-matchmaking.ts:joinTeamQueue',message:'JOIN TEAM QUEUE CALLED',data:{partyId:params.partyId,matchType:params.matchType,stackTrace:new Error().stack?.split('\n').slice(0,5).join('|')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'}) + '\n');
+        fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', JSON.stringify({location:'team-matchmaking.ts:joinTeamQueue',message:'JOIN TEAM QUEUE CALLED',data:{partyId:params.partyId,matchType:params.matchType,mode,requiredTeamSize,stackTrace:new Error().stack?.split('\n').slice(0,5).join('|')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'}) + '\n');
     } catch {}
     // #endregion
     
@@ -343,14 +363,15 @@ export async function joinTeamQueue(params: {
             return { success: false, error: 'Only the party leader can start the queue' };
         }
 
-        // Check party size for ranked
-        if (params.matchType === 'ranked' && redisMembers.length < 5) {
+        // Check party size for ranked (mode-specific)
+        if (params.matchType === 'ranked' && redisMembers.length < requiredTeamSize) {
             logQueueOperation('joinQueue', params.partyId, params.matchType, {
                 error: 'Insufficient party size for ranked',
                 partySize: redisMembers.length,
-                requiredSize: 5
+                requiredSize: requiredTeamSize,
+                mode
             });
-            return { success: false, error: 'Ranked 5v5 requires a full party of 5 players' };
+            return { success: false, error: `Ranked ${mode} requires a full party of ${requiredTeamSize} players` };
         }
 
         // Auto-ready the leader when they start the queue
@@ -478,13 +499,13 @@ export async function joinTeamQueue(params: {
             })
         );
 
-        // For casual matches: Add AI teammates to fill remaining slots
+        // For casual matches: Add AI teammates to fill remaining slots (mode-specific)
         let finalQueueMembers = queueMembers;
         let hasAITeammates = false;
         let humanMemberCount = redisMembers.length;
         
-        if (params.matchType === 'casual' && queueMembers.length < 5) {
-            const slotsToFill = 5 - queueMembers.length;
+        if (params.matchType === 'casual' && queueMembers.length < requiredTeamSize) {
+            const slotsToFill = requiredTeamSize - queueMembers.length;
             const avgHumanElo = queueMembers.reduce((sum, m) => sum + m.odElo, 0) / queueMembers.length;
             
             // Generate AI teammates with balanced ELO (±25 of human average)
@@ -492,7 +513,7 @@ export async function joinTeamQueue(params: {
             finalQueueMembers = [...queueMembers, ...aiTeammates];
             hasAITeammates = true;
             
-            console.log(`[TeamMatchmaking] Added ${slotsToFill} AI teammates to casual party ${params.partyId} (human avg ELO: ${avgHumanElo})`);
+            console.log(`[TeamMatchmaking] Added ${slotsToFill} AI teammates to casual ${mode} party ${params.partyId} (human avg ELO: ${avgHumanElo})`);
         }
 
         // Calculate matchmaking ELO using final team (including AI teammates for casual)
@@ -517,7 +538,7 @@ export async function joinTeamQueue(params: {
             odLeaderName: leader?.odUserName || 'Unknown',
             odElo: matchElo,
             odAvgTier: avgTier,
-            odMode: '5v5',
+            odMode: mode,  // Use the mode parameter
             odMatchType: params.matchType,
             odIglId: party.iglId || party.leaderId,
             odIglName: igl?.odUserName || 'Unknown',
@@ -539,12 +560,14 @@ export async function joinTeamQueue(params: {
             return { success: false, error: 'Queue service unavailable' };
         }
 
-        const queueKey = `${TEAM_QUEUE_PREFIX}${params.matchType}:5v5`;
+        // Use mode-specific queue key
+        const queueKey = `${TEAM_QUEUE_PREFIX}${params.matchType}:${mode}`;
         
         logQueueOperation('joinQueue', params.partyId, params.matchType, {
             queueKey,
             matchElo,
             avgTier,
+            mode,
             partySize: redisMembers.length,
             finalTeamSize: finalQueueMembers.length,
             hasAITeammates,
@@ -1076,7 +1099,6 @@ export async function joinTeammateQueue(params: {
         return { success: false, error: 'Not authenticated' };
     }
     // #region agent log
-    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:joinTeammateQueue:ENTRY',message:'joinTeammateQueue called - looking for HUMAN teammates only',data:{partyId:params.partyId,userId:session.user.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
     // #endregion
 
     const db = getDatabase();
@@ -1188,7 +1210,6 @@ export async function joinTeammateQueue(params: {
 
         console.log(`[TeamMatchmaking] Party ${params.partyId} (${members.length}/5) joined teammate queue`);
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:joinTeammateQueue:SUCCESS',message:'Joined teammate queue successfully',data:{partyId:params.partyId,memberCount:members.length,slotsNeeded,avgElo,queueKey:'team:teammates:5v5'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2,H3'})}).catch(()=>{});
         // #endregion
         
         // Refresh party TTL when joining queue to ensure party and user references stay valid
@@ -1392,7 +1413,6 @@ export async function checkForTeammates(partyId: string): Promise<{
 
         const candidates = await redis.zrangebyscore(queueKey, minElo, maxElo) as string[];
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:checkForTeammates:SEARCH',message:'Searching for teammate parties',data:{partyId,ourMemberCount:entry.odMembers.length,candidateCount:candidates.length,eloRange:{min:minElo,max:maxElo}},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
         // #endregion
 
         // Find parties that together sum to exactly 5 players
@@ -1429,7 +1449,6 @@ export async function checkForTeammates(partyId: string): Promise<{
         }
 
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-matchmaking.ts:checkForTeammates:RESULT',message:'Teammate search result',data:{partyId,totalPlayersFound:totalPlayers,partiesToMergeCount:partiesToMerge.length,needsExactly5:true,willFormTeam:totalPlayers===5},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
         // #endregion
         // Check if we have exactly 5 players
         if (totalPlayers === 5) {
@@ -1901,22 +1920,30 @@ function generateAITeammates(
 
 /**
  * Create an instant match against an AI team
- * Used for testing the 5v5 match flow and UI
+ * Used for testing team match flow and UI
  * 
  * For non-ranked (casual) matches:
- * - Allows parties with less than 5 members
- * - AI teammates fill the remaining slots
+ * - Allows parties with less than required members
+ * - AI teammates fill the remaining slots (mode-specific)
  */
 export async function createAITeamMatch(params: {
     partyId: string;
     difficulty?: BotDifficulty;
+    mode?: TeamMatchMode;  // '5v5' or '2v2', defaults to '5v5'
 }): Promise<{ success: boolean; matchId?: string; error?: string }> {
     const session = await auth();
     if (!session?.user?.id) {
         return { success: false, error: 'Not authenticated' };
     }
+    
+    const mode = params.mode || '5v5';
+    const requiredTeamSize = getTeamSizeForMode(mode);
 
-    console.log('[TeamMatchmaking] createAITeamMatch called with partyId:', params.partyId);
+    console.log('[TeamMatchmaking] createAITeamMatch called with:');
+    console.log('[TeamMatchmaking]   - params.mode:', params.mode);
+    console.log('[TeamMatchmaking]   - resolved mode:', mode);
+    console.log('[TeamMatchmaking]   - requiredTeamSize:', requiredTeamSize);
+    console.log('[TeamMatchmaking]   - partyId:', params.partyId);
 
     const db = getDatabase();
     const userId = session.user.id;
@@ -2010,14 +2037,14 @@ export async function createAITeamMatch(params: {
             humanMembers.reduce((sum, m) => sum + m.odElo, 0) / humanMembers.length
         );
 
-        // Fill remaining slots with AI teammates (for non-ranked matches)
-        const slotsToFill = 5 - humanMembers.length;
+        // Fill remaining slots with AI teammates (for non-ranked matches, mode-specific)
+        const slotsToFill = requiredTeamSize - humanMembers.length;
         let queueMembers: TeamQueueMember[] = [...humanMembers];
         
         if (slotsToFill > 0) {
             const aiTeammates = generateAITeammates(matchId, slotsToFill, avgElo, humanMembers.length);
             queueMembers = [...humanMembers, ...aiTeammates];
-            console.log(`[TeamMatchmaking] Added ${slotsToFill} AI teammates to party ${params.partyId}`);
+            console.log(`[TeamMatchmaking] Added ${slotsToFill} AI teammates to ${mode} party ${params.partyId}`);
         }
 
         // Calculate average tier
@@ -2053,7 +2080,7 @@ export async function createAITeamMatch(params: {
             odLeaderName: leader?.name || 'Unknown',
             odElo: avgElo,
             odAvgTier: avgTier,
-            odMode: '5v5',
+            odMode: mode,  // Use the mode parameter
             odMatchType: 'casual', // AI matches are casual
             odIglId: iglId,
             odIglName: iglMember?.odUserName || 'Unknown',
@@ -2078,6 +2105,7 @@ export async function createAITeamMatch(params: {
         const matchSetup = {
             matchId,
             humanTeam,
+            mode,  // Include mode for server-side AI team generation
             isAIMatch: true,
             hasAITeammates: slotsToFill > 0,
             humanMemberCount: humanMembers.length,
@@ -2104,7 +2132,11 @@ export async function createAITeamMatch(params: {
             'EX', 300
         );
 
-        console.log(`[TeamMatchmaking] AI Match created: ${matchId} for party ${params.partyId} (difficulty: ${params.difficulty || 'medium'}, humans: ${humanMembers.length}, AI teammates: ${slotsToFill})`);
+        console.log(`[TeamMatchmaking] AI Match created: ${matchId} for party ${params.partyId}`);
+        console.log(`[TeamMatchmaking]   - mode: ${mode}`);
+        console.log(`[TeamMatchmaking]   - difficulty: ${params.difficulty || 'medium'}`);
+        console.log(`[TeamMatchmaking]   - humans: ${humanMembers.length}, AI teammates: ${slotsToFill}`);
+        console.log(`[TeamMatchmaking]   - humanTeam.odMode: ${humanTeam.odMode}`);
         
         // Refresh party TTL when creating match to ensure party and user references stay valid
         await refreshPartyTTL(params.partyId);

@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { soundEngine } from '@/lib/sound-engine';
 import { Trophy, ChevronRight, Users, AlertCircle } from 'lucide-react';
@@ -101,7 +101,8 @@ interface ModeCardProps {
 }
 
 function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSelect, index, className, isInParty, isDisabledByParty }: ModeCardProps) {
-    const isTeamMode = mode.id === '5v5';
+    // Team modes include 2v2, 3v3, 4v4, 5v5 - they use mixed operations and team-based UI
+    const isTeamMode = ['2v2', '3v3', '4v4', '5v5'].includes(mode.id);
     const isClickable = mode.available && !isDisabledByParty;
     
     return (
@@ -151,34 +152,40 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                 </motion.div>
             )}
 
-            {/* 5v5 Special: Floating team icons */}
-            {isTeamMode && mode.available && (
-                <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    {/* Player silhouettes floating */}
-                    {[...Array(5)].map((_, i) => (
-                        <motion.div
-                            key={i}
-                            className="absolute text-2xl opacity-20"
-                            initial={{ y: 100, opacity: 0 }}
-                            animate={{ 
-                                y: [-10, 10, -10],
-                                opacity: [0.1, 0.25, 0.1],
-                            }}
-                            transition={{
-                                duration: 3 + i * 0.5,
-                                repeat: Infinity,
-                                delay: i * 0.3,
-                            }}
-                            style={{
-                                left: `${10 + i * 18}%`,
-                                top: `${20 + (i % 2) * 15}%`,
-                            }}
-                        >
-                            👤
-                        </motion.div>
-                    ))}
-                </div>
-            )}
+            {/* Team Mode: Floating team icons (dynamic based on mode) */}
+            {isTeamMode && mode.available && (() => {
+                const teamSize = parseInt(mode.id.split('v')[0]) || 5;
+                // Adjust spacing based on team size
+                const spacing = teamSize <= 2 ? 35 : 18;
+                const startPos = teamSize <= 2 ? 20 : 10;
+                return (
+                    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                        {/* Player silhouettes floating */}
+                        {[...Array(teamSize)].map((_, i) => (
+                            <motion.div
+                                key={i}
+                                className="absolute text-2xl opacity-20"
+                                initial={{ y: 100, opacity: 0 }}
+                                animate={{ 
+                                    y: [-10, 10, -10],
+                                    opacity: [0.1, 0.25, 0.1],
+                                }}
+                                transition={{
+                                    duration: 3 + i * 0.5,
+                                    repeat: Infinity,
+                                    delay: i * 0.3,
+                                }}
+                                style={{
+                                    left: `${startPos + i * spacing}%`,
+                                    top: `${20 + (i % 2) * 15}%`,
+                                }}
+                            >
+                                👤
+                            </motion.div>
+                        ))}
+                    </div>
+                );
+            })()}
 
             {/* Background Animated Stripes (Only if selected) */}
             {isSelected && (
@@ -229,7 +236,7 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                         <p className="text-[10px] text-muted-foreground">
                             {mode.id === '1v1' 
                                 ? "Leave party to play solo"
-                                : "Party queue is 5v5 only"}
+                                : "Use 2v2 or 5v5 for team play"}
                         </p>
                     </div>
                 </div>
@@ -302,38 +309,42 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                 </div>
             </div>
 
-            {/* 5v5 Special: Team formation indicator */}
-            {isTeamMode && mode.available && !isSelected && (
-                <div className="relative mt-2 flex justify-center items-center gap-1">
-                    <div className="flex -space-x-2">
-                        {[...Array(5)].map((_, i) => (
-                            <motion.div
-                                key={i}
-                                className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-violet-600 border-2 border-purple-900 flex items-center justify-center text-[8px] font-bold text-white shadow-lg"
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ delay: 0.1 * i }}
-                            >
-                                {i + 1}
-                            </motion.div>
-                        ))}
+            {/* Team Mode: Team formation indicator (dynamic based on mode) */}
+            {isTeamMode && mode.available && !isSelected && (() => {
+                // Get team size from mode id (e.g., '2v2' -> 2, '5v5' -> 5)
+                const teamSize = parseInt(mode.id.split('v')[0]) || 5;
+                return (
+                    <div className="relative mt-2 flex justify-center items-center gap-1">
+                        <div className="flex -space-x-2">
+                            {[...Array(teamSize)].map((_, i) => (
+                                <motion.div
+                                    key={i}
+                                    className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-violet-600 border-2 border-purple-900 flex items-center justify-center text-[8px] font-bold text-white shadow-lg"
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ delay: 0.1 * i }}
+                                >
+                                    {i + 1}
+                                </motion.div>
+                            ))}
+                        </div>
+                        <span className="ml-2 text-xs font-bold text-purple-400/80">vs</span>
+                        <div className="flex -space-x-2">
+                            {[...Array(teamSize)].map((_, i) => (
+                                <motion.div
+                                    key={i}
+                                    className="w-6 h-6 rounded-full bg-gradient-to-br from-rose-400 to-red-600 border-2 border-rose-900 flex items-center justify-center text-[8px] font-bold text-white shadow-lg"
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    transition={{ delay: 0.1 * i + 0.3 }}
+                                >
+                                    {i + 1}
+                                </motion.div>
+                            ))}
+                        </div>
                     </div>
-                    <span className="ml-2 text-xs font-bold text-purple-400/80">vs</span>
-                    <div className="flex -space-x-2">
-                        {[...Array(5)].map((_, i) => (
-                            <motion.div
-                                key={i}
-                                className="w-6 h-6 rounded-full bg-gradient-to-br from-rose-400 to-red-600 border-2 border-rose-900 flex items-center justify-center text-[8px] font-bold text-white shadow-lg"
-                                initial={{ scale: 0 }}
-                                animate={{ scale: 1 }}
-                                transition={{ delay: 0.1 * i + 0.3 }}
-                            >
-                                {i + 1}
-                            </motion.div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Bottom: Operation Selection (Only for available non-team modes) */}
             {mode.available && isSelected && !isTeamMode && (
@@ -375,23 +386,34 @@ function ModeCard({ mode, isSelected, selectedOperation, onSelect, onOperationSe
                 </motion.div>
             )}
 
-            {/* Team Mode: Show "All Operations" indicator when selected */}
-            {mode.available && isSelected && isTeamMode && (
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-4 flex justify-center"
-                >
-                    <div className="px-4 py-2 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-300 text-sm font-bold flex items-center gap-2">
-                        <span className="flex gap-1">
-                            {(Object.keys(OPERATION_ICONS) as Operation[]).map((op) => (
-                                <span key={op} className="text-base">{OPERATION_ICONS[op].symbol}</span>
-                            ))}
-                        </span>
-                        <span>All Operations</span>
-                    </div>
-                </motion.div>
-            )}
+            {/* Team Mode: Show operations indicator when selected */}
+            {mode.available && isSelected && isTeamMode && (() => {
+                const teamSize = parseInt(mode.id.split('v')[0]) || 5;
+                // 2v2 uses 2 random operations, other team modes use all 5
+                const is2v2 = teamSize === 2;
+                return (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-4 flex justify-center"
+                    >
+                        <div className="px-4 py-2 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-300 text-sm font-bold flex items-center gap-2">
+                            <span className="flex gap-1">
+                                {is2v2 ? (
+                                    // For 2v2, show dice icon to indicate random selection
+                                    <span className="text-base">🎲</span>
+                                ) : (
+                                    // For other team modes, show all operations
+                                    (Object.keys(OPERATION_ICONS) as Operation[]).map((op) => (
+                                        <span key={op} className="text-base">{OPERATION_ICONS[op].symbol}</span>
+                                    ))
+                                )}
+                            </span>
+                            <span>{is2v2 ? '2 Random Operations' : 'All Operations'}</span>
+                        </div>
+                    </motion.div>
+                );
+            })()}
 
             {/* Placeholder for non-selected cards (not for 5v5 which shows team formation) */}
             {mode.available && !isSelected && !isTeamMode && (
@@ -478,19 +500,57 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     const [isInParty, setIsInParty] = useState(false);
     const [partyId, setPartyId] = useState<string | null>(null);
 
+    // Request fullscreen for immersive arena experience
+    const requestFullscreen = async () => {
+        try {
+            const elem = document.documentElement;
+            if (elem.requestFullscreen && !document.fullscreenElement) {
+                await elem.requestFullscreen();
+            } else if ((elem as any).webkitRequestFullscreen) {
+                await (elem as any).webkitRequestFullscreen();
+            } else if ((elem as any).msRequestFullscreen) {
+                await (elem as any).msRequestFullscreen();
+            }
+        } catch (err) {
+            console.log('[Arena] Fullscreen request failed:', err);
+        }
+    };
+
+    // Track if we've already auto-selected a mode for the current party session
+    const hasAutoSelectedRef = useRef(false);
+    const previousPartyIdRef = useRef<string | null>(null);
+    
     // Check if user is in a party on mount
     useEffect(() => {
         const checkParty = async () => {
             try {
                 const result = await getPartyData();
                 if (result.party) {
+                    const newPartyId = result.party.id;
                     setIsInParty(true);
-                    setPartyId(result.party.id);
-                    // Auto-select 5v5 mode when in party
-                    setSelectedMode('5v5');
+                    setPartyId(newPartyId);
+                    
+                    // Only auto-select a team mode when FIRST joining a party (not on every poll)
+                    // Also reset if the party ID changed (joined a different party)
+                    if (!hasAutoSelectedRef.current || previousPartyIdRef.current !== newPartyId) {
+                        hasAutoSelectedRef.current = true;
+                        previousPartyIdRef.current = newPartyId;
+                        // Auto-select 5v5 mode when first joining a party
+                        setSelectedMode((currentMode) => {
+                            // If already on a valid team mode, keep it
+                            if (['2v2', '5v5'].includes(currentMode)) {
+                                return currentMode;
+                            }
+                            // Otherwise default to 5v5
+                            return '5v5';
+                        });
+                    }
                 } else {
                     setIsInParty(false);
                     setPartyId(null);
+                    // Reset auto-select flag when leaving party
+                    hasAutoSelectedRef.current = false;
+                    previousPartyIdRef.current = null;
                 }
             } catch (error) {
                 console.error('[ModeSelection] Error checking party:', error);
@@ -510,7 +570,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     // Build modes with dynamic ELO based on selected operation
     const vsModes: GameMode[] = [
         { id: '1v1', name: '1v1', available: true, gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)', rating: getEloForModeAndOperation(arenaStats, '1v1', selectedOperation) },
-        { id: '2v2', name: '2v2', available: false, gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', rating: getEloForModeAndOperation(arenaStats, '2v2', selectedOperation) },
+        { id: '2v2', name: '2v2', available: true, gradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', rating: getEloForModeAndOperation(arenaStats, '2v2', selectedOperation) },
         { id: '3v3', name: '3v3', available: false, gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', rating: getEloForModeAndOperation(arenaStats, '3v3', selectedOperation) },
         { id: '4v4', name: '4v4', available: false, gradient: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)', rating: getEloForModeAndOperation(arenaStats, '4v4', selectedOperation) },
         { id: '5v5', name: '5v5', available: true, gradient: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', rating: getEloForModeAndOperation(arenaStats, '5v5', selectedOperation) },
@@ -565,9 +625,12 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                             </div>
                             <Link
                                 href="/arena/teams/setup?mode=5v5"
-                                onClick={() => soundEngine.playClick()}
+                                onClick={() => {
+                                    soundEngine.playClick();
+                                    requestFullscreen();
+                                }}
                                 className="px-3 py-1 rounded-full text-xs font-bold transition-all hover:opacity-80"
-                                style={{ 
+                                style={{
                                     backgroundColor: 'var(--accent)',
                                     color: 'var(--primary-foreground)'
                                 }}
@@ -738,9 +801,9 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                 {/* Top Row: Full Width VS Modes */}
                 <div className="flex-1 grid grid-cols-5 gap-5 w-full">
                     {vsModes.map((mode, i) => {
-                        // When in party, disable all non-5v5 modes
-                        const isDisabledByParty = isInParty && mode.id !== '5v5';
-                        
+                        // When in party, only allow team modes (2v2, 5v5) - disable solo modes
+                        const isDisabledByParty = isInParty && !['2v2', '5v5'].includes(mode.id);
+
                         return (
                             <ModeCard
                                 key={mode.id}
@@ -786,7 +849,11 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
             <div className="pt-6 pb-2 flex flex-col items-center gap-3 shrink-0">
                 <AnimatePresence mode="wait">
                     {selectedModeData?.available ? (
-                        <Link href={queueHref} onClick={() => soundEngine.playClick()}>
+                        <Link href={queueHref} onClick={() => {
+                            soundEngine.playClick();
+                            // Request fullscreen for immersive arena experience
+                            requestFullscreen();
+                        }}>
                             <motion.button
                                 whileHover={{ scale: 1.05, boxShadow: "0 0 50px rgba(245, 158, 11, 0.6)" }}
                                 whileTap={{ scale: 0.95 }}

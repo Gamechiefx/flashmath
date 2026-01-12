@@ -1576,22 +1576,6 @@ app.prepare().then(async () => {
             // Auto-join party room if user is in a party
             currentPartyId = await joinPartyRoom(socket, userId);
             
-            // #region agent log - Track user joining room
-            try {
-                const fs = require('fs');
-                const roomName = `user:${userId}`;
-                const socketsInRoom = presenceNs.adapter.rooms.get(roomName);
-                const logEntry = JSON.stringify({
-                    location: 'server.js:USER_JOINED_ROOM',
-                    message: 'User joined their socket room',
-                    data: { userId, userName, socketId: socket.id, roomName, socketsInRoom: socketsInRoom ? socketsInRoom.size : 0 },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session',
-                    hypothesisId: 'B'
-                }) + '\n';
-                fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', logEntry);
-            } catch (e) { /* ignore */ }
-            // #endregion
             
             console.log(`[Presence] ${userName || userId} is now ${userStatus}`);
             
@@ -2170,30 +2154,99 @@ app.prepare().then(async () => {
         BREAK: 'break',
         HALFTIME: 'halftime',
         ANCHOR_DECISION: 'anchor_decision',
+        SOLO_DECISION: 'solo_decision',     // Between R3 and R4 of 2nd half - IGL chooses Normal vs Anchor Solo
         POST_MATCH: 'post_match',
     };
     
-    const TEAM_MATCH_CONFIG = {
-        ROUNDS_PER_HALF: 4,
-        TOTAL_ROUNDS: 8,
-        QUESTIONS_PER_SLOT: 5,
-        SLOTS_PER_ROUND: 5,
-        HALF_DURATION_MS: 300000,        // 5 minutes per half
-        ROUND_DURATION_MS: 80000,        // 1:20 per round (for reference, not used for clock)
-        PRE_MATCH_DURATION_MS: 15000,    // 15 seconds to view teams before strategy phase
-        BREAK_DURATION_MS: 15000,        // 15 seconds between rounds
-        HALFTIME_DURATION_MS: 120000,    // 2 minutes halftime
-        STRATEGY_DURATION_MS: 60000,     // 60 seconds for IGL to assign slots before match
-        TIMEOUT_DURATION_MS: 30000,      // 30 seconds per timeout
-        TIMEOUTS_PER_TEAM: 2,
-        POINTS_PER_CORRECT: 100,
-        STREAK_BONUS: 5,                 // +5 per consecutive correct
-        HANDOFF_COUNTDOWN_MS: 500,       // 0.5 second minimal delay before handoff
-        ROUND_COUNTDOWN_MS: 6000,        // 5-4-3-2-1-GO countdown (6s total)
-        TYPING_THROTTLE_MS: 50,          // Throttle typing updates
+    // =============================================================================
+    // MODE-SPECIFIC TEAM MATCH CONFIGURATIONS
+    // =============================================================================
+    
+    const TEAM_MATCH_CONFIGS = {
+        '5v5': {
+            TEAM_SIZE: 5,
+            ROUNDS_PER_HALF: 4,
+            TOTAL_ROUNDS: 8,
+            QUESTIONS_PER_SLOT: 5,
+            SLOTS_PER_ROUND: 5,
+            HALF_DURATION_MS: 300000,        // 5 minutes per half
+            ROUND_DURATION_MS: 80000,        // 1:20 per round
+            PRE_MATCH_DURATION_MS: 15000,    // 15 seconds to view teams before strategy phase
+            BREAK_DURATION_MS: 15000,        // 15 seconds between rounds
+            HALFTIME_DURATION_MS: 120000,    // 2 minutes halftime
+            STRATEGY_DURATION_MS: 60000,     // 60 seconds for IGL to assign slots before match
+            TIMEOUT_DURATION_MS: 30000,      // 30 seconds per timeout
+            TIMEOUTS_PER_TEAM: 2,
+            POINTS_PER_CORRECT: 100,
+            STREAK_BONUS: 5,                 // +5 per consecutive correct
+            HANDOFF_COUNTDOWN_MS: 500,       // 0.5 second minimal delay before handoff
+            ROUND_COUNTDOWN_MS: 6000,        // 5-4-3-2-1-GO countdown (6s total)
+            TYPING_THROTTLE_MS: 50,          // Throttle typing updates
+            DOUBLE_CALLIN_ENABLED: true,     // Double Call-In available in 5v5
+            QUESTION_TIMEOUT_MS: 5000,       // 5 seconds per question before auto-skip
+            TIMEOUT_WARNING_MS: 3000,        // Show warning at 3s remaining
+            SOLO_DECISION_DURATION_MS: 10000, // 10 seconds for IGL to choose Normal vs Anchor Solo
+        },
+        '2v2': {
+            TEAM_SIZE: 2,
+            ROUNDS_PER_HALF: 4,
+            TOTAL_ROUNDS: 8,
+            QUESTIONS_PER_SLOT: 6,           // 6 questions per slot (2 slots × 6 = 12 per round)
+            SLOTS_PER_ROUND: 2,              // 2 operations chosen randomly
+            HALF_DURATION_MS: 210000,        // 3:30 per half
+            ROUND_DURATION_MS: 50000,        // 0:50 per round
+            PRE_MATCH_DURATION_MS: 10000,    // 10 seconds pre-match (faster pace)
+            BREAK_DURATION_MS: 8000,         // 8 seconds between rounds
+            HALFTIME_DURATION_MS: 60000,     // 60 seconds halftime
+            STRATEGY_DURATION_MS: 30000,     // 30 seconds for IGL to assign slots
+            TIMEOUT_DURATION_MS: 30000,      // 30 seconds per timeout
+            TIMEOUTS_PER_TEAM: 2,
+            POINTS_PER_CORRECT: 100,
+            STREAK_BONUS: 5,
+            HANDOFF_COUNTDOWN_MS: 500,
+            ROUND_COUNTDOWN_MS: 5000,        // 4-3-2-1-GO countdown (5s total, faster)
+            TYPING_THROTTLE_MS: 50,
+            DOUBLE_CALLIN_ENABLED: false,    // Double Call-In NOT available in 2v2 per spec
+            QUESTION_TIMEOUT_MS: 5000,       // 5 seconds per question before auto-skip
+            TIMEOUT_WARNING_MS: 3000,        // Show warning at 3s remaining
+            SOLO_DECISION_DURATION_MS: 10000, // 10 seconds for IGL to choose Normal vs Anchor Solo
+        },
     };
     
-    const SLOT_OPERATIONS = ['addition', 'subtraction', 'multiplication', 'division', 'mixed'];
+    /**
+     * Get match configuration for a specific mode
+     * @param {string} mode - '5v5' or '2v2'
+     * @returns {Object} Mode-specific configuration
+     */
+    function getMatchConfig(mode) {
+        return TEAM_MATCH_CONFIGS[mode] || TEAM_MATCH_CONFIGS['5v5'];
+    }
+    
+    // Default config for backwards compatibility (uses 5v5)
+    const TEAM_MATCH_CONFIG = TEAM_MATCH_CONFIGS['5v5'];
+    
+    // All available operations
+    const ALL_SLOT_OPERATIONS = ['addition', 'subtraction', 'multiplication', 'division', 'mixed'];
+    
+    // Default slot operations (for 5v5, uses all operations)
+    const SLOT_OPERATIONS = ALL_SLOT_OPERATIONS;
+    
+    /**
+     * Get slot operations for a specific mode
+     * For 2v2: Randomly select 2 of 5 operations
+     * For 5v5: Use all 5 operations
+     * @param {string} mode - '5v5' or '2v2'
+     * @returns {string[]} Array of operation names for this match
+     */
+    function getSlotOperationsForMode(mode) {
+        if (mode === '2v2') {
+            // Shuffle and pick 2 operations randomly
+            const shuffled = [...ALL_SLOT_OPERATIONS].sort(() => Math.random() - 0.5);
+            return shuffled.slice(0, 2);
+        }
+        // Default: all operations for 5v5
+        return ALL_SLOT_OPERATIONS;
+    }
     
     // =============================================================================
     // AI TEAM BOT CONFIGURATION
@@ -2229,14 +2282,23 @@ app.prepare().then(async () => {
     };
 
     /**
-     * Generate an AI team with 5 bot players
+     * Generate an AI team with bot players (mode-aware)
+     * @param {string} matchId - Match ID for unique bot IDs
+     * @param {number} targetElo - Target ELO for the bots
+     * @param {string} difficulty - Bot difficulty level
+     * @param {string} mode - '5v5' or '2v2'
      */
-    function generateAITeam(matchId, targetElo, difficulty = 'medium') {
+    function generateAITeam(matchId, targetElo, difficulty = 'medium', mode = '5v5') {
+        console.log(`[TeamMatch] generateAITeam called with mode=${mode}`);
         const teamIdentity = BOT_TEAM_NAMES[Math.floor(Math.random() * BOT_TEAM_NAMES.length)];
         const names = BOT_NAMES_BY_THEME[teamIdentity.theme] || BOT_NAMES_BY_THEME.tech;
         const config = BOT_DIFFICULTY_CONFIGS[difficulty] || BOT_DIFFICULTY_CONFIGS.medium;
-
-        const botMembers = SLOT_OPERATIONS.map((op, index) => ({
+        
+        // Get mode-specific slot operations
+        const slotOps = getSlotOperationsForMode(mode);
+        console.log(`[TeamMatch] For mode=${mode}, slotOps=${JSON.stringify(slotOps)} (count: ${slotOps.length})`);
+        
+        const botMembers = slotOps.map((op, index) => ({
             odUserId: `ai_bot_${matchId}_${index}`,
             odUserName: names[index % names.length],
             odElo: targetElo + Math.floor(Math.random() * 100) - 50,
@@ -2249,18 +2311,20 @@ app.prepare().then(async () => {
             botConfig: config,
         }));
 
+        console.log(`[TeamMatch] Generated AI team for ${mode} with ${botMembers.length} bots`);
+
         return {
             odPartyId: `ai_party_${matchId}`,
             odTeamId: `ai_team_${matchId}`,
             odTeamName: teamIdentity.name,
             odTeamTag: teamIdentity.tag,
             odElo: targetElo,
-            odMode: '5v5',
+            odMode: mode,
             odMatchType: 'casual',
             odIglId: botMembers[0].odUserId,
             odIglName: botMembers[0].odUserName,
-            odAnchorId: botMembers[1].odUserId,
-            odAnchorName: botMembers[1].odUserName,
+            odAnchorId: botMembers[1] ? botMembers[1].odUserId : botMembers[0].odUserId,
+            odAnchorName: botMembers[1] ? botMembers[1].odUserName : botMembers[0].odUserName,
             odMembers: botMembers,
             odJoinedAt: Date.now(),
             isAITeam: true,
@@ -2300,15 +2364,29 @@ app.prepare().then(async () => {
     
     /**
      * Initialize a team match state
+     * @param {string} matchId - Unique match identifier
+     * @param {Object} team1 - Team 1 data from queue entry
+     * @param {Object} team2 - Team 2 data from queue entry
+     * @param {string} operation - Match operation type ('mixed' for team matches)
+     * @param {string} matchType - 'ranked' or 'casual'
+     * @param {string} mode - '5v5' or '2v2' (defaults to '5v5')
      */
-    function initTeamMatchState(matchId, team1, team2, operation, matchType) {
+    function initTeamMatchState(matchId, team1, team2, operation, matchType, mode = '5v5') {
+        // Get mode-specific configuration
+        const config = getMatchConfig(mode);
+        
+        // Get slot operations for this mode (2v2 gets 2 random operations)
+        const matchSlotOperations = getSlotOperationsForMode(mode);
+        
+        console.log(`[TeamMatch] Initializing ${mode} match ${matchId} with slots:`, matchSlotOperations);
+        
         // Create slot assignments (default: based on preferences or sequential)
         const createSlotAssignments = (team) => {
             const assignments = {};
             const members = [...team.odMembers];
             
             // Try to assign based on preferences first
-            for (const slot of SLOT_OPERATIONS) {
+            for (const slot of matchSlotOperations) {
                 const preferred = members.find(m => m.odPreferredOperation === slot);
                 if (preferred) {
                     assignments[slot] = preferred.odUserId;
@@ -2318,7 +2396,7 @@ app.prepare().then(async () => {
             
             // Fill remaining slots sequentially
             let memberIndex = 0;
-            for (const slot of SLOT_OPERATIONS) {
+            for (const slot of matchSlotOperations) {
                 if (!assignments[slot] && members[memberIndex]) {
                     assignments[slot] = members[memberIndex].odUserId;
                     memberIndex++;
@@ -2345,14 +2423,20 @@ app.prepare().then(async () => {
                 timeoutsUsed: 0,
                 slotAssignments,
                 players: {},
-                currentSlot: 1,           // Each team tracks their own slot (1-5)
-                questionsInSlot: 0,       // Each team tracks their own progress (0-5)
+                currentSlot: 1,           // Each team tracks their own slot (1-N based on mode)
+                questionsInSlot: 0,       // Each team tracks their own progress
                 // Double Call-In state (per spec: Anchor plays 2 slots, one player benched)
+                // NOTE: Double Call-In is NOT available in 2v2 mode
                 doubleCallinActive: false,       // Is Double Call-In active this round?
                 doubleCallinSlot: null,          // Which slot (operation) the anchor is taking over
                 doubleCallinBenchedId: null,     // Which player is sitting out
+                doubleCallinForRound: null,      // Which round this Double Call-In applies to
                 usedDoubleCallinHalf1: false,    // Used in 1st half?
                 usedDoubleCallinHalf2: false,    // Used in 2nd half?
+                // Anchor Solo state (Final Round Solo - anchor plays all slots in final round)
+                anchorSoloActive: false,         // Is Anchor Solo active for final round?
+                anchorSoloDecision: null,        // 'solo' | 'normal' | null (decision made by IGL)
+                usedAnchorSolo: false,           // Has Anchor Solo been used this match?
             };
         };
         
@@ -2363,7 +2447,7 @@ app.prepare().then(async () => {
         const initPlayerStates = (teamData, teamState) => {
             for (const member of teamData.odMembers) {
                 const slotOp = Object.entries(teamState.slotAssignments)
-                    .find(([op, id]) => id === member.odUserId)?.[0] || SLOT_OPERATIONS[0];
+                    .find(([op, id]) => id === member.odUserId)?.[0] || matchSlotOperations[0];
                 
                 teamState.players[member.odUserId] = {
                     odUserId: member.odUserId,
@@ -2388,11 +2472,14 @@ app.prepare().then(async () => {
                     questionStartTime: null,
                     currentInput: '',
                     usedDoubleCallin: false,
+                    questionTimeoutTimer: null,    // Timer ID for per-question timeout
+                    questionWarningTimer: null,    // Timer ID for timeout warning
+                    timeoutsInSlot: 0,             // Count of timed-out questions in current slot
                     connectionStats: initConnectionStats(),
                 };
             }
         };
-        
+
         initPlayerStates(team1, team1State);
         initPlayerStates(team2, team2State);
         
@@ -2400,12 +2487,14 @@ app.prepare().then(async () => {
             matchId,
             operation,
             matchType,
+            mode,                        // '5v5' or '2v2'
+            slotOperations: matchSlotOperations,  // Array of operations for this match
             round: 1,
             half: 1,
             phase: TEAM_MATCH_PHASES.PRE_MATCH,
-            gameClockMs: TEAM_MATCH_CONFIG.HALF_DURATION_MS, // 6 minutes per half, count DOWN
+            gameClockMs: config.HALF_DURATION_MS, // Mode-specific half duration, count DOWN
             relayClockMs: 0,
-            currentSlot: 1,              // 1-5 (which operation slot is active)
+            currentSlot: 1,              // 1-N (which operation slot is active, based on mode)
             // questionsInSlot is now per-team in team state
             team1: team1State,
             team2: team2State,
@@ -2438,34 +2527,47 @@ app.prepare().then(async () => {
      * Get the active player for a team in the current slot
      * Handles Double Call-In: if anchor is taking over this slot, return anchor instead
      * FIXED: Use ordered slot assignments instead of assuming SLOT_OPERATIONS order
+     * @param {Object} teamState - The team state object
+     * @param {number} slotNumber - The slot number (1-5)
+     * @param {number} currentRound - The current round number (used to check if Double Call-In applies)
      */
-    function getActivePlayer(teamState, slotNumber) {
+    function getActivePlayer(teamState, slotNumber, currentRound = null) {
         // Get the ordered list of slot assignments to ensure consistent turn order
         const orderedSlots = getOrderedSlotAssignments(teamState);
         const slotOp = orderedSlots[slotNumber - 1];
-        
+
         if (!slotOp) {
             console.error(`[TeamMatch] No slot operation found for slot ${slotNumber}. Available slots:`, orderedSlots);
             return null;
         }
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:getActivePlayer',message:'DC-H4: getActivePlayer called',data:{slotNumber,slotOp,doubleCallinActive:teamState.doubleCallinActive,doubleCallinSlot:teamState.doubleCallinSlot,matchesSlot:teamState.doubleCallinSlot===slotOp,anchorId:teamState.anchorId,orderedSlots},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DC-H4'})}).catch(()=>{});
-        // #endregion
-        
-        // Check if Double Call-In is active for this slot
-        if (teamState.doubleCallinActive && teamState.doubleCallinSlot === slotOp) {
-            // Return the anchor player instead of the normally assigned player
+
+        // ANCHOR SOLO: If anchor solo is active, anchor plays ALL slots
+        if (teamState.anchorSoloActive) {
             const anchorPlayer = teamState.players[teamState.anchorId];
             if (anchorPlayer) {
-                // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:getActivePlayer:anchorTakeover',message:'DC-H5: Anchor taking over slot',data:{anchorId:teamState.anchorId,anchorName:anchorPlayer.odName,slotOp},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DC-H5'})}).catch(()=>{});
-                // #endregion
-                console.log(`[TeamMatch] Double Call-In: Anchor ${anchorPlayer.odName} playing slot ${slotOp} instead of benched player`);
+                console.log(`[TeamMatch] Anchor Solo: ${anchorPlayer.odName} playing slot ${slotNumber} (${slotOp})`);
                 return anchorPlayer;
             }
         }
-        
+
+        // Check if Double Call-In is active for this slot AND this round
+        // Double Call-In only activates when:
+        // 1. doubleCallinActive is true
+        // 2. The target slot matches (doubleCallinSlot === slotOp)
+        // 3. The current round matches the scheduled round (doubleCallinForRound === currentRound)
+        const doubleCallinApplies = teamState.doubleCallinActive &&
+                                     teamState.doubleCallinSlot === slotOp &&
+                                     (currentRound === null || teamState.doubleCallinForRound === currentRound);
+
+        if (doubleCallinApplies) {
+            // Return the anchor player instead of the normally assigned player
+            const anchorPlayer = teamState.players[teamState.anchorId];
+            if (anchorPlayer) {
+                console.log(`[TeamMatch] Double Call-In: Anchor ${anchorPlayer.odName} playing slot ${slotOp} in Round ${currentRound} (scheduled for R${teamState.doubleCallinForRound})`);
+                return anchorPlayer;
+            }
+        }
+
         const playerId = teamState.slotAssignments[slotOp];
         const player = teamState.players[playerId];
         
@@ -2504,7 +2606,168 @@ app.prepare().then(async () => {
     function generateTeamQuestion(operation) {
         return generateQuestion(operation);
     }
-    
+
+    /**
+     * Clear any existing question timers for a player
+     * Call this before starting a new timer or when slot/round changes
+     */
+    function clearQuestionTimer(player) {
+        if (player.questionTimeoutTimer) {
+            clearTimeout(player.questionTimeoutTimer);
+            player.questionTimeoutTimer = null;
+        }
+        if (player.questionWarningTimer) {
+            clearTimeout(player.questionWarningTimer);
+            player.questionWarningTimer = null;
+        }
+    }
+
+    /**
+     * Start the question timer for an active player
+     * - Emits timeout_warning at (QUESTION_TIMEOUT_MS - TIMEOUT_WARNING_MS) 
+     * - Calls handleQuestionTimeout at QUESTION_TIMEOUT_MS
+     * 
+     * @param {Object} match - The match object
+     * @param {Object} team - The team object the player belongs to
+     * @param {Object} player - The player object
+     * @param {Object} ns - The Socket.IO namespace
+     */
+    function startQuestionTimer(match, team, player, ns) {
+        // Don't start timers for AI players - they answer on their own
+        if (isAITeammate(player.odUserId) || isAIBot(player.odUserId)) {
+            return;
+        }
+
+        // Clear any existing timers first
+        clearQuestionTimer(player);
+
+        const matchConfig = getMatchConfig(match.mode || '5v5');
+        const timeoutMs = matchConfig.QUESTION_TIMEOUT_MS;
+        const warningMs = matchConfig.TIMEOUT_WARNING_MS;
+        const warningDelayMs = timeoutMs - warningMs; // When to show warning (2s into question for 5s timeout with 3s warning)
+
+        // Start the warning timer
+        player.questionWarningTimer = setTimeout(() => {
+            // Emit warning to the player's socket
+            if (player.odSocketId) {
+                console.log(`[TeamMatch] Emitting timeout_warning to ${player.odName} (socket: ${player.odSocketId})`);
+                ns.to(player.odSocketId).emit('timeout_warning', {
+                    matchId: match.matchId,
+                    playerId: player.odUserId,
+                    remainingMs: warningMs,
+                    countdownSeconds: Math.ceil(warningMs / 1000),
+                });
+            } else {
+                console.warn(`[TeamMatch] Cannot emit timeout_warning - ${player.odName} has no socket ID`);
+            }
+            console.log(`[TeamMatch] Timeout warning for ${player.odName} - ${warningMs}ms remaining`);
+        }, warningDelayMs);
+
+        // Start the timeout timer
+        player.questionTimeoutTimer = setTimeout(() => {
+            handleQuestionTimeout(match, team, player, ns);
+        }, timeoutMs);
+
+        console.log(`[TeamMatch] Started ${timeoutMs}ms question timer for ${player.odName}`);
+    }
+
+    /**
+     * Handle a question timeout - player didn't answer in time
+     * - Mark question as skipped (0 points, streak broken)
+     * - Generate new question or advance slot if all questions timed out
+     * 
+     * @param {Object} match - The match object
+     * @param {Object} team - The team object
+     * @param {Object} player - The player who timed out
+     * @param {Object} ns - The Socket.IO namespace
+     */
+    function handleQuestionTimeout(match, team, player, ns) {
+        // Clear any remaining timers
+        clearQuestionTimer(player);
+
+        const matchConfig = getMatchConfig(match.mode || '5v5');
+
+        // Increment timeout counter for this slot
+        player.timeoutsInSlot = (player.timeoutsInSlot || 0) + 1;
+        
+        // Reset streak (timeout breaks streak)
+        player.streak = 0;
+        
+        // Increment total questions answered (counts as an attempt)
+        player.total++;
+        team.questionsInSlot++;
+
+        console.log(`[TeamMatch] Question timeout for ${player.odName}: ${player.timeoutsInSlot} timeouts in slot, ${team.questionsInSlot}/${matchConfig.QUESTIONS_PER_SLOT} questions in slot`);
+
+        // Emit timeout event to client
+        if (player.odSocketId) {
+            ns.to(player.odSocketId).emit('question_timeout', {
+                matchId: match.matchId,
+                playerId: player.odUserId,
+                playerName: player.odName,
+                correctAnswer: player.currentQuestion?.answer,
+                question: player.currentQuestion?.displayText,
+                timeoutsInSlot: player.timeoutsInSlot,
+                questionsInSlot: team.questionsInSlot,
+                questionsPerSlot: matchConfig.QUESTIONS_PER_SLOT,
+                streak: 0,
+            });
+        }
+
+        // Broadcast to team that player timed out
+        ns.to(`team:${match.matchId}:${team.teamId}`).emit('teammate_timeout', {
+            playerId: player.odUserId,
+            playerName: player.odName,
+            timeoutsInSlot: player.timeoutsInSlot,
+        });
+
+        // Check if slot is complete
+        if (team.questionsInSlot >= matchConfig.QUESTIONS_PER_SLOT) {
+            // Slot complete - advance to next slot
+            console.log(`[TeamMatch] Slot complete for ${team.teamName} after timeout`);
+            advanceTeamToNextSlot(match, team, ns);
+        } else if (player.timeoutsInSlot >= matchConfig.QUESTIONS_PER_SLOT) {
+            // Player timed out on ALL questions in their slot - force handoff
+            console.log(`[TeamMatch] Player ${player.odName} timed out on all questions - forcing slot advance`);
+            
+            // Mark the remaining questions as timed out
+            const remaining = matchConfig.QUESTIONS_PER_SLOT - team.questionsInSlot;
+            team.questionsInSlot = matchConfig.QUESTIONS_PER_SLOT;
+            player.total += remaining;
+            player.timeoutsInSlot += remaining;
+            
+            advanceTeamToNextSlot(match, team, ns);
+        } else {
+            // Generate next question and restart timer
+            const slotOp = getSlotOperation(team.currentSlot, match.operation, team);
+            player.currentQuestion = generateTeamQuestion(slotOp);
+            player.questionStartTime = Date.now();
+
+            // Emit new question to player
+            if (player.odSocketId) {
+                console.log(`[TeamMatch] Emitting new_question to ${player.odName} (socket: ${player.odSocketId}): ${player.currentQuestion.question}`);
+                ns.to(player.odSocketId).emit('new_question', {
+                    question: player.currentQuestion,
+                    questionNumber: team.questionsInSlot + 1,
+                    totalQuestions: matchConfig.QUESTIONS_PER_SLOT,
+                    slot: team.currentSlot,
+                    operation: slotOp,
+                    afterTimeout: true,
+                });
+            } else {
+                console.warn(`[TeamMatch] Cannot emit new_question - ${player.odName} has no socket ID!`);
+            }
+
+            // Start timer for the new question
+            startQuestionTimer(match, team, player, ns);
+        }
+
+        // Save match state after timeout processing
+        arenaRedis.saveTeamMatch(match).catch(err => {
+            console.error(`[TeamMatch] Failed to save match after timeout:`, err);
+        });
+    }
+
     // Team match namespace
     const teamMatchNs = io.of('/arena/teams');
     
@@ -2542,13 +2805,15 @@ app.prepare().then(async () => {
                     if (!match) {
                         const setupData = await arenaRedis.getTeamMatchSetup(matchId);
                         if (setupData && setupData.isAIMatch) {
-                            console.log(`[TeamMatch] Creating AI match ${matchId} on first player join`);
+                            const matchMode = setupData.mode || setupData.humanTeam?.odMode || '5v5';
+                            console.log(`[TeamMatch] Creating AI match ${matchId} (${matchMode}) on first player join`);
+                            console.log(`[TeamMatch] DEBUG setupData.mode=${setupData.mode}, humanTeam.odMode=${setupData.humanTeam?.odMode}, resolved matchMode=${matchMode}`);
                             
-                            // Generate AI team
-                            const aiTeam = generateAITeam(matchId, setupData.targetElo, setupData.aiDifficulty);
+                            // Generate AI team (mode-aware)
+                            const aiTeam = generateAITeam(matchId, setupData.targetElo, setupData.aiDifficulty, matchMode);
                             
-                            // Create the match
-                            match = initTeamMatchState(matchId, setupData.humanTeam, aiTeam, 'mixed', 'casual');
+                            // Create the match (with mode)
+                            match = initTeamMatchState(matchId, setupData.humanTeam, aiTeam, 'mixed', 'casual', matchMode);
                             match.isAIMatch = true;
                             match.aiDifficulty = setupData.aiDifficulty;
                             match.hasAITeammates = setupData.hasAITeammates || false;
@@ -2589,18 +2854,19 @@ app.prepare().then(async () => {
                         const matchResult = await arenaRedis.getMatchFromMatchmaking(partyId);
                         console.log(`[TeamMatch] DEBUG: getMatchFromMatchmaking returned: found=${!!matchResult}, matchResultMatchId=${matchResult?.matchId}, expectedMatchId=${matchId}, idsMatch=${matchResult?.matchId === matchId}`);
                         if (matchResult && matchResult.matchId === matchId) {
-                            console.log(`[TeamMatch] Creating PvP match ${matchId} from matchmaking data`);
-                            
-                            // Determine match type from matchmaking result
+                            // Determine match type and mode from matchmaking result
                             const matchType = matchResult.odTeam1.odMatchType || 'casual';
+                            const matchMode = matchResult.odTeam1.odMode || '5v5';
+                            console.log(`[TeamMatch] Creating PvP match ${matchId} (${matchMode}) from matchmaking data`);
                             
-                            // Create match state from matchmaking result
+                            // Create match state from matchmaking result (with mode)
                             match = initTeamMatchState(
                                 matchId,
                                 matchResult.odTeam1,
                                 matchResult.odTeam2,
                                 'mixed',  // operation
-                                matchType
+                                matchType,
+                                matchMode
                             );
                             
                             // Check for AI teammates on either team and configure them
@@ -2684,6 +2950,8 @@ app.prepare().then(async () => {
                 team1: sanitizeTeamState(match.team1, team.teamId === match.team1.teamId),
                 team2: sanitizeTeamState(match.team2, team.teamId === match.team2.teamId),
                 isMyTeam: team.teamId,
+                mode: match.mode || '5v5',                // Include match mode
+                slotOperations: match.slotOperations,     // Include slot operations for UI
             });
 
             // If pre-match countdown is already in progress, send the current countdown state
@@ -2740,21 +3008,23 @@ app.prepare().then(async () => {
         // CREATE AI TEAM MATCH (For Testing)
         // =================================================================
         socket.on('create_ai_match', async (data) => {
-            const { matchId, humanTeam, difficulty, operation } = data;
+            const { matchId, humanTeam, difficulty, operation, mode } = data;
             
             if (!matchId || !humanTeam) {
                 socket.emit('error', { message: 'Invalid AI match data' });
                 return;
             }
             
-            console.log(`[TeamMatch] Creating AI match ${matchId} with difficulty: ${difficulty || 'medium'}`);
+            // Determine mode from data or humanTeam
+            const matchMode = mode || humanTeam.odMode || '5v5';
+            console.log(`[TeamMatch] Creating AI match ${matchId} (${matchMode}) with difficulty: ${difficulty || 'medium'}`);
             
-            // Generate AI team based on human team ELO
+            // Generate AI team based on human team ELO (mode-aware)
             const targetElo = humanTeam.odElo || 500;
-            const aiTeam = generateAITeam(matchId, targetElo, difficulty || 'medium');
+            const aiTeam = generateAITeam(matchId, targetElo, difficulty || 'medium', matchMode);
             
-            // Create the match
-            const match = initTeamMatchState(matchId, humanTeam, aiTeam, operation || 'mixed', 'casual');
+            // Create the match (with mode)
+            const match = initTeamMatchState(matchId, humanTeam, aiTeam, operation || 'mixed', 'casual', matchMode);
             match.isAIMatch = true;
             match.aiDifficulty = difficulty || 'medium';
             match.hasAITeammates = humanTeam.hasAITeammates || false;
@@ -2837,6 +3107,8 @@ app.prepare().then(async () => {
             const targetPlayer = Object.values(team.players).find(p => p.slot === newSlot);
             const movingPlayer = team.players[playerId];
             
+            let swapDetails = null;
+            
             if (targetPlayer && targetPlayer.odUserId !== playerId) {
                 // Swap slots
                 const oldSlot = movingPlayer.slot;
@@ -2846,6 +3118,16 @@ app.prepare().then(async () => {
                 // CRITICAL: Also update team.slotAssignments (the authoritative source for getActivePlayerForSlot)
                 team.slotAssignments[oldSlot] = targetPlayer.odUserId;
                 team.slotAssignments[newSlot] = movingPlayer.odUserId;
+                
+                swapDetails = {
+                    type: 'swap',
+                    player1Name: movingPlayer.odName,
+                    player1OldSlot: oldSlot,
+                    player1NewSlot: newSlot,
+                    player2Name: targetPlayer.odName,
+                    player2OldSlot: newSlot,
+                    player2NewSlot: oldSlot,
+                };
                 
                 console.log(`[TeamMatch] IGL ${userId} swapped ${movingPlayer.odName} (slot ${oldSlot}→${newSlot}) with ${targetPlayer.odName} (slot ${newSlot}→${oldSlot})`);
             } else {
@@ -2858,6 +3140,13 @@ app.prepare().then(async () => {
                     delete team.slotAssignments[oldSlot];
                 }
                 team.slotAssignments[newSlot] = movingPlayer.odUserId;
+                
+                swapDetails = {
+                    type: 'move',
+                    playerName: movingPlayer.odName,
+                    oldSlot: oldSlot,
+                    newSlot: newSlot,
+                };
             }
             
             // Broadcast updated slot assignments to own team
@@ -2866,6 +3155,8 @@ app.prepare().then(async () => {
             teamMatchNs.to(`team:${matchId}:${team.teamId}`).emit('slot_assignments_updated', {
                 slots: team.slotAssignments,
                 teamId: team.teamId,
+                swapDetails: swapDetails,
+                phase: match.phase, // Include phase so client knows if this is halftime
             });
             
             // Also notify opponent team of the slot changes (so they see correct opponent display)
@@ -3006,15 +3297,19 @@ app.prepare().then(async () => {
         socket.on('anchor_callin', (data) => {
             const { matchId, userId, targetSlot, half } = data;
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:anchor_callin:entry',message:'DC-H2: Server received anchor_callin',data:{matchId,userId,targetSlot,half,hasUserId:!!userId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DC-H2'})}).catch(()=>{});
-            // #endregion
             
             console.log(`[TeamMatch] anchor_callin received:`, { matchId, userId, targetSlot, half });
             
             const match = activeTeamMatches.get(matchId);
             if (!match) {
                 socket.emit('error', { message: 'Match not found' });
+                return;
+            }
+            
+            // Double Call-In is NOT available in 2v2 mode (per spec)
+            const matchConfig = getMatchConfig(match.mode || '5v5');
+            if (!matchConfig.DOUBLE_CALLIN_ENABLED) {
+                socket.emit('error', { message: 'Double Call-In is not available in 2v2 mode' });
                 return;
             }
             
@@ -3087,10 +3382,25 @@ app.prepare().then(async () => {
                 return;
             }
             
+            // Determine which round the Double Call-In applies to FIRST (before activation)
+            // - During STRATEGY phase: applies to Round 1 (the round about to start)
+            // - During HALFTIME phase: applies to Round 1 of 2nd half (rounds reset)
+            // - During BREAK phase: applies to the next round (match.round + 1)
+            // - During ACTIVE/ROUND_COUNTDOWN phase: applies to the next round (match.round + 1)
+            let targetRound;
+            if (match.phase === TEAM_MATCH_PHASES.STRATEGY) {
+                targetRound = 1; // First round of match
+            } else if (match.phase === TEAM_MATCH_PHASES.HALFTIME) {
+                targetRound = 1; // First round of 2nd half (rounds reset at halftime)
+            } else {
+                targetRound = match.round + 1; // Next round in current half
+            }
+            
             // Activate Double Call-In
             team.doubleCallinActive = true;
             team.doubleCallinSlot = slotOp;
             team.doubleCallinBenchedId = benchedPlayerId;
+            team.doubleCallinForRound = targetRound; // Track which round this applies to
             
             // Mark as used for this half
             if (match.half === 1) {
@@ -3099,27 +3409,14 @@ app.prepare().then(async () => {
                 team.usedDoubleCallinHalf2 = true;
             }
             
-            // Determine which round the Double Call-In applies to:
-            // - During STRATEGY phase: applies to Round 1 (the round about to start)
-            // - During BREAK/HALFTIME phase: applies to the next round (match.round + 1)
-            // - During ACTIVE/ROUND_COUNTDOWN phase: applies to the next round (match.round + 1)
-            const isStrategyPhaseForLog = match.phase === TEAM_MATCH_PHASES.STRATEGY;
-            const targetRound = isStrategyPhaseForLog ? 1 : match.round + 1;
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:anchor_callin:activated',message:'DC-H3: Double Call-In ACTIVATED on server',data:{teamId:isTeam1?'team1':'team2',doubleCallinActive:team.doubleCallinActive,doubleCallinSlot:team.doubleCallinSlot,benchedPlayerId,anchorId:team.anchorId,forRound:targetRound,currentRound:match.round,phase:match.phase},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DC-H3'})}).catch(()=>{});
-            // #endregion
             
             console.log(`[TeamMatch] Double Call-In ACTIVATED:`);
             console.log(`  - Anchor: ${anchorPlayer.odName} will play ${slotOp} slot`);
             console.log(`  - Benched: ${benchedPlayer.odName} sits out Round ${targetRound}`);
             console.log(`  - Half: ${match.half}, Round: ${targetRound}, Phase: ${match.phase}`);
             
-            // Determine which round the Double Call-In applies to:
-            // - During STRATEGY phase: applies to Round 1
-            // - During BREAK/HALFTIME/ACTIVE/ROUND_COUNTDOWN: applies to next round
-            const isStrategyPhase = match.phase === TEAM_MATCH_PHASES.STRATEGY;
-            const forRound = isStrategyPhase ? 1 : match.round + 1;
+            // Use the already calculated targetRound for the broadcast
+            const forRound = targetRound;
             
             // Broadcast to all players in match
             teamMatchNs.to(matchId).emit('double_callin_activated', {
@@ -3138,31 +3435,109 @@ app.prepare().then(async () => {
                 message: `${anchorPlayer.odName} will take over ${slotOp} slot from ${benchedPlayer.odName} in Round ${forRound}`,
             });
         });
+
+        // =================================================================
+        // ANCHOR SOLO DECISION (Final Round Solo)
+        // IGL chooses between NORMAL relay or ANCHOR SOLO for final round
+        // Available: 2nd Half, between Round 3 and Round 4
+        // =================================================================
+        socket.on('anchor_solo_decision', (data) => {
+            const { matchId, userId, decision } = data; // decision: 'solo' | 'normal'
+
+            console.log(`[TeamMatch] anchor_solo_decision received:`, { matchId, userId, decision });
+
+            const match = activeTeamMatches.get(matchId);
+            if (!match) {
+                socket.emit('error', { message: 'Match not found' });
+                return;
+            }
+
+            // Can only decide during SOLO_DECISION phase
+            if (match.phase !== TEAM_MATCH_PHASES.SOLO_DECISION) {
+                socket.emit('error', { message: 'Can only make solo decision during solo decision phase' });
+                return;
+            }
+
+            // Validate decision
+            if (decision !== 'solo' && decision !== 'normal') {
+                socket.emit('error', { message: 'Invalid decision. Must be "solo" or "normal"' });
+                return;
+            }
+
+            // Find team and verify IGL
+            const isTeam1 = Object.keys(match.team1.players).includes(userId);
+            const team = isTeam1 ? match.team1 : match.team2;
+
+            if (team.iglId !== userId) {
+                socket.emit('error', { message: 'Only IGL can make solo decision' });
+                return;
+            }
+
+            // Check if already decided
+            if (team.anchorSoloDecision !== null) {
+                socket.emit('error', { message: 'Solo decision already made' });
+                return;
+            }
+
+            // Record the decision
+            team.anchorSoloDecision = decision;
+            if (decision === 'solo') {
+                team.anchorSoloActive = true;
+                team.usedAnchorSolo = true;
+            }
+
+            const anchor = team.players[team.anchorId];
+            console.log(`[TeamMatch] Anchor Solo decision by ${team.teamName}: ${decision.toUpperCase()}`);
+
+            // Notify all players of the decision
+            teamMatchNs.to(matchId).emit('solo_decision_made', {
+                teamId: team.teamId,
+                teamName: team.teamName,
+                decision,
+                anchorId: team.anchorId,
+                anchorName: anchor?.odName || 'Unknown',
+            });
+
+            // Check if both teams have decided
+            const otherTeam = isTeam1 ? match.team2 : match.team1;
+            const bothDecided = team.anchorSoloDecision !== null && otherTeam.anchorSoloDecision !== null;
+
+            if (bothDecided) {
+                // Clear the decision timer if it exists
+                if (match.soloDecisionTimer) {
+                    clearTimeout(match.soloDecisionTimer);
+                    match.soloDecisionTimer = null;
+                }
+
+                // Reveal both decisions and proceed to final round
+                revealSoloDecisionsAndStartFinalRound(match, teamMatchNs);
+            }
+        });
         
         // Submit an answer
         socket.on('submit_answer', (data) => {
             const { matchId, userId, answer } = data;
-            
+
             const match = activeTeamMatches.get(matchId);
             if (!match || match.phase !== TEAM_MATCH_PHASES.ACTIVE) return;
-            
+
             // Find player
             const isTeam1 = Object.keys(match.team1.players).includes(userId);
             const team = isTeam1 ? match.team1 : match.team2;
             const opponentTeam = isTeam1 ? match.team2 : match.team1;
             const player = team.players[userId];
-            
+
             if (!player || !player.isActive || !player.currentQuestion) {
                 socket.emit('error', { message: 'Not your turn' });
                 return;
             }
-            
+
+            // Clear the question timeout timer since they answered
+            clearQuestionTimer(player);
+
             const answerTimeMs = Date.now() - player.questionStartTime;
             const isCorrect = parseInt(answer) === player.currentQuestion.answer;
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:submit_answer',message:'H3A/H3B: answer submitted - before increment (PER-TEAM)',data:{userId,teamId:team.teamId,isCorrect,teamQuestionsInSlotBefore:team.questionsInSlot,teamCurrentSlot:team.currentSlot,QUESTIONS_PER_SLOT:TEAM_MATCH_CONFIG.QUESTIONS_PER_SLOT},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3A,H3B'})}).catch(()=>{});
-            // #endregion
             
             player.total++;
             player.totalAnswerTimeMs += answerTimeMs;
@@ -3213,24 +3588,14 @@ app.prepare().then(async () => {
             // Advance to next question or slot (per-team)
             team.questionsInSlot++;
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:submit_answer_after',message:'H3A/H3B: after increment - using TEAM counter',data:{teamId:team.teamId,questionsInSlotAfter:team.questionsInSlot,willAdvanceSlot:team.questionsInSlot>=TEAM_MATCH_CONFIG.QUESTIONS_PER_SLOT,teamCurrentSlot:team.currentSlot},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3A,H3B'})}).catch(()=>{});
-            // #endregion
             
-            if (team.questionsInSlot >= TEAM_MATCH_CONFIG.QUESTIONS_PER_SLOT) {
+            // Use mode-specific config for questions per slot
+            const matchConfig = getMatchConfig(match.mode || '5v5');
+            if (team.questionsInSlot >= matchConfig.QUESTIONS_PER_SLOT) {
                 // This team's slot complete - advance their slot
-                // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:submit_answer:advance_slot',message:'Q6-H1: Advancing to next slot (NOT generating Q6)',data:{teamId:team.teamId,questionsInSlot:team.questionsInSlot,currentSlot:team.currentSlot},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'Q6-H1'})}).catch(()=>{});
-                // #endregion
                 advanceTeamToNextSlot(match, team, teamMatchNs);
             } else {
                 // Generate next question for this player
-                // #region agent log
-                const questionNumber = team.questionsInSlot + 1;
-                if (questionNumber > 5) {
-                    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:submit_answer:Q6_BUG',message:'Q6-H2: BUG! About to generate Q6+!',data:{teamId:team.teamId,questionsInSlot:team.questionsInSlot,nextQuestionNumber:questionNumber,currentSlot:team.currentSlot},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'Q6-H2'})}).catch(()=>{});
-                }
-                // #endregion
                 generateNextQuestion(match, player, team, teamMatchNs);
             }
         });
@@ -3256,9 +3621,6 @@ app.prepare().then(async () => {
         socket.on('igl_timeout', (data) => {
             const { matchId, userId } = data;
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:igl_timeout:entry',message:'TO-H1: igl_timeout event received',data:{matchId,userId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'TO-H1'})}).catch(()=>{});
-            // #endregion
             
             const match = activeTeamMatches.get(matchId);
             if (!match) {
@@ -3326,9 +3688,6 @@ app.prepare().then(async () => {
             const remainingMs = match.breakEndTime ? Math.max(0, match.breakEndTime - now) : 0;
             const newDurationMs = remainingMs + TEAM_MATCH_CONFIG.TIMEOUT_DURATION_MS;
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:igl_timeout:before_clear',message:'TO-H2: Before clearing timeout',data:{matchId,hasBreakTimeout:!!match.breakTimeout,hasHalftimeTimer:!!match.halftimeTimer,breakEndTime:match.breakEndTime,remainingMs,newDurationMs,phase:match.phase},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'TO-H2'})}).catch(()=>{});
-            // #endregion
             
             // Clear existing break timeout and create new one with extended duration
             if (match.breakTimeout) {
@@ -3352,9 +3711,6 @@ app.prepare().then(async () => {
             const phaseAtTimeout = match.phase;
             
             match.breakTimeout = setTimeout(() => {
-                // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:igl_timeout:timeout_fired',message:'TO-H3: Extended timeout fired',data:{matchId,phase:match.phase,expectedDurationMs:newDurationMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'TO-H3'})}).catch(()=>{});
-                // #endregion
                 
                 // Clear the countdown interval
                 if (match.timeoutCountdownInterval) {
@@ -3400,9 +3756,6 @@ app.prepare().then(async () => {
                 }
             }, 1000);
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:igl_timeout:after_create',message:'TO-H2: After creating new timeout',data:{matchId,newBreakTimeoutSet:!!match.breakTimeout,newBreakEndTime:match.breakEndTime,newDurationMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'TO-H2'})}).catch(()=>{});
-            // #endregion
             
             // Notify clients about the timeout extension
             teamMatchNs.to(matchId).emit('timeout_called', {
@@ -3468,6 +3821,13 @@ app.prepare().then(async () => {
             
             const match = activeTeamMatches.get(matchId);
             if (!match) return;
+            
+            // Double Call-In is NOT available in 2v2 mode (per spec)
+            const matchConfig = getMatchConfig(match.mode || '5v5');
+            if (!matchConfig.DOUBLE_CALLIN_ENABLED) {
+                socket.emit('error', { message: 'Double Call-In is not available in 2v2 mode' });
+                return;
+            }
             
             const isTeam1Anchor = match.team1.anchorId === userId;
             const isTeam2Anchor = match.team2.anchorId === userId;
@@ -3943,7 +4303,9 @@ app.prepare().then(async () => {
         if (match.preMatchCountdownStarted) return; // Prevent double-start
         match.preMatchCountdownStarted = true;
         
-        const durationMs = TEAM_MATCH_CONFIG.PRE_MATCH_DURATION_MS;
+        // Use mode-specific config for pre-match duration
+        const preMatchConfig = getMatchConfig(match.mode || '5v5');
+        const durationMs = preMatchConfig.PRE_MATCH_DURATION_MS;
         match.preMatchStartTime = Date.now();
         match.relayClockMs = durationMs;
         
@@ -3979,31 +4341,36 @@ app.prepare().then(async () => {
      * Start the STRATEGY phase where IGL assigns slots before match starts
      */
     function startStrategyPhase(match, ns) {
+        // Use mode-specific config for strategy phase duration
+        const strategyConfig = getMatchConfig(match.mode || '5v5');
+        
         match.phase = TEAM_MATCH_PHASES.STRATEGY;
         match.strategyStartTime = Date.now();
-        match.strategyTimeRemainingMs = TEAM_MATCH_CONFIG.STRATEGY_DURATION_MS;
+        match.strategyTimeRemainingMs = strategyConfig.STRATEGY_DURATION_MS;
         
         const team1Slots = getTeamSlotAssignments(match.team1);
         const team2Slots = getTeamSlotAssignments(match.team2);
         
-        console.log(`[TeamMatch] Match ${match.matchId} entering STRATEGY phase (${TEAM_MATCH_CONFIG.STRATEGY_DURATION_MS / 1000}s)`);
+        console.log(`[TeamMatch] Match ${match.matchId} (${match.mode || '5v5'}) entering STRATEGY phase (${strategyConfig.STRATEGY_DURATION_MS / 1000}s)`);
         console.log(`[TeamMatch] Team1 slots:`, JSON.stringify(team1Slots));
         console.log(`[TeamMatch] Team2 slots:`, JSON.stringify(team2Slots));
         
         // Emit strategy phase started to all players
         ns.to(match.matchId).emit('strategy_phase_start', {
             matchId: match.matchId,
-            durationMs: TEAM_MATCH_CONFIG.STRATEGY_DURATION_MS,
+            durationMs: strategyConfig.STRATEGY_DURATION_MS,
             team1Slots,
             team2Slots,
             team1IglId: match.team1.iglId,
             team2IglId: match.team2.iglId,
+            mode: match.mode || '5v5',                // Include match mode
+            slotOperations: match.slotOperations,     // Include slot operations for UI
         });
         
         // Start countdown timer for strategy phase - emit every second for smooth countdown
         match.strategyTimer = setInterval(() => {
             const elapsed = Date.now() - match.strategyStartTime;
-            match.strategyTimeRemainingMs = Math.max(0, TEAM_MATCH_CONFIG.STRATEGY_DURATION_MS - elapsed);
+            match.strategyTimeRemainingMs = Math.max(0, strategyConfig.STRATEGY_DURATION_MS - elapsed);
             
             // Emit time remaining every second
             ns.to(match.matchId).emit('strategy_time_update', {
@@ -4114,7 +4481,7 @@ app.prepare().then(async () => {
             
             for (const team of [match.team1, match.team2]) {
                 const teamSlot1Op = getSlotOperation(1, match.operation, team);
-                const activePlayer = getActivePlayer(team, 1);
+                const activePlayer = getActivePlayer(team, 1, match.round);
                 if (activePlayer) {
                     activePlayer.isActive = true;
                     activePlayer.currentQuestion = generateTeamQuestion(teamSlot1Op);
@@ -4123,8 +4490,8 @@ app.prepare().then(async () => {
             }
             
             // Get active player IDs for both teams
-            const team1ActivePlayer = getActivePlayer(match.team1, 1);
-            const team2ActivePlayer = getActivePlayer(match.team2, 1);
+            const team1ActivePlayer = getActivePlayer(match.team1, 1, match.round);
+            const team2ActivePlayer = getActivePlayer(match.team2, 1, match.round);
             
             // Notify all players with full match state including active players
             ns.to(match.matchId).emit('match_start', {
@@ -4157,6 +4524,8 @@ app.prepare().then(async () => {
                                 team1: sanitizeTeamState(match.team1, team.teamId === match.team1.teamId),
                                 team2: sanitizeTeamState(match.team2, team.teamId === match.team2.teamId),
                                 isMyTeam: team.teamId,
+                                mode: match.mode || '5v5',                // Include match mode
+                                slotOperations: match.slotOperations,     // Include slot operations for UI
                             });
                         }
                     }
@@ -4164,9 +4533,13 @@ app.prepare().then(async () => {
             }
             
             // Also send question_update for convenience (some UI elements listen for this)
+            // AND start question timeout timers for human players
             for (const team of [match.team1, match.team2]) {
-                const activePlayer = getActivePlayer(team, 1);
+                const activePlayer = getActivePlayer(team, 1, match.round);
                 if (activePlayer) {
+                    // Reset timeout counter for new round
+                    activePlayer.timeoutsInSlot = 0;
+                    
                     ns.to(`team:${match.matchId}:${team.teamId}`).emit('question_update', {
                         questionId: Date.now().toString(),
                         questionText: activePlayer.currentQuestion.question,
@@ -4175,15 +4548,15 @@ app.prepare().then(async () => {
                         slotNumber: team.currentSlot,
                         questionInSlot: 1,
                     });
+                    
+                    // Start question timeout timer for human players
+                    startQuestionTimer(match, team, activePlayer, ns);
                 }
             }
             
             // Start the game clock
             match.timer = setInterval(() => tickTeamMatch(match, ns), 1000);
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:startTeamMatch:clockStart',message:'H1/H4: initial game clock value when match starts',data:{matchId:match.matchId,gameClockMs:match.gameClockMs,expectedMs:TEAM_MATCH_CONFIG.HALF_DURATION_MS,isAIMatch:match.isAIMatch},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H4'})}).catch(()=>{});
-            // #endregion
             
             // Start AI bot behavior if this match has any AI players (opponents or teammates)
             const hasTeam1AI = Object.keys(match.team1.players).some(id => isAITeammate(id) || isAIBot(id));
@@ -4239,13 +4612,16 @@ app.prepare().then(async () => {
                     return; // Only answer during active phase
                 }
                 
+                // Use mode-specific config for slots per round
+                const matchConfig = getMatchConfig(match.mode || '5v5');
+                
                 // Skip if this team has already completed all slots for the round
-                if (team.currentSlot > TEAM_MATCH_CONFIG.SLOTS_PER_ROUND) {
+                if (team.currentSlot > matchConfig.SLOTS_PER_ROUND) {
                     return; // Team is waiting for other team to finish
                 }
                 
                 // Find the active player for THIS TEAM's current slot
-                const activePlayer = getActivePlayer(team, team.currentSlot);
+                const activePlayer = getActivePlayer(team, team.currentSlot, match.round);
                 if (!activePlayer) {
                     return; // No active player
                 }
@@ -4293,9 +4669,6 @@ app.prepare().then(async () => {
      * Process a bot's answer
      */
     function processBotAnswer(match, team, player, answer, isCorrect, ns) {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:processBotAnswer',message:'H6: bot answered question',data:{matchId:match.matchId,half:match.half,playerId:player.odUserId,teamSlot:team.currentSlot,questionsInSlot:team.questionsInSlot,isCorrect,phase:match.phase},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6'})}).catch(()=>{});
-        // #endregion
         
         const answerTimeMs = Date.now() - player.questionStartTime;
         
@@ -4337,7 +4710,9 @@ app.prepare().then(async () => {
         // Advance questions (per-team)
         team.questionsInSlot++;
         
-        if (team.questionsInSlot >= TEAM_MATCH_CONFIG.QUESTIONS_PER_SLOT) {
+        // Use mode-specific config for questions per slot
+        const matchConfig = getMatchConfig(match.mode || '5v5');
+        if (team.questionsInSlot >= matchConfig.QUESTIONS_PER_SLOT) {
             advanceTeamToNextSlot(match, team, ns);
         } else {
             // Generate next question for bot
@@ -4393,9 +4768,6 @@ app.prepare().then(async () => {
      * End the current half (called when half timer expires)
      */
     function endHalf(match, ns) {
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:endHalf:entry',message:'H5: endHalf called',data:{matchId:match.matchId,currentHalf:match.half,currentRound:match.round,isAIMatch:match.isAIMatch,botIntervalsCount:match.botIntervals?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-        // #endregion
         
         // Ensure roundScores array exists (safety check for matches that may have been restored)
         if (!match.roundScores) {
@@ -4409,12 +4781,16 @@ app.prepare().then(async () => {
             team2: match.team2.score,
         });
         
-        // Deactivate all players
+        // Deactivate all players and clear question timers
         for (const team of [match.team1, match.team2]) {
             for (const player of Object.values(team.players)) {
                 player.isActive = false;
+                clearQuestionTimer(player);
             }
         }
+
+        // Use mode-specific config for halftime duration
+        const halfConfig = getMatchConfig(match.mode || '5v5');
         
         if (match.half === 1) {
             // End of first half - go to halftime
@@ -4422,7 +4798,7 @@ app.prepare().then(async () => {
             match.half = 2;
             
             // Calculate halftime duration, including any pending timeout extensions
-            let halftimeDuration = TEAM_MATCH_CONFIG.HALFTIME_DURATION_MS;
+            let halftimeDuration = halfConfig.HALFTIME_DURATION_MS;
             let appliedExtensions = [];
             
             for (const team of [match.team1, match.team2]) {
@@ -4454,10 +4830,7 @@ app.prepare().then(async () => {
             match.breakTimeout = setTimeout(() => {
                 if (match.phase === TEAM_MATCH_PHASES.HALFTIME) {
                     match.round = 0; // Set to 0 so startNextRound's round++ makes it 1
-                    match.gameClockMs = TEAM_MATCH_CONFIG.HALF_DURATION_MS; // Reset clock for second half
-                    // #region agent log
-                    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:endHalf:halftimeTimeout',message:'H6/H7: halftime timeout fired, resuming 2nd half',data:{matchId:match.matchId,roundBeforeStartNextRound:match.round,gameClockMsReset:match.gameClockMs,isAIMatch:match.isAIMatch,botIntervalsActive:match.botIntervals?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6,H7'})}).catch(()=>{});
-                    // #endregion
+                    match.gameClockMs = halfConfig.HALF_DURATION_MS; // Reset clock for second half
                     startNextRound(match, ns);
                 }
             }, halftimeDuration);
@@ -4474,20 +4847,15 @@ app.prepare().then(async () => {
      * Generate next question for player
      */
     function generateNextQuestion(match, player, team, ns) {
-        // #region agent log
-        const qNum = team.questionsInSlot + 1;
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:generateNextQuestion:entry',message:'Q6-H1: generateNextQuestion called',data:{playerId:player.odUserId,teamId:team.teamId,questionsInSlotBefore:team.questionsInSlot,questionNumber:qNum,currentSlot:team.currentSlot,willBeQ6:qNum>5},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'Q6-H1'})}).catch(()=>{});
-        // #endregion
-        
+
         const slotOp = getSlotOperation(team.currentSlot, match.operation, team); // Use team's slot
         player.currentQuestion = generateTeamQuestion(slotOp);
         player.questionStartTime = Date.now();
         player.currentInput = '';
-        
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:generateNextQuestion',message:'H3C: generating next question (per-team)',data:{playerId:player.odUserId,teamId:team.teamId,slotOp,teamCurrentSlot:team.currentSlot,teamQuestionsInSlot:team.questionsInSlot,questionText:player.currentQuestion.question},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3C'})}).catch(()=>{});
-        // #endregion
-        
+
+        // Start the question timeout timer
+        startQuestionTimer(match, team, player, ns);
+
         // Send to team only - use TEAM's slot and questions counters
         ns.to(`team:${match.matchId}:${team.teamId}`).emit('question_update', {
             questionId: Date.now().toString(),
@@ -4507,21 +4875,26 @@ app.prepare().then(async () => {
         team.currentSlot++;
         
         // Mark previous player as complete and inactive
-        const prevPlayer = getActivePlayer(team, team.currentSlot - 1);
+        const prevPlayer = getActivePlayer(team, team.currentSlot - 1, match.round);
         if (prevPlayer) {
             prevPlayer.isActive = false;
             prevPlayer.isComplete = true;
+            // Clear any remaining question timers for the previous player
+            clearQuestionTimer(prevPlayer);
         }
         
+        // Use mode-specific config for slots per round
+        const matchConfig = getMatchConfig(match.mode || '5v5');
+        
         // Check if this team completed all slots for the round
-        if (team.currentSlot > TEAM_MATCH_CONFIG.SLOTS_PER_ROUND) {
-            console.log(`[TeamMatch] Team ${team.teamId} completed all slots. currentSlot=${team.currentSlot}`);
+        if (team.currentSlot > matchConfig.SLOTS_PER_ROUND) {
+            console.log(`[TeamMatch] Team ${team.teamId} completed all slots for ${match.mode || '5v5'} mode. currentSlot=${team.currentSlot}, SLOTS_PER_ROUND=${matchConfig.SLOTS_PER_ROUND}`);
             
             // This team finished the round - check if both teams are done
             const otherTeam = team.teamId === match.team1.teamId ? match.team2 : match.team1;
             console.log(`[TeamMatch] Other team (${otherTeam.teamId}) currentSlot=${otherTeam.currentSlot}`);
             
-            if (otherTeam.currentSlot > TEAM_MATCH_CONFIG.SLOTS_PER_ROUND) {
+            if (otherTeam.currentSlot > matchConfig.SLOTS_PER_ROUND) {
                 // Both teams finished - end the round
                 console.log(`[TeamMatch] Both teams finished! Calling endRound for round ${match.round}`);
                 endRound(match, ns);
@@ -4535,12 +4908,13 @@ app.prepare().then(async () => {
         } else {
             // Activate next slot player for this team
             const slotOp = getSlotOperation(team.currentSlot, match.operation, team);
-            const activePlayer = getActivePlayer(team, team.currentSlot);
+            const activePlayer = getActivePlayer(team, team.currentSlot, match.round);
             
             if (activePlayer) {
                 activePlayer.isActive = true;
                 activePlayer.currentQuestion = generateTeamQuestion(slotOp);
                 activePlayer.questionStartTime = Date.now();
+                activePlayer.timeoutsInSlot = 0; // Reset timeout counter for new slot
                 
                 // Countdown notification for this team
                 ns.to(`team:${match.matchId}:${team.teamId}`).emit('handoff_countdown', {
@@ -4551,7 +4925,7 @@ app.prepare().then(async () => {
                     countdownMs: TEAM_MATCH_CONFIG.HANDOFF_COUNTDOWN_MS,
                 });
                 
-                // After countdown, send question
+                // After countdown, send question and start timeout timer
                 setTimeout(() => {
                     if (activePlayer.currentQuestion) {
                         ns.to(`team:${match.matchId}:${team.teamId}`).emit('question_update', {
@@ -4562,15 +4936,20 @@ app.prepare().then(async () => {
                             slotNumber: team.currentSlot,
                             questionInSlot: 1,
                         });
+                        // Start the question timeout timer after handoff
+                        startQuestionTimer(match, team, activePlayer, ns);
                     }
                 }, TEAM_MATCH_CONFIG.HANDOFF_COUNTDOWN_MS);
             }
             
             // Notify about this team's slot change (to own team)
+            // Include activePlayerId so client can update isActive state
             ns.to(`team:${match.matchId}:${team.teamId}`).emit('slot_change', {
                 teamId: team.teamId,
                 currentSlot: team.currentSlot,
                 slotOperation: slotOp,
+                activePlayerId: activePlayer?.odUserId,
+                activePlayerName: activePlayer?.odName,
             });
             
             // ALSO notify the opponent team about this team's slot change
@@ -4594,21 +4973,23 @@ app.prepare().then(async () => {
         
         // Mark previous players as complete and inactive
         for (const team of [match.team1, match.team2]) {
-            const prevPlayer = getActivePlayer(team, match.currentSlot - 1);
+            const prevPlayer = getActivePlayer(team, match.currentSlot - 1, match.round);
             if (prevPlayer) {
                 prevPlayer.isActive = false;
                 prevPlayer.isComplete = true;
             }
         }
         
-        if (match.currentSlot > TEAM_MATCH_CONFIG.SLOTS_PER_ROUND) {
+        // Use mode-specific config for slots per round
+        const matchConfig = getMatchConfig(match.mode || '5v5');
+        if (match.currentSlot > matchConfig.SLOTS_PER_ROUND) {
             // Round complete
             endRound(match, ns);
         } else {
             // Activate next slot players
             for (const team of [match.team1, match.team2]) {
                 const slotOp = getSlotOperation(match.currentSlot, match.operation, team);
-                const activePlayer = getActivePlayer(team, match.currentSlot);
+                const activePlayer = getActivePlayer(team, match.currentSlot, match.round);
                 if (activePlayer) {
                     activePlayer.isActive = true;
                     activePlayer.currentQuestion = generateTeamQuestion(slotOp);
@@ -4628,7 +5009,7 @@ app.prepare().then(async () => {
             // After countdown, send questions
             setTimeout(() => {
                 for (const team of [match.team1, match.team2]) {
-                    const activePlayer = getActivePlayer(team, match.currentSlot);
+                    const activePlayer = getActivePlayer(team, match.currentSlot, match.round);
                     if (activePlayer && activePlayer.currentQuestion) {
                         ns.to(`team:${match.matchId}:${team.teamId}`).emit('question_update', {
                             questionId: Date.now().toString(),
@@ -4667,27 +5048,36 @@ app.prepare().then(async () => {
             team2: match.team2.score,
         });
         
-        // Deactivate all players and reset Double Call-In for this round
+        // Deactivate all players, clear question timers, and reset Double Call-In ONLY if it was used this round
         for (const team of [match.team1, match.team2]) {
             for (const player of Object.values(team.players)) {
                 player.isActive = false;
+                // Clear any remaining question timers
+                clearQuestionTimer(player);
             }
-            // Reset Double Call-In active state for this round (it only lasts one round)
-            if (team.doubleCallinActive) {
-                console.log(`[TeamMatch] Resetting Double Call-In for team ${team.teamId} after round ${match.round}`);
+            // Reset Double Call-In ONLY if it was for THIS round (not a future round)
+            // This prevents resetting a Double Call-In scheduled for the next round
+            if (team.doubleCallinActive && team.doubleCallinForRound === match.round) {
+                console.log(`[TeamMatch] Resetting Double Call-In for team ${team.teamId} after round ${match.round} (was scheduled for round ${team.doubleCallinForRound})`);
+                team.doubleCallinActive = false;
+                team.doubleCallinSlot = null;
+                team.doubleCallinBenchedId = null;
+                team.doubleCallinForRound = null;
+            } else if (team.doubleCallinActive) {
+                console.log(`[TeamMatch] Preserving Double Call-In for team ${team.teamId}: scheduled for round ${team.doubleCallinForRound}, current round is ${match.round}`);
             }
-            team.doubleCallinActive = false;
-            team.doubleCallinSlot = null;
-            team.doubleCallinBenchedId = null;
         }
         
-        if (match.round === TEAM_MATCH_CONFIG.ROUNDS_PER_HALF) {
-            // Halftime
+        // Use mode-specific config for round/half checking
+        const roundConfig = getMatchConfig(match.mode || '5v5');
+        
+        if (match.round === roundConfig.ROUNDS_PER_HALF && match.half === 1) {
+            // End of 1st Half - go to Halftime
             match.phase = TEAM_MATCH_PHASES.HALFTIME;
             match.half = 2;
             
             // Calculate halftime duration, including any pending timeout extensions
-            let halftimeDuration = TEAM_MATCH_CONFIG.HALFTIME_DURATION_MS;
+            let halftimeDuration = roundConfig.HALFTIME_DURATION_MS;
             let appliedExtensions = [];
             
             for (const team of [match.team1, match.team2]) {
@@ -4735,22 +5125,30 @@ app.prepare().then(async () => {
                     match.halftimeTimer = null;
                     if (match.phase === TEAM_MATCH_PHASES.HALFTIME) {
                         match.round = 0;
-                        match.gameClockMs = TEAM_MATCH_CONFIG.HALF_DURATION_MS;
+                        match.gameClockMs = roundConfig.HALF_DURATION_MS;
                         startNextRound(match, ns);
                     }
                 }
             }, 1000);
             
-        } else if (match.round >= TEAM_MATCH_CONFIG.TOTAL_ROUNDS) {
-            // Match complete
+        } else if (match.round >= roundConfig.TOTAL_ROUNDS || 
+                   (match.round === roundConfig.ROUNDS_PER_HALF && match.half === 2)) {
+            // Match complete - either reached total rounds (legacy) or Round 4 of 2nd Half
+            console.log(`[TeamMatch] Match complete: round=${match.round}, half=${match.half}`);
             endTeamMatch(match, ns);
+            
+        } else if (match.half === 2 && match.round === roundConfig.ROUNDS_PER_HALF - 1) {
+            // End of Round 3 in 2nd Half - SOLO DECISION PHASE
+            // IGL must choose between Normal relay or Anchor Solo for the final round
+            console.log(`[TeamMatch] Entering solo decision phase after round ${match.round}`);
+            startSoloDecisionPhase(match, ns);
             
         } else {
             // Tactical break between rounds
             match.phase = TEAM_MATCH_PHASES.BREAK;
             
             // Calculate break duration, including any pending timeout extensions
-            let breakDuration = TEAM_MATCH_CONFIG.BREAK_DURATION_MS;
+            let breakDuration = roundConfig.BREAK_DURATION_MS;
             let appliedExtensions = [];
             
             for (const team of [match.team1, match.team2]) {
@@ -4819,9 +5217,6 @@ app.prepare().then(async () => {
         match.phase = TEAM_MATCH_PHASES.ROUND_COUNTDOWN;
         match.roundCountdownStartTime = Date.now();
         
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:startNextRound',message:'H7/H8: startNextRound called - entering countdown',data:{matchId:match.matchId,roundBefore:roundBeforeIncrement,roundAfter:match.round,half:match.half,gameClockMs:match.gameClockMs,isAIMatch:match.isAIMatch,botIntervalsCount:match.botIntervals?.length||0},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7,H8'})}).catch(()=>{});
-        // #endregion
         
         // Reset per-team slot state for new round
         for (const team of [match.team1, match.team2]) {
@@ -4830,9 +5225,6 @@ app.prepare().then(async () => {
             for (const player of Object.values(team.players)) {
                 player.isComplete = false;
             }
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:startNextRound:teamState',message:'DC-H6: Team state at round start',data:{teamId:team.teamId,round:match.round,doubleCallinActive:team.doubleCallinActive,doubleCallinSlot:team.doubleCallinSlot,anchorId:team.anchorId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DC-H6'})}).catch(()=>{});
-            // #endregion
         }
         
         // Emit round_countdown event to clients with initial state
@@ -4878,6 +5270,127 @@ app.prepare().then(async () => {
             }
         }, 1000);
     }
+
+    /**
+     * Start the Solo Decision phase before the final round of 2nd half
+     * IGLs have 10 seconds to choose NORMAL or ANCHOR SOLO
+     */
+    function startSoloDecisionPhase(match, ns) {
+        match.phase = TEAM_MATCH_PHASES.SOLO_DECISION;
+        
+        const matchConfig = getMatchConfig(match.mode || '5v5');
+        const decisionDuration = matchConfig.SOLO_DECISION_DURATION_MS;
+        
+        // Reset solo decision state for both teams
+        match.team1.anchorSoloDecision = null;
+        match.team2.anchorSoloDecision = null;
+        
+        // Notify all players about the solo decision phase
+        const team1Anchor = match.team1.players[match.team1.anchorId];
+        const team2Anchor = match.team2.players[match.team2.anchorId];
+        
+        ns.to(match.matchId).emit('solo_decision_phase', {
+            round: match.round,
+            half: match.half,
+            nextRound: match.round + 1,
+            durationMs: decisionDuration,
+            team1: {
+                teamId: match.team1.teamId,
+                teamName: match.team1.teamName,
+                iglId: match.team1.iglId,
+                anchorId: match.team1.anchorId,
+                anchorName: team1Anchor?.odName || 'Unknown',
+            },
+            team2: {
+                teamId: match.team2.teamId,
+                teamName: match.team2.teamName,
+                iglId: match.team2.iglId,
+                anchorId: match.team2.anchorId,
+                anchorName: team2Anchor?.odName || 'Unknown',
+            },
+        });
+        
+        console.log(`[TeamMatch] Solo decision phase started for match ${match.matchId} (${decisionDuration}ms)`);
+        
+        // Auto-select NORMAL for AI team IGLs immediately
+        for (const team of [match.team1, match.team2]) {
+            if (isAITeammate(team.iglId) || isAIBot(team.iglId)) {
+                team.anchorSoloDecision = 'normal';
+                console.log(`[TeamMatch] AI IGL for ${team.teamName} auto-selected NORMAL`);
+                ns.to(match.matchId).emit('solo_decision_made', {
+                    teamId: team.teamId,
+                    teamName: team.teamName,
+                    decision: 'normal',
+                    anchorId: team.anchorId,
+                    anchorName: team.players[team.anchorId]?.odName || 'AI',
+                });
+            }
+        }
+        
+        // Check if both teams already decided (e.g., both AI)
+        if (match.team1.anchorSoloDecision !== null && match.team2.anchorSoloDecision !== null) {
+            revealSoloDecisionsAndStartFinalRound(match, ns);
+            return;
+        }
+        
+        // Start decision timer - auto-select NORMAL if no decision made
+        match.soloDecisionTimer = setTimeout(() => {
+            console.log(`[TeamMatch] Solo decision timeout - auto-selecting NORMAL for undecided teams`);
+            
+            // Auto-select NORMAL for any team that hasn't decided
+            for (const team of [match.team1, match.team2]) {
+                if (team.anchorSoloDecision === null) {
+                    team.anchorSoloDecision = 'normal';
+                    console.log(`[TeamMatch] ${team.teamName} auto-selected NORMAL (timeout)`);
+                    ns.to(match.matchId).emit('solo_decision_made', {
+                        teamId: team.teamId,
+                        teamName: team.teamName,
+                        decision: 'normal',
+                        anchorId: team.anchorId,
+                        anchorName: team.players[team.anchorId]?.odName || 'Unknown',
+                        autoSelected: true,
+                    });
+                }
+            }
+            
+            revealSoloDecisionsAndStartFinalRound(match, ns);
+        }, decisionDuration);
+    }
+
+    /**
+     * Reveal both teams' solo decisions and start the final round
+     */
+    function revealSoloDecisionsAndStartFinalRound(match, ns) {
+        const team1Anchor = match.team1.players[match.team1.anchorId];
+        const team2Anchor = match.team2.players[match.team2.anchorId];
+        
+        // Emit the reveal event
+        ns.to(match.matchId).emit('solo_decisions_revealed', {
+            team1: {
+                teamId: match.team1.teamId,
+                teamName: match.team1.teamName,
+                decision: match.team1.anchorSoloDecision,
+                anchorName: team1Anchor?.odName || 'Unknown',
+                anchorSoloActive: match.team1.anchorSoloActive,
+            },
+            team2: {
+                teamId: match.team2.teamId,
+                teamName: match.team2.teamName,
+                decision: match.team2.anchorSoloDecision,
+                anchorName: team2Anchor?.odName || 'Unknown',
+                anchorSoloActive: match.team2.anchorSoloActive,
+            },
+        });
+        
+        console.log(`[TeamMatch] Solo decisions revealed:`);
+        console.log(`  - ${match.team1.teamName}: ${match.team1.anchorSoloDecision?.toUpperCase()}`);
+        console.log(`  - ${match.team2.teamName}: ${match.team2.anchorSoloDecision?.toUpperCase()}`);
+        
+        // Brief delay to show the reveal, then start final round
+        setTimeout(() => {
+            startNextRound(match, ns);
+        }, 2000); // 2 second reveal animation
+    }
     
     /**
      * Begin the active phase after countdown completes
@@ -4891,14 +5404,25 @@ app.prepare().then(async () => {
         // Get slot1 operation for team1 (used for the broadcast event)
         const slot1Op = getSlotOperation(1, match.operation, match.team1);
         
-        // Activate first slot players
+        // Activate first slot players and track their IDs for the round_start event
+        let team1ActivePlayerId = null;
+        let team2ActivePlayerId = null;
+        
         for (const team of [match.team1, match.team2]) {
             const teamSlot1Op = getSlotOperation(1, match.operation, team);
-            const activePlayer = getActivePlayer(team, 1);
+            const activePlayer = getActivePlayer(team, 1, match.round);
             if (activePlayer) {
                 activePlayer.isActive = true;
                 activePlayer.currentQuestion = generateTeamQuestion(teamSlot1Op);
                 activePlayer.questionStartTime = Date.now();
+                activePlayer.timeoutsInSlot = 0; // Reset timeout counter for new round
+                
+                // Track which player is active for each team
+                if (team === match.team1) {
+                    team1ActivePlayerId = activePlayer.odUserId;
+                } else {
+                    team2ActivePlayerId = activePlayer.odUserId;
+                }
             }
         }
         
@@ -4907,11 +5431,13 @@ app.prepare().then(async () => {
             half: match.half,
             currentSlot: 1,
             slotOperation: slot1Op,
+            team1ActivePlayerId,
+            team2ActivePlayerId,
         });
         
-        // Send questions to teams
+        // Send questions to teams and start timeout timers
         for (const team of [match.team1, match.team2]) {
-            const activePlayer = getActivePlayer(team, 1);
+            const activePlayer = getActivePlayer(team, 1, match.round);
             if (activePlayer && activePlayer.currentQuestion) {
                 ns.to(`team:${match.matchId}:${team.teamId}`).emit('question_update', {
                     questionId: Date.now().toString(),
@@ -4921,6 +5447,8 @@ app.prepare().then(async () => {
                     slotNumber: 1,
                     questionInSlot: 1,
                 });
+                // Start the question timeout timer
+                startQuestionTimer(match, team, activePlayer, ns);
             }
         }
     }
@@ -5016,10 +5544,11 @@ app.prepare().then(async () => {
      * Called by the matchmaking system when a match is found
      * Now async to support Redis storage
      */
-    global.createTeamMatch = async function(matchId, team1, team2, operation, matchType) {
-        const match = initTeamMatchState(matchId, team1, team2, operation, matchType);
+    global.createTeamMatch = async function(matchId, team1, team2, operation, matchType, mode = '5v5') {
+        const matchMode = mode || team1.odMode || '5v5';
+        const match = initTeamMatchState(matchId, team1, team2, operation, matchType, matchMode);
         await saveTeamMatchState(matchId, match);
-        console.log(`[TeamMatch] Match ${matchId} created and saved to Redis: ${team1.odTeamName || 'Team 1'} vs ${team2.odTeamName || 'Team 2'}`);
+        console.log(`[TeamMatch] Match ${matchId} (${matchMode}) created and saved to Redis: ${team1.odTeamName || 'Team 1'} vs ${team2.odTeamName || 'Team 2'}`);
         return match;
     };
     

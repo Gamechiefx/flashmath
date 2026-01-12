@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 export default async function TeamQueuePage({
     searchParams,
 }: {
-    searchParams: Promise<{ partyId?: string; phase?: string }>;
+    searchParams: Promise<{ partyId?: string; phase?: string; mode?: string }>;
 }) {
     const session = await auth();
     
@@ -28,22 +28,24 @@ export default async function TeamQueuePage({
     const params = await searchParams;
     const partyId = params.partyId;
     const initialPhase = (params.phase as 'teammates' | 'opponent') || 'opponent';
+    // Get mode from URL params or default to 5v5
+    const mode = (params.mode as '5v5' | '2v2') || '5v5';
     
     if (!partyId) {
-        redirect('/arena/teams/setup?mode=5v5');
+        redirect(`/arena/teams/setup?mode=${mode}`);
     }
 
     // Get party data to verify user is in the party
     const partyResult = await getPartyData();
     
     if (!partyResult.party || partyResult.party.id !== partyId) {
-        redirect('/arena/teams/setup?mode=5v5');
+        redirect(`/arena/teams/setup?mode=${mode}`);
     }
     
     // CRITICAL: If the party is NOT in the queue, redirect back to setup
     // This prevents the redirect loop where client detects null queueStatus and redirects
     if (!partyResult.party.queueStatus) {
-        redirect('/arena/teams/setup?mode=5v5&fromQueue=true');
+        redirect(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
     }
 
     return (
@@ -53,6 +55,7 @@ export default async function TeamQueuePage({
             currentUserId={session.user.id as string}
             currentUserName={session.user.name || 'Player'}
             initialPhase={initialPhase}
+            mode={mode}
         />
     );
 }

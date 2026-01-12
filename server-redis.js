@@ -58,6 +58,7 @@ const KEYS = {
     QUEUE_ENTRY: 'arena:queue:entry:',
     QUEUE_PARTY: 'arena:queue:party:',
     MATCHMAKING_QUEUE: 'arena:matchmaking:queue',
+    MATCHMAKING_RESULT: 'arena:matchmaking:result:',  // Match result by partyId
     
     // Leaderboards
     LEADERBOARD_ELO: 'leaderboard:elo:',
@@ -381,6 +382,8 @@ async function saveTeamMatch(match) {
             gameClockMs: (match.gameClockMs || 360000).toString(),
             operation: match.operation || 'mixed',
             matchType: match.matchType || 'casual',
+            mode: match.mode || '5v5',  // CRITICAL: Include mode for 2v2/5v5 distinction
+            slotOperations: JSON.stringify(match.slotOperations || []),  // Include slot operations
             isAIMatch: match.isAIMatch ? '1' : '0',
             aiDifficulty: match.aiDifficulty || '',
             startTime: (match.startTime || Date.now()).toString(),
@@ -424,6 +427,10 @@ function saveTeamState(pipeline, baseKey, teamName, team) {
         timeoutsUsed: (team.timeoutsUsed || 0).toString(),
         slotAssignments: JSON.stringify(team.slotAssignments || {}),
         isHome: team.isHome ? '1' : '0',
+        // Anchor Solo state
+        anchorSoloActive: team.anchorSoloActive ? '1' : '0',
+        anchorSoloDecision: team.anchorSoloDecision || '',
+        usedAnchorSolo: team.usedAnchorSolo ? '1' : '0',
     });
     pipeline.expire(teamKey, TTL.TEAM_MATCH);
     
@@ -457,6 +464,14 @@ async function getTeamMatch(matchId) {
             return null;
         }
         
+        // Parse slotOperations from JSON (or default to empty array)
+        let slotOperations = [];
+        try {
+            slotOperations = matchData.slotOperations ? JSON.parse(matchData.slotOperations) : [];
+        } catch (e) {
+            console.error('[Redis] Failed to parse slotOperations:', e);
+        }
+        
         return {
             matchId: matchData.id,
             phase: matchData.phase,
@@ -465,6 +480,8 @@ async function getTeamMatch(matchId) {
             gameClockMs: parseInt(matchData.gameClockMs, 10),
             operation: matchData.operation,
             matchType: matchData.matchType,
+            mode: matchData.mode || '5v5',  // CRITICAL: Include mode for 2v2/5v5 distinction
+            slotOperations,                  // Include slot operations for UI
             isAIMatch: matchData.isAIMatch === '1',
             aiDifficulty: matchData.aiDifficulty,
             startTime: parseInt(matchData.startTime, 10),
@@ -506,6 +523,10 @@ function parseTeamState(teamData, playersData) {
         timeoutsUsed: parseInt(teamData.timeoutsUsed, 10),
         slotAssignments: teamData.slotAssignments ? JSON.parse(teamData.slotAssignments) : {},
         isHome: teamData.isHome === '1',
+        // Anchor Solo state
+        anchorSoloActive: teamData.anchorSoloActive === '1',
+        anchorSoloDecision: teamData.anchorSoloDecision || null,
+        usedAnchorSolo: teamData.usedAnchorSolo === '1',
         players,
     };
 }
@@ -760,6 +781,53 @@ async function getQueueSize() {
     return safeRedisOp(async () => {
         return await redis.zcard(KEYS.QUEUE_1V1);
     }, 0);
+}
+
+/**
+ * Save matchmaking result (when two parties are matched for a PvP game)
+ * This allows the Socket.IO server to retrieve match data when players connect.
+ * Stored by partyId so both parties can look up the match.
+ * 
+ * NOTE: team-matchmaking.ts stores match results under 'team:match:${partyId}'
+ * so we use the same key pattern for compatibility.
+ */
+const TEAM_MATCH_RESULT_KEY = 'team:match:';
+
+async function saveMatchFromMatchmaking(partyId, matchResult) {
+    return safeRedisOp(async () => {
+        const key = TEAM_MATCH_RESULT_KEY + partyId;
+        await redis.set(key, JSON.stringify(matchResult), 'EX', TTL.MATCH_SETUP);
+        console.log(`[Redis] Saved matchmaking result for party ${partyId}, matchId=${matchResult.matchId}`);
+        return true;
+    }, false);
+}
+
+/**
+ * Get matchmaking result by partyId
+ * Returns the match result data so the server can initialize the match.
+ * Uses the same key pattern as team-matchmaking.ts: 'team:match:${partyId}'
+ */
+async function getMatchFromMatchmaking(partyId) {
+    return safeRedisOp(async () => {
+        const key = TEAM_MATCH_RESULT_KEY + partyId;
+        const data = await redis.get(key);
+        if (!data) {
+            console.log(`[Redis] No matchmaking result found for party ${partyId}`);
+            return null;
+        }
+        console.log(`[Redis] Found matchmaking result for party ${partyId}`);
+        return JSON.parse(data);
+    }, null);
+}
+
+/**
+ * Delete matchmaking result after match is initialized
+ */
+async function deleteMatchFromMatchmaking(partyId) {
+    return safeRedisOp(async () => {
+        await redis.del(TEAM_MATCH_RESULT_KEY + partyId);
+        return true;
+    }, false);
 }
 
 // =============================================================================
@@ -1179,6 +1247,11 @@ module.exports = {
     getQueueEntry,
     findMatchCandidates,
     getQueueSize,
+    
+    // Matchmaking Results (PvP match data for Socket.IO server)
+    saveMatchFromMatchmaking,
+    getMatchFromMatchmaking,
+    deleteMatchFromMatchmaking,
     
     // Leaderboards
     updateLeaderboard,

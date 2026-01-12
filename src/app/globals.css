@@ -662,3 +662,44 @@ input[type="number"] {
 .animate-badge-bounce {
   animation: badge-bounce 0.5s ease-out;
 }
+
+/* =============================================================================
+   SCROLLBAR HIDING - Full page lock for arena flows
+   ============================================================================= */
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  overflow: hidden;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* =============================================================================
+   SCROLLBAR HIDING UTILITIES
+   ============================================================================= */
+
+/* Hide scrollbar but allow scrolling */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari, Opera */
+}
+
+/* Hide scrollbar on html/body for specific pages */
+.arena-teams-flow,
+.arena-teams-flow body {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  overflow: hidden;
+}
+
+.arena-teams-flow::-webkit-scrollbar,
+.arena-teams-flow body::-webkit-scrollbar {
+  display: none;
+}

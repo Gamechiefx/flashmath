@@ -12,9 +12,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { 
+import {
     Loader2, Users, Crown, Anchor, Zap, Search, UserPlus,
-    CheckCircle, AlertCircle, X, Vote, Clock
+    CheckCircle, AlertCircle, X, Vote, Clock, Maximize, Minimize
 } from 'lucide-react';
 import { Party, updatePartyQueueStatus } from '@/lib/actions/social';
 import { 
@@ -42,6 +42,7 @@ interface TeamQueueClientProps {
     currentUserId: string;
     currentUserName: string;
     initialPhase: 'teammates' | 'opponent';
+    mode: '5v5' | '2v2';  // Match mode
 }
 
 // Module-level state to persist across Fast Refresh
@@ -54,6 +55,7 @@ export function TeamQueueClient({
     currentUserId,
     currentUserName,
     initialPhase,
+    mode,
 }: TeamQueueClientProps) {
     const router = useRouter();
     
@@ -68,7 +70,6 @@ export function TeamQueueClient({
     
     // #region agent log
     if (typeof window !== 'undefined') {
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:MOUNT',message:'Queue page mounted',data:{partyId,queueStatus:party.queueStatus,initialPhase,isLeader:party.leaderId===currentUserId,url:window.location.href},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
     }
     // #endregion
     
@@ -87,7 +88,42 @@ export function TeamQueueClient({
     const [showIGLModal, setShowIGLModal] = useState(false);
     const [iglSelectionTime, setIglSelectionTime] = useState(25);
     const [newPartyId, setNewPartyId] = useState<string | null>(null);
-    
+
+    // Fullscreen state
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    // Track fullscreen state changes
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        setIsFullscreen(!!document.fullscreenElement);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+        };
+    }, []);
+
+    // Toggle fullscreen
+    const toggleFullscreen = async () => {
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            } else {
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    await elem.requestFullscreen();
+                } else if ((elem as any).webkitRequestFullscreen) {
+                    await (elem as any).webkitRequestFullscreen();
+                }
+            }
+        } catch (err) {
+            console.log('[TeamQueue] Fullscreen toggle failed:', err);
+        }
+    };
+
     const isLeader = party.leaderId === currentUserId;
     const partySize = party.members.length;
     const needsTeammates = partySize < 5;
@@ -131,7 +167,6 @@ export function TeamQueueClient({
             const result = await getPartyData();
             
             // #region agent log - H6: Track fresh status check
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:FRESH_STATUS_CHECK',message:'Fresh queue status check on mount',data:{propsQueueStatus:party.queueStatus,freshQueueStatus:result.party?.queueStatus,userId:currentUserId?.slice(-8)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H6'})}).catch(()=>{});
             // #endregion
             
             if (!result.party?.queueStatus) {
@@ -159,7 +194,6 @@ export function TeamQueueClient({
     // Real-time queue status listener - instant notification when leader cancels
     useEffect(() => {
         // #region agent log - Track socket event processing on queue page
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:SOCKET_EFFECT',message:'Queue page socket effect triggered',data:{hasUpdate:!!latestQueueStatusUpdate,updatePartyId:latestQueueStatusUpdate?.partyId,currentPartyId:partyId,queueStatus:latestQueueStatusUpdate?.queueStatus,isRedirecting:isRedirectingRef.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D,E'})}).catch(()=>{});
         // #endregion
         
         if (!latestQueueStatusUpdate) return;
@@ -167,7 +201,6 @@ export function TeamQueueClient({
         // Only react to updates for our party
         if (latestQueueStatusUpdate.partyId !== partyId) {
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:SOCKET_WRONG_PARTY',message:'Socket update for different party - ignoring',data:{updatePartyId:latestQueueStatusUpdate.partyId,currentPartyId:partyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
             return;
         }
@@ -179,14 +212,12 @@ export function TeamQueueClient({
             if (isRedirectingRef.current) {
                 console.log('[TeamQueue] Already redirecting, ignoring socket event');
                 // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:SOCKET_ALREADY_REDIRECTING',message:'Already redirecting - ignoring socket event',data:{partyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
                 // #endregion
                 return;
             }
             
             console.log('[TeamQueue] 🔌 Queue cancelled via socket - redirecting to setup');
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:SOCKET_REDIRECTING_TO_SETUP',message:'Queue cancelled - redirecting to setup via socket',data:{partyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D,E'})}).catch(()=>{});
             // #endregion
             isRedirectingRef.current = true;
             redirectingParties.add(partyId); // Persist across Fast Refresh
@@ -259,7 +290,6 @@ export function TeamQueueClient({
                         }
                         console.log('[TeamQueue] ❌ 2 consecutive polls with no status - redirecting!');
                         // #region agent log
-                        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:NON_LEADER_REDIRECT',message:'Non-leader redirecting to setup due to null queueStatus',data:{partyId,noQueueStatusCount:noQueueStatusCount.current,url:window.location.href},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
                         // #endregion
                         isRedirectingRef.current = true;
                         redirectingParties.add(partyId); // Persist across Fast Refresh
@@ -365,7 +395,6 @@ export function TeamQueueClient({
                 }
                 console.log('[TeamQueue] ❌ Party queue status is NULL - redirecting to setup!');
                 // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:TEAMMATE_PHASE_REDIRECT',message:'Teammate phase - NULL queueStatus, redirecting to setup',data:{partyId,url:typeof window!=='undefined'?window.location.href:'SSR'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
                 // Party is not in queue, redirect back to setup
                 if (typeof window !== 'undefined') {
@@ -407,6 +436,8 @@ export function TeamQueueClient({
     // Poll for teammates
     useEffect(() => {
         if (phase !== 'teammates' || isJoining) return;
+        // #region agent log
+        // #endregion
 
         const poll = async () => {
             const result = await checkForTeammates(partyId);
@@ -588,7 +619,6 @@ export function TeamQueueClient({
             
             console.log('[TeamQueue] Fresh party queueStatus:', freshParty.party?.queueStatus);
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:OPPONENT_FRESH_CHECK',message:'Fresh party data for opponent phase',data:{freshQueueStatus:freshParty.party?.queueStatus,activePartyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C,E'})}).catch(()=>{});
             // #endregion
             
             if (!freshParty.party?.queueStatus) {
@@ -599,7 +629,6 @@ export function TeamQueueClient({
                 }
                 console.log('[TeamQueue] ❌ Party queue status is NULL (opponent) - redirecting to setup!');
                 // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:OPPONENT_REDIRECT_TO_SETUP',message:'Queue status NULL - redirecting to setup',data:{activePartyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
                 // Party is not in queue, redirect back to setup
                 if (typeof window !== 'undefined') {
@@ -613,13 +642,17 @@ export function TeamQueueClient({
             }
             
             console.log('[TeamQueue] ✅ Party is in queue, joining opponent search...');
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:JOINING_OPPONENT_QUEUE',message:'About to join opponent queue',data:{activePartyId,freshQueueStatus:freshParty.party?.queueStatus},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+            
+            // Read matchType from party state with fallback to 'ranked'
+            const matchType = freshParty.party?.queueState?.matchType || 'ranked';
+            
+            // #region agent log - HB: Track when queue page calls joinTeamQueue
             // #endregion
             setIsJoining(true);
             const result = await joinTeamQueue({
                 partyId: activePartyId,
-                matchType: 'ranked',
+                matchType: matchType,
+                mode: mode,  // Pass the mode from props
             });
             
             if (!result.success) {
@@ -632,7 +665,7 @@ export function TeamQueueClient({
         };
         
         joinOpponentSearch();
-    }, [phase, partyId, newPartyId, isLeader, router]);
+    }, [phase, partyId, newPartyId, isLeader, router, mode]);
 
     // Poll for match
     useEffect(() => {
@@ -663,15 +696,23 @@ export function TeamQueueClient({
     }, [partyId, newPartyId, phase, isJoining, match]);
 
     // Navigate to match when found
+    // Navigate to match when found - include partyId in URL for server lookup
     useEffect(() => {
         if (match) {
+            const activePartyId = newPartyId || partyId;
+            // #region agent log - MATCH_NAVIGATION: Critical tracking of partyId at navigation time
+            // #endregion
+            console.log('[TeamQueue] Match found - navigating with partyId:', { matchId: match.matchId, activePartyId, partyIdProp: partyId, newPartyId });
             const timeout = setTimeout(() => {
-                router.push(`/arena/teams/match/${match.matchId}`);
+                // CRITICAL: Include partyId in URL - server needs it to look up match from Redis
+                const targetUrl = `/arena/teams/match/${match.matchId}?partyId=${activePartyId}`;
+                console.log('[TeamQueue] Navigating to:', targetUrl);
+                router.push(targetUrl);
             }, 2000);
-            
+
             return () => clearTimeout(timeout);
         }
-    }, [match, router]);
+    }, [match, router, partyId, newPartyId]);
 
     const handleLeaveQueue = async () => {
         console.log('[TeamQueue] === handleLeaveQueue CALLED ===');
@@ -701,7 +742,6 @@ export function TeamQueueClient({
         // This ensures the setup page won't see a stale queueStatus
         console.log('[TeamQueue] Clearing queue status in DB...');
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:LEAVE_QUEUE_BEFORE_CLEAR',message:'About to clear queue status',data:{partyId,phase},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
         const clearResult = await updatePartyQueueStatus(partyId, null);
         console.log('[TeamQueue] Queue status cleared');
@@ -713,7 +753,6 @@ export function TeamQueueClient({
         }
         
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-queue-client.tsx:LEAVE_QUEUE_AFTER_CLEAR',message:'Queue status cleared in DB',data:{partyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
         
         // Small delay to ensure the update propagates
@@ -754,9 +793,18 @@ export function TeamQueueClient({
     };
 
     return (
-        <div className="min-h-screen bg-background text-foreground 
-                        flex items-center justify-center p-6">
-            
+        <div className="h-screen overflow-hidden no-scrollbar bg-background text-foreground
+                        flex items-center justify-center p-4">
+
+            {/* Fullscreen Toggle Button */}
+            <button
+                onClick={toggleFullscreen}
+                className="fixed top-4 right-4 z-50 p-2.5 rounded-xl bg-black/40 border border-white/10 hover:border-primary/50 text-white/60 hover:text-primary transition-all backdrop-blur-sm hover:bg-primary/10"
+                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            >
+                {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+            </button>
+
             {/* IGL Selection Modal */}
             {assembledTeam && (
                 <IGLSelectionModal
@@ -845,27 +893,27 @@ export function TeamQueueClient({
                 >
                     {/* Header */}
                     <div className={cn(
-                        "p-6 border-b border-[var(--glass-border)]",
+                        "p-4 border-b border-[var(--glass-border)]",
                         phase === 'teammates' ? "bg-accent/10" : "bg-primary/10"
                     )}>
                         <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                                 <div className={cn(
-                                    "w-12 h-12 rounded-xl flex items-center justify-center",
+                                    "w-10 h-10 rounded-xl flex items-center justify-center",
                                     phase === 'teammates' ? "bg-accent/20" : "bg-primary/20"
                                 )}>
                                     {phase === 'teammates' ? (
-                                        <UserPlus className="w-6 h-6 text-accent" />
+                                        <UserPlus className="w-5 h-5 text-accent" />
                                     ) : (
-                                        <Users className="w-6 h-6 text-primary" />
+                                        <Users className="w-5 h-5 text-primary" />
                                     )}
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-card-foreground">
+                                    <h2 className="text-lg font-bold text-card-foreground">
                                         {phase === 'teammates' ? 'Finding Teammates' : 'Team Queue'}
                                     </h2>
-                                    <p className="text-sm text-muted-foreground">
-                                        5v5 Team Arena
+                                    <p className="text-xs text-muted-foreground">
+                                        5v5 Team Arena • {party.queueState?.matchType === 'casual' ? 'Casual Match' : 'Ranked Match'}
                                     </p>
                                 </div>
                             </div>
@@ -884,18 +932,51 @@ export function TeamQueueClient({
                         </div>
                     </div>
 
+                    {/* Match Type Display */}
+                    <div className="px-4 py-3 border-b border-[var(--glass-border)] bg-card/30">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <div className={cn(
+                                    "w-3 h-3 rounded-full",
+                                    party.queueState?.matchType === 'casual' 
+                                        ? "bg-blue-400" 
+                                        : "bg-amber-400"
+                                )}>
+                                </div>
+                                <div>
+                                    <h3 className="font-semibold text-card-foreground">
+                                        {party.queueState?.matchType === 'casual' ? 'Casual Match' : 'Ranked Match'}
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground">
+                                        {party.queueState?.matchType === 'casual' 
+                                            ? 'No ELO changes • AI teammates will fill empty slots'
+                                            : 'ELO will be affected • Full team required'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className={cn(
+                                "px-2 py-1 rounded text-xs font-medium",
+                                party.queueState?.matchType === 'casual'
+                                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                                    : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                            )}>
+                                {party.queueState?.matchType === 'casual' ? 'CASUAL' : 'RANKED'}
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Queue Status */}
-                    <div data-testid="queue-status" className="p-8 text-center">
+                    <div data-testid="queue-status" className="p-6 text-center">
                         {isJoining ? (
-                            <div className="flex flex-col items-center gap-4">
-                                <Loader2 className="w-12 h-12 text-primary animate-spin" />
+                            <div className="flex flex-col items-center gap-3">
+                                <Loader2 className="w-10 h-10 text-primary animate-spin" />
                                 <p className="text-muted-foreground">
                                     {phase === 'teammates' ? 'Joining teammate search...' : 'Joining queue...'}
                                 </p>
                             </div>
                         ) : error ? (
-                            <div className="flex flex-col items-center gap-4 text-red-500">
-                                <AlertCircle className="w-12 h-12" />
+                            <div className="flex flex-col items-center gap-3 text-red-500">
+                                <AlertCircle className="w-10 h-10" />
                                 <p>{error}</p>
                                 <button
                                     onClick={() => router.push('/arena/teams/setup?mode=5v5')}
@@ -908,7 +989,7 @@ export function TeamQueueClient({
                         ) : (
                             <>
                                 {/* Animated searching indicator */}
-                                <div className="relative w-32 h-32 mx-auto mb-6">
+                                <div className="relative w-24 h-24 mx-auto mb-4">
                                     <motion.div
                                         animate={{ rotate: 360 }}
                                         transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
@@ -920,47 +1001,47 @@ export function TeamQueueClient({
                                     <motion.div
                                         animate={{ rotate: -360 }}
                                         transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                                        className="absolute inset-2 rounded-full 
+                                        className="absolute inset-2 rounded-full
                                                    border-4 border-transparent border-t-primary"
                                     />
                                     <div className="absolute inset-0 flex items-center justify-center">
                                         {phase === 'teammates' ? (
-                                            <Search className="w-10 h-10 text-accent" />
+                                            <Search className="w-8 h-8 text-accent" />
                                         ) : (
-                                            <Zap className="w-10 h-10 text-primary" />
+                                            <Zap className="w-8 h-8 text-primary" />
                                         )}
                                     </div>
                                 </div>
 
-                                <h3 className="text-2xl font-bold mb-2 text-card-foreground">
-                                    {phase === 'teammates' 
-                                        ? 'Finding Teammates...' 
+                                <h3 className="text-xl font-bold mb-2 text-card-foreground">
+                                    {phase === 'teammates'
+                                        ? 'Finding Teammates...'
                                         : 'Finding Opponents...'}
                                 </h3>
-                                
-                                <p className="text-muted-foreground mb-6">
+
+                                <p className="text-sm text-muted-foreground mb-4">
                                     {phase === 'teammates'
                                         ? `Looking for ${5 - partySize} more player${5 - partySize > 1 ? 's' : ''} to complete your team`
                                         : 'Searching for teams with similar skill level'}
                                 </p>
 
                                 {/* Stats */}
-                                <div className="grid grid-cols-2 gap-4 max-w-xs mx-auto mb-8">
-                                    <div className="p-3 rounded-lg bg-card">
+                                <div className="grid grid-cols-2 gap-3 max-w-xs mx-auto mb-6">
+                                    <div className="p-2 rounded-lg bg-card">
                                         <p className="text-xs text-muted-foreground mb-1">Queue Time</p>
                                         <p className={cn(
-                                            "text-2xl font-mono font-bold",
+                                            "text-xl font-mono font-bold",
                                             phase === 'teammates' ? "text-accent" : "text-primary"
                                         )}>
                                             {formatTime(queueStatus?.queueTimeMs || 0)}
                                         </p>
                                     </div>
-                                    <div className="p-3 rounded-lg bg-card">
+                                    <div className="p-2 rounded-lg bg-card">
                                         <p className="text-xs text-muted-foreground mb-1">
                                             {phase === 'teammates' ? 'Team Size' : 'ELO Range'}
                                         </p>
-                                        <p className="text-2xl font-mono font-bold text-primary">
-                                            {phase === 'teammates' 
+                                        <p className="text-xl font-mono font-bold text-primary">
+                                            {phase === 'teammates'
                                                 ? `${queueStatus?.partySize || partySize}/5`
                                                 : `±${queueStatus?.currentEloRange || 0}`}
                                         </p>
@@ -971,8 +1052,8 @@ export function TeamQueueClient({
                     </div>
 
                     {/* Team Members */}
-                    <div className="px-6 pb-6">
-                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">
+                    <div className="px-4 pb-4">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
                             {phase === 'teammates' ? 'Your Party' : 'Your Team'}
                         </p>
                         <div className="grid grid-cols-5 gap-2">
@@ -1012,35 +1093,52 @@ export function TeamQueueClient({
                         </div>
                     </div>
 
-                    {/* Cancel Button (leader only) */}
-                    {isLeader && !match && (
-                        <div className="p-4 border-t border-[var(--glass-border)] bg-card/50">
-                            <button
-                                onClick={handleLeaveQueue}
-                                disabled={isLeaving}
-                                className="w-full py-3 rounded-lg bg-red-500/20 hover:bg-red-500/30 
-                                           border border-red-500/30 text-red-400 font-medium 
-                                           transition-colors disabled:opacity-50 flex items-center 
-                                           justify-center gap-2"
-                            >
-                                {isLeaving ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <>
-                                        <X className="w-4 h-4" />
-                                        {phase === 'igl_selection' 
-                                            ? 'Leave Team & Return to Setup' 
-                                            : 'Cancel Queue'}
-                                    </>
+                    {/* Cancel Button - Leader can cancel queue, non-leaders see info */}
+                    <div className="p-4 border-t border-[var(--glass-border)] bg-card/50">
+                        {isLeader && !match ? (
+                            <>
+                                <button
+                                    onClick={handleLeaveQueue}
+                                    disabled={isLeaving}
+                                    className="w-full py-3 rounded-lg bg-red-500/20 hover:bg-red-500/30 
+                                               border border-red-500/30 text-red-400 font-medium 
+                                               transition-colors disabled:opacity-50 flex items-center 
+                                               justify-center gap-2"
+                                >
+                                    {isLeaving ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <>
+                                            <X className="w-4 h-4" />
+                                            {phase === 'igl_selection' 
+                                                ? 'Leave Team & Return to Setup' 
+                                                : 'Cancel Queue'}
+                                        </>
+                                    )}
+                                </button>
+                                {phase === 'igl_selection' && (
+                                    <p className="text-xs text-muted-foreground text-center mt-2">
+                                        This will leave the assembled teammates and return your party to setup
+                                    </p>
                                 )}
+                            </>
+                        ) : !match ? (
+                            <div className="text-center text-sm text-muted-foreground">
+                                Only the party leader can cancel the queue
+                            </div>
+                        ) : (
+                            /* Fallback when match is found but loading - give users a way out */
+                            <button
+                                onClick={() => router.push('/arena/teams/setup?mode=5v5&fromQueue=true')}
+                                className="w-full py-3 rounded-lg bg-white/5 hover:bg-white/10 
+                                           border border-white/10 text-white/60 font-medium 
+                                           transition-colors flex items-center justify-center gap-2"
+                            >
+                                <X className="w-4 h-4" />
+                                Cancel & Return to Setup
                             </button>
-                            {phase === 'igl_selection' && (
-                                <p className="text-xs text-muted-foreground text-center mt-2">
-                                    This will leave the assembled teammates and return your party to setup
-                                </p>
-                            )}
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </motion.div>
             </div>
         </div>

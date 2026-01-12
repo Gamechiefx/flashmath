@@ -109,7 +109,6 @@ export function TeamSetupClient({
     // #region agent log - H3: Track render count
     setupRenderCount++;
     if (setupRenderCount % 10 === 0 || setupRenderCount <= 5) {
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:RENDER',message:'Setup component render',data:{renderCount:setupRenderCount,userId:currentUserId?.slice(-8),queueStatus:party?.queueStatus},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3'})}).catch(()=>{});
     }
     // #endregion
     
@@ -123,7 +122,6 @@ export function TeamSetupClient({
     
     // #region agent log
     if (typeof window !== 'undefined') {
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:MOUNT',message:'Setup page mounted',data:{fromQueue,initialQueueStatus:initialParty?.queueStatus,url:window.location.href,sessionStorage:sessionStorage.getItem('flashmath_just_left_queue')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,D'})}).catch(()=>{});
     }
     // #endregion
 
@@ -172,7 +170,6 @@ export function TeamSetupClient({
         }
         
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:MOUNT_EFFECT',message:'Mount effect running',data:{fromQueue,blockAutoRedirect:blockAutoRedirect.current,isRedirecting:isRedirecting.current,sessionStorage:storedValue,initialQueueStatusWasNull:initialQueueStatusWasNull.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A,B'})}).catch(()=>{});
         // #endregion
         
         // If fromQueue prop is true AND initial queueStatus was null, block TEMPORARILY
@@ -187,7 +184,6 @@ export function TeamSetupClient({
             }));
             console.log('[TeamSetup] ✅ BLOCKING TEMPORARILY: fromQueue=true and queueStatus was null');
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:BLOCKED_BY_PROP',message:'Blocked by fromQueue prop - TEMPORARILY',data:{fromQueue},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
             // #endregion
             
             // CRITICAL: After 5 seconds, unblock to allow following leader to NEW queues
@@ -196,7 +192,6 @@ export function TeamSetupClient({
                 setSuppressQueueBanner(false); // Also lift the banner suppression
                 console.log('[TeamSetup] ⚠️ fromQueue block LIFTED after 5s grace period - can now follow new queues');
                 // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:UNBLOCK_AFTER_GRACE',message:'Unblocked after 5s grace period',data:{fromQueue},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
                 // #endregion
             }, 5000);
 
@@ -210,7 +205,6 @@ export function TeamSetupClient({
             console.log('[TeamSetup] 🧹 STALE QUEUE STATUS DETECTED: fromQueue=true but queueStatus is not null');
             console.log('[TeamSetup] Clearing stale queue status...');
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:STALE_QUEUE_CLEAR',message:'Clearing stale queue status on mount',data:{fromQueue,initialQueueStatus:initialParty?.queueStatus,partyId:initialParty?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FIX'})}).catch(()=>{});
             // #endregion
             
             // Clear the stale queue status on the server
@@ -286,7 +280,6 @@ export function TeamSetupClient({
             const statusChanged = prevStatus !== newStatus;
             
             // #region agent log - Key: Track every poll result with change detection
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:POLL_RESULT',message:statusChanged ? '🔴 STATUS CHANGED' : 'Poll result',data:{pollCount,prevQueueStatus:prevStatus,newQueueStatus:newStatus,statusChanged,partyId:result.party?.id,blockAutoRedirect:blockAutoRedirect.current,suppressQueueBanner,fromQueue},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
             // #endregion
             if (result.party) {
                 if (statusChanged) {
@@ -309,7 +302,6 @@ export function TeamSetupClient({
         console.log('[TeamSetup] initialQueueStatusWasNull:', initialQueueStatusWasNull.current);
         
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:AUTO_REDIRECT_EFFECT',message:'Auto-redirect effect triggered',data:{timeSinceMount,queueStatus:party?.queueStatus,blockAutoRedirect:blockAutoRedirect.current,isRedirecting:isRedirecting.current,initialQueueStatusWasNull:initialQueueStatusWasNull.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
         
         // IMPORTANT: If queueStatus was null when we mounted but now it's set,
@@ -328,13 +320,12 @@ export function TeamSetupClient({
             sessionStorage.removeItem('flashmath_just_left_queue');
             
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:NEW_QUEUE_REDIRECT',message:'NEW queue detected - REDIRECTING to queue',data:{queueStatus:party.queueStatus,partyId:party.id,initialQueueStatusWasNull:initialQueueStatusWasNull.current,timeSinceMount:timeSinceMountForNewQueue},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
             // #endregion
             
             const phase = party.queueStatus === 'finding_teammates' 
                 ? 'teammates' 
                 : 'opponent';
-            router.push(`/arena/teams/queue?partyId=${party.id}&phase=${phase}`);
+            router.push(`/arena/teams/queue?partyId=${party.id}&phase=${phase}&mode=${mode}`);
             return;
         } else if (initialQueueStatusWasNull.current && party?.queueStatus) {
             // Log why we're NOT redirecting (helps debug)
@@ -376,13 +367,12 @@ export function TeamSetupClient({
         if (party?.queueStatus) {
             console.log('[TeamSetup] ❌ REDIRECTING to queue! status:', party.queueStatus);
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:EXISTING_QUEUE_REDIRECT',message:'REDIRECTING to queue page (existing queue)',data:{queueStatus:party.queueStatus,partyId:party.id,timeSinceMount,blockAutoRedirect:blockAutoRedirect.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,E'})}).catch(()=>{});
             // #endregion
             isRedirecting.current = true;
             const phase = party.queueStatus === 'finding_teammates' 
                 ? 'teammates' 
                 : 'opponent';
-            router.push(`/arena/teams/queue?partyId=${party.id}&phase=${phase}`);
+            router.push(`/arena/teams/queue?partyId=${party.id}&phase=${phase}&mode=${mode}`);
         } else {
             console.log('[TeamSetup] No queueStatus, staying on setup page');
         }
@@ -391,7 +381,6 @@ export function TeamSetupClient({
     // Real-time queue status listener - instant notification when leader starts queue
     useEffect(() => {
         // #region agent log - Track socket event processing
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_EFFECT',message:'Socket effect triggered',data:{hasUpdate:!!latestQueueStatusUpdate,updatePartyId:latestQueueStatusUpdate?.partyId,currentPartyId:party?.id,queueStatus:latestQueueStatusUpdate?.queueStatus,isRedirecting:isRedirecting.current},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D,E'})}).catch(()=>{});
         // #endregion
         
         if (!latestQueueStatusUpdate) return;
@@ -399,7 +388,6 @@ export function TeamSetupClient({
         // Only react to updates for our party
         if (latestQueueStatusUpdate.partyId !== party?.id) {
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_WRONG_PARTY',message:'Socket update for different party - ignoring',data:{updatePartyId:latestQueueStatusUpdate.partyId,currentPartyId:party?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
             return;
         }
@@ -407,7 +395,6 @@ export function TeamSetupClient({
         // Don't redirect on null (that means queue was cancelled, we want to stay here)
         if (!latestQueueStatusUpdate.queueStatus) {
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_NULL_STATUS',message:'Socket update with null status - staying on setup',data:{partyId:party?.id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
             // #endregion
             return;
         }
@@ -418,7 +405,6 @@ export function TeamSetupClient({
         if (isRedirecting.current) {
             console.log('[TeamSetup] Already redirecting, ignoring socket event');
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_ALREADY_REDIRECTING',message:'Already redirecting - ignoring socket event',data:{partyId:party?.id,queueStatus:latestQueueStatusUpdate.queueStatus},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
             // #endregion
             return;
         }
@@ -435,7 +421,6 @@ export function TeamSetupClient({
         
         console.log('[TeamSetup] 🔌 Queue started via socket - redirecting to queue');
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_REDIRECTING',message:'Following leader to queue via socket',data:{partyId:party?.id,queueStatus:latestQueueStatusUpdate.queueStatus},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D,E'})}).catch(()=>{});
         // #endregion
         isRedirecting.current = true;
         blockAutoRedirect.current = false;
@@ -447,8 +432,8 @@ export function TeamSetupClient({
         const phase = latestQueueStatusUpdate.queueStatus === 'finding_teammates' 
             ? 'teammates' 
             : 'opponent';
-        router.push(`/arena/teams/queue?partyId=${party?.id}&phase=${phase}`);
-    }, [latestQueueStatusUpdate, party?.id, router, clearQueueStatusUpdate]);
+        router.push(`/arena/teams/queue?partyId=${party?.id}&phase=${phase}&mode=${mode}`);
+    }, [latestQueueStatusUpdate, party?.id, router, clearQueueStatusUpdate, mode]);
 
     // Auto-advance steps
     useEffect(() => {
@@ -524,7 +509,6 @@ export function TeamSetupClient({
         setLoading(true);
         
         // #region agent log - HD: Track when handleStartQueue sets queue status
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:handleStartQueue',message:'handleStartQueue - SETTING QUEUE STATUS TO finding_opponents',data:{partyId:party.id,memberCount:party.members.length,matchType,callerFunc:'handleStartQueue'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
         
         // FIX: Clear the fromQueue URL parameter to reset navigation state
@@ -545,7 +529,6 @@ export function TeamSetupClient({
         if (result.success) {
             console.log('[TeamSetup] Notifying party members via socket');
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_NOTIFY_START',message:'Sending socket notification for queue start',data:{partyId:party.id,status:'finding_opponents',matchType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
             // #endregion
             const memberIds = party.members.map(m => m.odUserId);
             notifyQueueStatusChange(memberIds, 'finding_opponents', party.id);
@@ -556,7 +539,7 @@ export function TeamSetupClient({
         }
 
         console.log('[TeamSetup] Navigating to queue page');
-        router.push(`/arena/teams/queue?partyId=${party.id}&phase=opponent`);
+        router.push(`/arena/teams/queue?partyId=${party.id}&phase=opponent&mode=${mode}`);
     };
     
     // ==========================================================================
@@ -609,15 +592,17 @@ export function TeamSetupClient({
     const startAIMatchInternal = async () => {
         if (!party) return;
         console.log('[TeamSetup] === startAIMatchInternal ===');
-        console.log('[TeamSetup] partyId:', party.id, 'difficulty:', aiDifficulty);
+        console.log('[TeamSetup] partyId:', party.id, 'difficulty:', aiDifficulty, 'mode:', mode);
         
         setLoading(true);
         setError(null);
         
         try {
+            console.log('[TeamSetup] Calling createAITeamMatch with mode:', mode);
             const result = await createAITeamMatch({
                 partyId: party.id,
                 difficulty: aiDifficulty,
+                mode: mode as '5v5' | '2v2',  // Pass the mode from URL params
             });
             
             if (!result.success || !result.matchId) {
@@ -665,7 +650,6 @@ export function TeamSetupClient({
         console.log('[TeamSetup] === handleFindTeammates CALLED ===');
         console.log('[TeamSetup] partyId:', party.id, 'currentSize:', party.members.length, 'matchType:', matchType);
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:handleFindTeammates:ENTRY',message:'handleFindTeammates called',data:{partyId:party.id,memberCount:party.members.length,matchType,hasIgl:!!party.iglId,hasAnchor:!!party.anchorId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H5'})}).catch(()=>{});
         // #endregion
         
         // FIX: Clear the fromQueue URL parameter to reset navigation state
@@ -682,7 +666,6 @@ export function TeamSetupClient({
         setError(null);
         
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:FIND_TEAMMATES',message:'Leader starting queue - finding teammates',data:{partyId:party.id,memberCount:party.members.length,matchType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
         // #endregion
         
         try {
@@ -692,7 +675,6 @@ export function TeamSetupClient({
                 if (matchType === 'casual') {
                     console.log('[TeamSetup] CASUAL mode: Skipping teammate search, going directly to opponent search with AI teammates');
                     // #region agent log - HD: Track when setup page sets queue status
-                    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:CASUAL_SET_QUEUE',message:'CASUAL MODE - SETTING QUEUE STATUS TO finding_opponents',data:{partyId:party.id,memberCount:party.members.length,matchType,callerFunc:'handleFindTeammates'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
                     // #endregion
                     
                     // Update queue status to finding_opponents (not finding_teammates)
@@ -712,7 +694,7 @@ export function TeamSetupClient({
                 // Navigate to queue with phase=opponent (AI teammates will be auto-added by joinTeamQueue)
                 // Reset loading state before navigation to prevent stuck button
                 setLoading(false);
-                router.push(`/arena/teams/queue?partyId=${party.id}&phase=opponent`);
+                router.push(`/arena/teams/queue?partyId=${party.id}&phase=opponent&mode=${mode}`);
                 return;
             }
             
@@ -730,18 +712,16 @@ export function TeamSetupClient({
             // Notify all party members via socket for real-time sync
             console.log('[TeamSetup] Notifying party members via socket');
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:SOCKET_NOTIFY_TEAMMATES',message:'Sending socket notification for finding teammates',data:{partyId:party.id,status:'finding_teammates',matchType},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'FLOW'})}).catch(()=>{});
             // #endregion
             const memberIds = party.members.map(m => m.odUserId);
             notifyQueueStatusChange(memberIds, 'finding_teammates', party.id);
             
             console.log('[TeamSetup] Navigating to queue page');
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-setup-client.tsx:handleFindTeammates:NAVIGATE',message:'About to navigate to queue page',data:{partyId:party.id,phase:'teammates',matchType,destination:`/arena/teams/queue?partyId=${party.id}&phase=teammates`},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H5'})}).catch(()=>{});
             // #endregion
             // Reset loading state before navigation to prevent stuck button
             setLoading(false);
-            router.push(`/arena/teams/queue?partyId=${party.id}&phase=teammates`);
+            router.push(`/arena/teams/queue?partyId=${party.id}&phase=teammates&mode=${mode}`);
         } catch (err: any) {
             console.error('[TeamSetup] handleFindTeammates error:', err);
             setError(err.message || 'An error occurred');
@@ -1105,21 +1085,41 @@ export function TeamSetupClient({
                                                                 className="mt-3 pt-3 border-t border-[var(--glass-border)]"
                                                             >
                                                                 <p className="text-[10px] text-muted-foreground mb-2">AI Difficulty:</p>
-                                                                <div className="flex gap-1">
-                                                                    {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => (
-                                                                        <button
-                                                                            key={diff}
-                                                                            onClick={() => setAIDifficulty(diff)}
-                                                                            className={cn(
-                                                                                "flex-1 py-1.5 rounded-md text-[10px] font-medium transition-all capitalize",
-                                                                                aiDifficulty === diff
-                                                                                    ? "bg-cyan-500 text-white"
-                                                                                    : "bg-card/50 text-muted-foreground hover:bg-card"
-                                                                            )}
-                                                                        >
-                                                                            {diff}
-                                                                        </button>
-                                                                    ))}
+                                                                <div className="flex gap-2">
+                                                                    {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => {
+                                                                        const isSelected = aiDifficulty === diff;
+                                                                        const diffStyles = {
+                                                                            easy: {
+                                                                                selected: 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/30',
+                                                                                unselected: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20',
+                                                                            },
+                                                                            medium: {
+                                                                                selected: 'bg-amber-500 text-white border-amber-400 shadow-amber-500/30',
+                                                                                unselected: 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20',
+                                                                            },
+                                                                            hard: {
+                                                                                selected: 'bg-orange-500 text-white border-orange-400 shadow-orange-500/30',
+                                                                                unselected: 'bg-orange-500/10 text-orange-400 border-orange-500/30 hover:bg-orange-500/20',
+                                                                            },
+                                                                            impossible: {
+                                                                                selected: 'bg-rose-500 text-white border-rose-400 shadow-rose-500/30',
+                                                                                unselected: 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20',
+                                                                            },
+                                                                        };
+                                                                        return (
+                                                                            <button
+                                                                                key={diff}
+                                                                                onClick={() => setAIDifficulty(diff)}
+                                                                                className={cn(
+                                                                                    "flex-1 py-2 px-1 rounded-lg text-[10px] font-bold transition-all capitalize border-2",
+                                                                                    isSelected && "shadow-lg scale-105",
+                                                                                    isSelected ? diffStyles[diff].selected : diffStyles[diff].unselected
+                                                                                )}
+                                                                            >
+                                                                                {diff}
+                                                                            </button>
+                                                                        );
+                                                                    })}
                                                                 </div>
                                                                 <p className="mt-2 text-xs text-cyan-400 flex items-center gap-1">
                                                                     <Sparkles className="w-3 h-3" />
@@ -1377,20 +1377,40 @@ export function TeamSetupClient({
                                             >
                                                 <p className="text-xs text-muted-foreground mb-2">AI Difficulty:</p>
                                                 <div className="flex gap-2">
-                                                    {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => (
-                                                        <button
-                                                            key={diff}
-                                                            onClick={() => setAIDifficulty(diff)}
-                                                            className={cn(
-                                                                "flex-1 py-2 rounded-lg text-xs font-medium transition-all capitalize",
-                                                                aiDifficulty === diff
-                                                                    ? "bg-cyan-500 text-white"
-                                                                    : "bg-card/50 text-muted-foreground hover:bg-card"
-                                                            )}
-                                                        >
-                                                            {diff}
-                                                        </button>
-                                                    ))}
+                                                    {(['easy', 'medium', 'hard', 'impossible'] as BotDifficulty[]).map((diff) => {
+                                                        const isSelected = aiDifficulty === diff;
+                                                        const diffStyles = {
+                                                            easy: {
+                                                                selected: 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/30',
+                                                                unselected: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20',
+                                                            },
+                                                            medium: {
+                                                                selected: 'bg-amber-500 text-white border-amber-400 shadow-amber-500/30',
+                                                                unselected: 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20',
+                                                            },
+                                                            hard: {
+                                                                selected: 'bg-orange-500 text-white border-orange-400 shadow-orange-500/30',
+                                                                unselected: 'bg-orange-500/10 text-orange-400 border-orange-500/30 hover:bg-orange-500/20',
+                                                            },
+                                                            impossible: {
+                                                                selected: 'bg-rose-500 text-white border-rose-400 shadow-rose-500/30',
+                                                                unselected: 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20',
+                                                            },
+                                                        };
+                                                        return (
+                                                            <button
+                                                                key={diff}
+                                                                onClick={() => setAIDifficulty(diff)}
+                                                                className={cn(
+                                                                    "flex-1 py-2.5 px-2 rounded-lg text-xs font-bold transition-all capitalize border-2",
+                                                                    isSelected && "shadow-lg scale-105",
+                                                                    isSelected ? diffStyles[diff].selected : diffStyles[diff].unselected
+                                                                )}
+                                                            >
+                                                                {diff}
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
                                                 {partySize < requiredSize && (
                                                     <p className="mt-2 text-xs text-cyan-400 flex items-center gap-1">

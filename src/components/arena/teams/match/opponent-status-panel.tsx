@@ -148,29 +148,40 @@ export function OpponentStatusPanel({
                         <AnimatePresence>
                             {lastAnswerResult && (
                                 <motion.div
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    exit={{ opacity: 0, scale: 0.8 }}
+                                    initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                                    animate={{
+                                        opacity: 1,
+                                        scale: 1,
+                                        y: 0,
+                                        // Shake for incorrect
+                                        ...(lastAnswerResult.isCorrect ? {} : {
+                                            x: [0, -3, 3, -3, 3, 0]
+                                        })
+                                    }}
+                                    exit={{ opacity: 0, scale: 0.8, y: -10 }}
+                                    transition={{ duration: 0.3 }}
                                     className={cn(
-                                        "inline-flex items-center gap-2 px-3 py-1.5 rounded-full",
+                                        "inline-flex items-center gap-2 px-4 py-2 rounded-xl shadow-lg",
                                         lastAnswerResult.isCorrect
-                                            ? "bg-emerald-500/20 text-emerald-400"
-                                            : "bg-rose-500/20 text-rose-400"
+                                            ? "bg-emerald-500/30 border border-emerald-500/50 text-emerald-400"
+                                            : "bg-rose-500/30 border border-rose-500/50 text-rose-400"
                                     )}
                                 >
-                                    {lastAnswerResult.isCorrect ? (
-                                        <>
-                                            <Check className="w-4 h-4" />
-                                            <span className="font-medium">
-                                                +{lastAnswerResult.pointsEarned}
-                                            </span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <X className="w-4 h-4" />
-                                            <span className="font-medium">MISS</span>
-                                        </>
-                                    )}
+                                    <div className={cn(
+                                        "w-6 h-6 rounded-full flex items-center justify-center",
+                                        lastAnswerResult.isCorrect ? "bg-emerald-500" : "bg-rose-500"
+                                    )}>
+                                        {lastAnswerResult.isCorrect ? (
+                                            <Check className="w-4 h-4 text-white" />
+                                        ) : (
+                                            <X className="w-4 h-4 text-white" />
+                                        )}
+                                    </div>
+                                    <span className="font-bold">
+                                        {lastAnswerResult.isCorrect
+                                            ? `+${lastAnswerResult.pointsEarned}`
+                                            : 'MISSED!'}
+                                    </span>
                                 </motion.div>
                             )}
                         </AnimatePresence>

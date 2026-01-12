@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
@@ -36,12 +36,14 @@ import {
     QuestionCardSpectator,
     RoundStartCountdown,
     RelayHandoff,
+    AnchorSoloDecisionModal,
     type SlotProgress,
     type PlayerHalftimeStats,
     type RoundMVP,
     type RoundInsight,
 } from '@/components/arena/teams/match';
 import { soundEngine } from '@/lib/sound-engine';
+import { UserAvatar } from '@/components/user-avatar';
 
 interface TeamMatchClientProps {
     matchId: string;
@@ -101,6 +103,8 @@ interface MatchState {
     team1: TeamState;
     team2: TeamState;
     isMyTeam: string;
+    mode?: '5v5' | '2v2';              // Match mode (5v5 or 2v2)
+    slotOperations?: string[];          // The operations used in this match (e.g., ['addition', 'multiplication'] for 2v2)
 }
 
 interface SlotAssignment {
@@ -132,8 +136,33 @@ const operationSymbols: Record<string, string> = {
     mixed: '?',
 };
 
-const operations = ['addition', 'subtraction', 'multiplication', 'division', 'mixed'];
-const SLOT_LABELS = ['Addition', 'Subtraction', 'Multiplication', 'Division', 'Mixed'];
+// Default operations for 5v5 (all 5 operations)
+const DEFAULT_OPERATIONS = ['addition', 'subtraction', 'multiplication', 'division', 'mixed'];
+const DEFAULT_SLOT_LABELS = ['Addition', 'Subtraction', 'Multiplication', 'Division', 'Mixed'];
+
+// Backwards compatibility aliases
+const operations = DEFAULT_OPERATIONS;
+const SLOT_LABELS = DEFAULT_SLOT_LABELS;
+
+// Map operation names to display labels
+const OPERATION_TO_LABEL: Record<string, string> = {
+    'addition': 'Addition',
+    'subtraction': 'Subtraction',
+    'multiplication': 'Multiplication',
+    'division': 'Division',
+    'mixed': 'Mixed',
+};
+
+/**
+ * Get slot labels based on match operations (mode-aware)
+ * For 2v2, returns labels for the 2 randomly selected operations
+ */
+function getSlotLabels(slotOperations?: string[]): string[] {
+    if (slotOperations && slotOperations.length > 0) {
+        return slotOperations.map(op => OPERATION_TO_LABEL[op] || op);
+    }
+    return DEFAULT_SLOT_LABELS;
+}
 
 /**
  * Resolve banner ID to style key for BANNER_STYLES lookup
@@ -189,6 +218,215 @@ function HalftimeCountdown({ durationMs, onComplete }: { durationMs: number; onC
     );
 }
 
+// Post-match result player card - extracted to prevent recreation on re-render
+interface ResultPlayerCardProps {
+    player: PlayerState;
+    isWinner: boolean;
+    index: number;
+    currentUserId: string;
+    onViewStats: (player: PlayerState) => void;
+}
+
+function ResultPlayerCard({ player, isWinner, index, currentUserId, onViewStats }: ResultPlayerCardProps) {
+    const resolvedBanner = resolveBannerStyle(player.odEquippedBanner || 'default');
+    const bannerStyle = BANNER_STYLES[resolvedBanner] || BANNER_STYLES.default;
+    const isCurrentUser = player.odUserId === currentUserId;
+    const avgTime = player.total > 0 ? (player.totalAnswerTimeMs / player.total / 1000).toFixed(1) : 'N/A';
+    const accuracy = player.total > 0 ? Math.round((player.correct || 0) / player.total * 100) : 0;
+
+    return (
+        <motion.div
+            initial={{ y: 40, opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            transition={{ delay: index * 0.08, type: 'spring', damping: 20 }}
+            className={cn(
+                "relative flex flex-col rounded-2xl overflow-hidden min-h-[340px] min-w-[200px]",
+                "border-3 shadow-2xl",
+                isCurrentUser
+                    ? "border-primary ring-4 ring-primary/30 shadow-primary/20"
+                    : isWinner
+                        ? "border-emerald-500/60 shadow-emerald-500/10"
+                        : "border-rose-500/60 shadow-rose-500/10"
+            )}
+        >
+            {/* FULL BANNER BACKGROUND */}
+            <div className={cn("absolute inset-0 bg-gradient-to-b", bannerStyle.background)} />
+
+            {/* Banner pattern overlay */}
+            {bannerStyle.pattern && (
+                <div
+                    className={cn("absolute inset-0 opacity-50", bannerStyle.animationClass)}
+                    style={{
+                        backgroundImage: bannerStyle.pattern,
+                        backgroundSize: bannerStyle.patternSize || 'auto'
+                    }}
+                />
+            )}
+
+            {/* Darkening gradient for readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+
+            {/* Win/Loss border glow */}
+            <div className={cn(
+                "absolute inset-0 opacity-30",
+                isWinner
+                    ? "bg-gradient-to-t from-emerald-500/40 to-transparent"
+                    : "bg-gradient-to-t from-rose-500/40 to-transparent"
+            )} />
+
+            {/* Content */}
+            <div className="relative flex flex-col h-full p-4">
+                {/* Top row: Score + Roles */}
+                <div className="flex items-start justify-between mb-auto">
+                    {/* Score badge */}
+                    <div className={cn(
+                        "px-4 py-2 rounded-xl text-2xl font-black",
+                        "bg-black/50 backdrop-blur-md border-2",
+                        isWinner
+                            ? "border-emerald-400/60 text-emerald-400"
+                            : "border-rose-400/60 text-rose-400"
+                    )}>
+                        +{player.score}
+                    </div>
+
+                    {/* Role badges */}
+                    <div className="flex gap-2">
+                        {player.isIgl && (
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600
+                                           flex items-center justify-center shadow-xl border-2 border-amber-300">
+                                <Crown className="w-5 h-5 text-white drop-shadow-lg" />
+                            </div>
+                        )}
+                        {player.isAnchor && (
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600
+                                           flex items-center justify-center shadow-xl border-2 border-purple-300">
+                                <Anchor className="w-5 h-5 text-white drop-shadow-lg" />
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Center: Avatar */}
+                <div className="flex justify-center my-4">
+                    <div className={cn(
+                        "w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black",
+                        "bg-gradient-to-br from-slate-700 to-slate-900 shadow-2xl",
+                        "border-4",
+                        isWinner ? "border-emerald-400" : "border-rose-400"
+                    )}>
+                        <span className="text-white drop-shadow-lg">
+                            {player.odName?.charAt(0)?.toUpperCase() || '?'}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Bottom section */}
+                <div className="mt-auto space-y-3">
+                    {/* Player name */}
+                    <div className="text-center">
+                        <h3 className={cn(
+                            "text-xl font-black truncate drop-shadow-lg",
+                            bannerStyle.textColor
+                        )}>
+                            {player.odName}
+                        </h3>
+                        {player.odEquippedTitle && (
+                            <p className="text-sm text-white/70 truncate">
+                                {player.odEquippedTitle.replace(/^title[_-]?/i, '').replace(/[_-]/g, ' ')}
+                            </p>
+                        )}
+                    </div>
+
+                    {/* Operation badge */}
+                    {player.slot && (
+                        <div className="flex justify-center">
+                            <div className={cn(
+                                "px-4 py-1.5 rounded-full text-lg font-black",
+                                "bg-black/40 backdrop-blur-sm border-2",
+                                isWinner
+                                    ? "border-emerald-400/50 text-emerald-400"
+                                    : "border-rose-400/50 text-rose-400"
+                            )}>
+                                {operationSymbols[player.slot] || player.slot}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Stats row */}
+                    <div className="flex items-center justify-center gap-4 text-sm">
+                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/30 backdrop-blur-sm">
+                            <span className="text-white/60">Acc:</span>
+                            <span className={cn(
+                                "font-bold",
+                                accuracy >= 80 ? "text-emerald-400" : accuracy >= 50 ? "text-amber-400" : "text-rose-400"
+                            )}>{accuracy}%</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/30 backdrop-blur-sm">
+                            <span className="text-white/60">Avg:</span>
+                            <span className="font-bold text-primary">{avgTime}s</span>
+                        </div>
+                    </div>
+
+                    {/* View Stats button */}
+                    <button
+                        onClick={() => onViewStats(player)}
+                        className={cn(
+                            "w-full py-3 rounded-xl font-bold text-sm uppercase tracking-wider transition-all",
+                            "bg-black/40 backdrop-blur-sm border-2 hover:bg-black/60",
+                            isWinner
+                                ? "border-emerald-400/50 text-emerald-400 hover:border-emerald-400"
+                                : "border-rose-400/50 text-rose-400 hover:border-rose-400"
+                        )}
+                    >
+                        View Stats
+                    </button>
+                </div>
+            </div>
+        </motion.div>
+    );
+}
+
+// Post-match award card - extracted to prevent recreation on re-render
+interface AwardCardProps {
+    icon: React.ComponentType<{ className?: string }>;
+    title: string;
+    player: PlayerState;
+    value: string;
+    color: 'amber' | 'cyan' | 'orange';
+}
+
+function AwardCard({ icon: Icon, title, player, value, color }: AwardCardProps) {
+    const colorClasses = {
+        amber: 'bg-amber-500/10 border-amber-500/40 text-amber-400',
+        cyan: 'bg-cyan-500/10 border-cyan-500/40 text-cyan-400',
+        orange: 'bg-orange-500/10 border-orange-500/40 text-orange-400',
+    };
+    const iconBgClasses = {
+        amber: 'bg-gradient-to-br from-amber-400 to-amber-600',
+        cyan: 'bg-gradient-to-br from-cyan-400 to-cyan-600',
+        orange: 'bg-gradient-to-br from-orange-400 to-orange-600',
+    };
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={cn("flex items-center gap-4 p-4 rounded-xl border-2", colorClasses[color])}
+        >
+            <div className={cn(
+                "w-12 h-12 rounded-xl flex items-center justify-center shadow-lg",
+                iconBgClasses[color]
+            )}>
+                <Icon className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className="text-xs uppercase tracking-wider opacity-70">{title}</p>
+                <p className="font-bold text-lg text-white truncate">{player.odName}</p>
+            </div>
+            <p className="font-black text-2xl">{value}</p>
+        </motion.div>
+    );
+}
+
 export function TeamMatchClient({
     matchId,
     currentUserId,
@@ -199,11 +437,6 @@ export function TeamMatchClient({
     const searchParams = useSearchParams();
     // Also check URL for partyId (fallback if not passed as prop)
     const effectivePartyId = partyId || searchParams.get('partyId') || undefined;
-    // #region agent log - H8_MOUNT: Track partyId sources at component mount
-    if (typeof window !== 'undefined') {
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:MOUNT_PARTYID',message:'Component mounting - partyId sources',data:{partyIdProp:partyId||'UNDEFINED',searchParamsPartyId:searchParams.get('partyId')||'NULL',effectivePartyId:effectivePartyId||'UNDEFINED',fullUrl:window.location.href,matchId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H8_MOUNT'})}).catch(()=>{});
-    }
-    // #endregion
     const socketRef = useRef<Socket | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const mockSimulatorRef = useRef<MockMatchSimulator | null>(null);
@@ -250,6 +483,21 @@ export function TeamMatchClient({
         odUserId: string;
         currentInput: string;
     } | null>(null);
+    // Question timeout warning state
+    const [timeoutWarning, setTimeoutWarning] = useState<{
+        active: boolean;
+        secondsRemaining: number;
+    } | null>(null);
+    const [showTimeoutFlash, setShowTimeoutFlash] = useState(false);
+    // Solo decision phase state (final round decision)
+    const [soloDecisionPhase, setSoloDecisionPhase] = useState<{
+        active: boolean;
+        durationMs: number;
+        myDecision: 'normal' | 'solo' | null;
+        opponentDecision: 'normal' | 'solo' | null;
+        myAnchorName: string;
+        opponentAnchorName: string;
+    } | null>(null);
     const [opponentLastResult, setOpponentLastResult] = useState<{
         isCorrect: boolean;
         pointsEarned: number;
@@ -277,6 +525,12 @@ export function TeamMatchClient({
     const [usedAnchorSolo, setUsedAnchorSolo] = useState(false);
     const [timeoutsRemaining, setTimeoutsRemaining] = useState(2); // 2 per match
     const [breakCountdownMs, setBreakCountdownMs] = useState(0); // Countdown for tactical breaks
+    
+    // Double Anchor slot indicator - tracks which slot has been targeted for Double Anchor
+    const [doubleAnchorSlot, setDoubleAnchorSlot] = useState<string | null>(null); // Slot operation name
+    const [doubleAnchorForRound, setDoubleAnchorForRound] = useState<number | null>(null); // Which round it applies to
+    const [doubleAnchorBenchedPlayer, setDoubleAnchorBenchedPlayer] = useState<string | null>(null); // Who is benched
+    const [doubleAnchorPlayerName, setDoubleAnchorPlayerName] = useState<string | null>(null); // Anchor player name
     const [phaseInitialDuration, setPhaseInitialDuration] = useState(0); // Initial duration when phase starts
     const lastPhaseRef = useRef<string | null>(null);
     
@@ -350,9 +604,10 @@ export function TeamMatchClient({
             socketRef.current.emit('leave_match', { matchId });
         }
         
-        // Navigate back to setup
-        router.push('/arena/teams/setup?mode=5v5');
-    }, [matchId, router, isLeaving]);
+        // Navigate back to setup (use mode from match state if available)
+        const mode = matchState?.mode || '5v5';
+        router.push(`/arena/teams/setup?mode=${mode}`);
+    }, [matchId, router, isLeaving, matchState?.mode]);
 
     // Initiate quit vote (leader only)
     const handleInitiateQuitVote = useCallback(() => {
@@ -396,9 +651,6 @@ export function TeamMatchClient({
         // Convert slot name to slot number
         const slotNumber = operations.indexOf(targetSlot.toLowerCase()) + 1;
         
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:handleDoubleCallin',message:'DC-H1: Client emitting anchor_callin',data:{matchId,userId:currentUserId,targetRound,targetSlot,slotNumber,half:matchState.half,phase:matchState.phase},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DC-H1'})}).catch(()=>{});
-        // #endregion
         
         console.log('[TeamMatch] IGL activating Double Call-In for round:', targetRound, 'slot:', targetSlot, 'Half:', matchState.half, 'UserId:', currentUserId);
         socketRef.current.emit('anchor_callin', { 
@@ -602,9 +854,6 @@ export function TeamMatchClient({
             setConnected(true);
 
             // Join the match - include partyId for PvP match lookup from Redis
-            // #region agent log - H5/H6/H7: Track join_team_match emission
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:join_team_match',message:'Emitting join_team_match - SOCKET CONNECT',data:{matchId,userId:currentUserId?.slice(-8),effectivePartyId:effectivePartyId||'UNDEFINED',hasPartyId:!!effectivePartyId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H8_EMIT'})}).catch(()=>{});
-            // #endregion
             console.log('[TeamMatch] Emitting join_team_match with effectivePartyId:', effectivePartyId || 'UNDEFINED');
             socket.emit('join_team_match', {
                 matchId,
@@ -615,9 +864,6 @@ export function TeamMatchClient({
 
         socket.on('match_state', (state: MatchState) => {
             console.log('[TeamMatch] Received match state:', state);
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:match_state',message:'H1A/H2A: match_state received',data:{phase:state.phase,gameClockMs:state.gameClockMs,relayClockMs:state.relayClockMs,currentSlot:state.currentSlot,questionsInSlot:state.questionsInSlot,round:state.round,half:state.half},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1A,H2A'})}).catch(()=>{});
-            // #endregion
 
             // If we're already in post_match, don't update state (preserve results screen)
             if (finalMatchStateRef.current?.phase === 'post_match') {
@@ -649,9 +895,6 @@ export function TeamMatchClient({
         socket.on('strategy_phase_start', (data) => {
             console.log('[TeamMatch] Strategy phase started:', data);
             soundEngine.playGo();
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:strategy_phase_start',message:'Strategy phase started',data:{durationMs:data.durationMs,myTeamSlots:Object.keys(data.team1Slots || data.team2Slots || {}).length},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'STRATEGY'})}).catch(()=>{});
-            // #endregion
             
             // Determine which team is mine by checking if currentUserId is in team1Slots or team2Slots
             // This avoids stale closure issues with matchState
@@ -671,19 +914,108 @@ export function TeamMatchClient({
                 myTeamReady: false,
                 opponentTeamReady: false,
             });
-            
-            // Update match phase
-            setMatchState(prev => prev ? { ...prev, phase: 'strategy' } : prev);
+
+            // Update match phase AND slotOperations/mode from strategy phase data
+            setMatchState(prev => prev ? { 
+                ...prev, 
+                phase: 'strategy',
+                mode: data.mode || prev.mode,
+                slotOperations: data.slotOperations || prev.slotOperations,
+            } : prev);
         });
         
         socket.on('strategy_time_update', (data) => {
             setStrategyPhase(prev => prev ? { ...prev, remainingMs: data.remainingMs } : prev);
         });
         
-        socket.on('slot_assignments_updated', (data: { slots: Record<string, string>, teamId?: string }) => {
+        socket.on('slot_assignments_updated', (data: {
+            slots: Record<string, string>;  // { operation: playerId } mapping
+            teamId?: string;
+            swapDetails?: {
+                type: 'swap' | 'move';
+                player1Name?: string;
+                player1OldSlot?: string;
+                player1NewSlot?: string;
+                player2Name?: string;
+                player2OldSlot?: string;
+                player2NewSlot?: string;
+                playerName?: string;
+                oldSlot?: string;
+                newSlot?: string;
+            };
+            phase?: string;
+        }) => {
             console.log('[TeamMatch] Slot assignments updated:', data);
-            // Update strategy phase slots
-            setStrategyPhase(prev => prev ? { ...prev, mySlots: data.slots } : prev);
+            
+            // Update strategy phase slots - need to rebuild the mySlots structure
+            // data.slots is { operation: playerId }, we need { playerId: SlotAssignment }
+            setStrategyPhase(prev => {
+                if (!prev) return prev;
+                
+                // Build a new mySlots object from the updated assignments
+                // We need to preserve player metadata (name, level, cosmetics) from existing data
+                const existingPlayerData: Record<string, SlotAssignment> = {};
+                
+                // First, collect all existing player data by playerId
+                for (const [playerId, assignment] of Object.entries(prev.mySlots)) {
+                    existingPlayerData[playerId] = assignment;
+                }
+                
+                // Now rebuild mySlots with updated slot assignments
+                const newMySlots: Record<string, SlotAssignment> = {};
+                
+                for (const [operation, playerId] of Object.entries(data.slots)) {
+                    const existingData = existingPlayerData[playerId];
+                    if (existingData) {
+                        // Preserve player data, update slot
+                        newMySlots[playerId] = {
+                            ...existingData,
+                            slot: operation,
+                        };
+                    } else {
+                        // Player not found in existing data - use defaults
+                        // This shouldn't normally happen, but handle gracefully
+                        newMySlots[playerId] = {
+                            slot: operation,
+                            name: 'Unknown',
+                            level: 1,
+                            isIgl: false,
+                            isAnchor: false,
+                            banner: 'default',
+                            frame: 'default',
+                            title: 'Player',
+                        };
+                    }
+                }
+                
+                return { ...prev, mySlots: newMySlots };
+            });
+            
+            // Show notification for halftime slot reassignments
+            if (data.phase === 'halftime' && data.swapDetails) {
+                const operationSymbols: Record<string, string> = {
+                    'addition': '+',
+                    'subtraction': '−',
+                    'multiplication': '×',
+                    'division': '÷',
+                    'mixed': '±'
+                };
+                
+                if (data.swapDetails.type === 'swap') {
+                    const slot1Symbol = operationSymbols[data.swapDetails.player1NewSlot || ''] || data.swapDetails.player1NewSlot;
+                    const slot2Symbol = operationSymbols[data.swapDetails.player2NewSlot || ''] || data.swapDetails.player2NewSlot;
+                    toast.info('🔄 Slot Reassignment', {
+                        description: `${data.swapDetails.player1Name} → ${slot1Symbol} | ${data.swapDetails.player2Name} → ${slot2Symbol}`,
+                        duration: 5000,
+                    });
+                } else if (data.swapDetails.type === 'move') {
+                    const newSlotSymbol = operationSymbols[data.swapDetails.newSlot || ''] || data.swapDetails.newSlot;
+                    toast.info('🔄 Slot Reassignment', {
+                        description: `${data.swapDetails.playerName} moved to ${newSlotSymbol}`,
+                        duration: 5000,
+                    });
+                }
+            }
             
             // Also update matchState player slots AND slotAssignments (for halftime changes)
             setMatchState(prev => {
@@ -781,9 +1113,6 @@ export function TeamMatchClient({
 
         socket.on('question_update', (data) => {
             console.log('[TeamMatch] Question update:', data);
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:question_update',message:'H3A/H3C: question update received',data:{activePlayerId:data.activePlayerId,questionText:data.questionText,slotNumber:data.slotNumber,questionInSlot:data.questionInSlot,operation:data.operation},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3A,H3C'})}).catch(()=>{});
-            // #endregion
             // Update question for the active player AND set them as active
             setMatchState(prev => {
                 if (!prev) return prev;
@@ -834,9 +1163,6 @@ export function TeamMatchClient({
 
         socket.on('answer_result', (data) => {
             console.log('[TeamMatch] Answer result:', data);
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:answer_result',message:'H3A/H3B: answer result and questionsInSlot',data:{userId:data.userId,isCorrect:data.isCorrect,questionsInSlot:data.questionsInSlot,teamId:data.teamId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3A,H3B'})}).catch(()=>{});
-            // #endregion
             if (data.userId === currentUserId) {
                 // Play correct/incorrect sound for own answer
                 if (data.isCorrect) {
@@ -895,6 +1221,10 @@ export function TeamMatchClient({
                 if (team.players[data.userId]) {
                     team.players[data.userId].score = data.newPlayerScore;
                     team.players[data.userId].streak = data.newStreak;
+                    // Update maxStreak if current streak is higher
+                    if (data.newStreak > (team.players[data.userId].maxStreak || 0)) {
+                        team.players[data.userId].maxStreak = data.newStreak;
+                    }
                     // Track correct/total for accuracy calculation (halftime stats)
                     team.players[data.userId].total = (team.players[data.userId].total || 0) + 1;
                     if (data.isCorrect) {
@@ -945,11 +1275,246 @@ export function TeamMatchClient({
             }
         });
 
-        socket.on('slot_change', (data) => {
+        // Question timeout warning - starts countdown before timeout
+        socket.on('timeout_warning', (data: {
+            matchId: string;
+            playerId: string;
+            remainingMs: number;
+            countdownSeconds: number;
+        }) => {
+            console.log('[TeamMatch] Timeout warning:', data);
+            if (data.playerId === currentUserId) {
+                setTimeoutWarning({
+                    active: true,
+                    secondsRemaining: data.countdownSeconds,
+                });
+                // Play warning sound
+                soundEngine.playCountdownTickIntense(data.countdownSeconds);
+
+                // Start countdown interval
+                const interval = setInterval(() => {
+                    setTimeoutWarning(prev => {
+                        if (!prev || prev.secondsRemaining <= 1) {
+                            clearInterval(interval);
+                            return null;
+                        }
+                        const newSeconds = prev.secondsRemaining - 1;
+                        soundEngine.playCountdownTickIntense(newSeconds);
+                        return { ...prev, secondsRemaining: newSeconds };
+                    });
+                }, 1000);
+            }
+        });
+
+        // Question timeout - player didn't answer in time
+        socket.on('question_timeout', (data: {
+            matchId: string;
+            playerId: string;
+            playerName: string;
+            correctAnswer: number;
+            question: string;
+            timeoutsInSlot: number;
+            questionsInSlot: number;
+            questionsPerSlot: number;
+            streak: number;
+        }) => {
+            console.log('[TeamMatch] Question timeout:', data);
+            if (data.playerId === currentUserId) {
+                // Clear any active warning
+                setTimeoutWarning(null);
+                // Show timeout flash
+                setShowTimeoutFlash(true);
+                setTimeout(() => setShowTimeoutFlash(false), 1500);
+                // Play timeout sound
+                soundEngine.playIncorrect();
+                // Clear input
+                setCurrentInput('');
+                // Show toast with correct answer
+                toast.error(`Time's up! Answer was ${data.correctAnswer}`, {
+                    duration: 2000,
+                });
+                
+                // Update questionsInSlot to update progress dots and player stats
+                setMatchState(prev => {
+                    if (!prev) return prev;
+                    const newState = JSON.parse(JSON.stringify(prev));
+                    
+                    // Find the team and update questionsInSlot
+                    for (const team of [newState.team1, newState.team2]) {
+                        if (team.players[currentUserId]) {
+                            team.questionsInSlot = data.questionsInSlot;
+                            // Also update player's total (for accuracy tracking)
+                            if (team.players[currentUserId]) {
+                                team.players[currentUserId].total = (team.players[currentUserId].total || 0) + 1;
+                                team.players[currentUserId].streak = 0; // Timeout breaks streak
+                            }
+                            break;
+                        }
+                    }
+                    
+                    return newState;
+                });
+            }
+        });
+
+        // Teammate timeout notification
+        socket.on('teammate_timeout', (data: {
+            playerId: string;
+            playerName: string;
+            timeoutsInSlot: number;
+        }) => {
+            console.log('[TeamMatch] Teammate timeout:', data);
+            if (data.playerId !== currentUserId) {
+                toast.warning(`${data.playerName} timed out!`, {
+                    duration: 1500,
+                });
+            }
+        });
+
+        // New question after timeout - update the question for the active player
+        socket.on('new_question', (data: {
+            question: { question: string; answer: number; operation?: string };
+            questionNumber: number;
+            totalQuestions: number;
+            slot: number;
+            operation: string;
+            afterTimeout?: boolean;
+        }) => {
+            console.log('[TeamMatch] New question (after timeout):', data);
+            console.log('[TeamMatch] Updating question for userId:', currentUserId, 'to:', data.question.question);
+            
+            // Update the player's current question in match state
+            // This is sent only to the player who timed out, so currentUserId is correct
+            setMatchState(prev => {
+                if (!prev) return prev;
+                const newState = JSON.parse(JSON.stringify(prev));
+
+                // Find which team the current user is on
+                let foundPlayer = false;
+                for (const team of [newState.team1, newState.team2]) {
+                    const player = team.players[currentUserId];
+                    if (player) {
+                        // Update the question - keep player active
+                        player.isActive = true;
+                        player.isComplete = false;
+                        player.currentQuestion = {
+                            question: data.question.question,
+                            operation: data.operation,
+                        };
+                        foundPlayer = true;
+                        console.log('[TeamMatch] Updated player question in state:', player.odName, '->', data.question.question);
+                        break;
+                    }
+                }
+                
+                if (!foundPlayer) {
+                    console.warn('[TeamMatch] Could not find player in state for new_question. userId:', currentUserId);
+                }
+
+                return newState;
+            });
+        });
+
+        // =================================================================
+        // SOLO DECISION PHASE (Final Round Anchor Solo Decision)
+        // =================================================================
+
+        // Solo decision phase started - IGL must choose Normal vs Anchor Solo
+        socket.on('solo_decision_phase', (data: {
+            round: number;
+            half: number;
+            nextRound: number;
+            durationMs: number;
+            team1: { teamId: string; teamName: string; iglId: string; anchorId: string; anchorName: string };
+            team2: { teamId: string; teamName: string; iglId: string; anchorId: string; anchorName: string };
+        }) => {
+            console.log('[TeamMatch] Solo decision phase started:', data);
+            soundEngine.playGo(); // Play attention sound
+            
+            // Determine which team is mine
+            setMatchState(prev => {
+                if (!prev) return prev;
+                const isTeam1 = Object.keys(prev.team1.players).includes(currentUserId);
+                const myTeamData = isTeam1 ? data.team1 : data.team2;
+                const opponentTeamData = isTeam1 ? data.team2 : data.team1;
+                
+                setSoloDecisionPhase({
+                    active: true,
+                    durationMs: data.durationMs,
+                    myDecision: null,
+                    opponentDecision: null,
+                    myAnchorName: myTeamData.anchorName,
+                    opponentAnchorName: opponentTeamData.anchorName,
+                });
+                
+                return { ...prev, phase: 'anchor_decision' };
+            });
+        });
+
+        // A team made their solo decision
+        socket.on('solo_decision_made', (data: {
+            teamId: string;
+            teamName: string;
+            decision: 'normal' | 'solo';
+            anchorId: string;
+            anchorName: string;
+            autoSelected?: boolean;
+        }) => {
+            console.log('[TeamMatch] Solo decision made:', data);
+            
+            setMatchState(prev => {
+                if (!prev) return prev;
+                const isMyTeam = 
+                    (prev.team1.teamId === data.teamId && Object.keys(prev.team1.players).includes(currentUserId)) ||
+                    (prev.team2.teamId === data.teamId && Object.keys(prev.team2.players).includes(currentUserId));
+                
+                setSoloDecisionPhase(phase => {
+                    if (!phase) return phase;
+                    if (isMyTeam) {
+                        return { ...phase, myDecision: data.decision };
+                    } else {
+                        return { ...phase, opponentDecision: data.decision };
+                    }
+                });
+                
+                return prev;
+            });
+            
+            if (data.autoSelected) {
+                toast.info(`${data.teamName} auto-selected NORMAL (timeout)`, { duration: 2000 });
+            }
+        });
+
+        // Both teams' decisions revealed
+        socket.on('solo_decisions_revealed', (data: {
+            team1: { teamId: string; teamName: string; decision: string; anchorName: string; anchorSoloActive: boolean };
+            team2: { teamId: string; teamName: string; decision: string; anchorName: string; anchorSoloActive: boolean };
+        }) => {
+            console.log('[TeamMatch] Solo decisions revealed:', data);
+            soundEngine.playGo();
+            
+            // Show toast with both decisions
+            const team1Msg = data.team1.anchorSoloActive 
+                ? `${data.team1.teamName}: ANCHOR SOLO (${data.team1.anchorName})` 
+                : `${data.team1.teamName}: NORMAL`;
+            const team2Msg = data.team2.anchorSoloActive 
+                ? `${data.team2.teamName}: ANCHOR SOLO (${data.team2.anchorName})` 
+                : `${data.team2.teamName}: NORMAL`;
+            
+            toast.info(`Final Round: ${team1Msg} vs ${team2Msg}`, { duration: 3000 });
+            
+            // Close the decision modal
+            setSoloDecisionPhase(null);
+        });
+
+        socket.on('slot_change', (data: {
+            teamId: string;
+            currentSlot: number;
+            slotOperation: string;
+            activePlayerId?: string;
+            activePlayerName?: string;
+        }) => {
             console.log('[TeamMatch] Slot change:', data);
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:slot_change',message:'H3B: slot changed (per-team)',data:{teamId:data.teamId,currentSlot:data.currentSlot,slotOperation:data.slotOperation},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3B'})}).catch(()=>{});
-            // #endregion
             setMatchState(prev => {
                 if (!prev) return prev;
                 const newState = JSON.parse(JSON.stringify(prev));
@@ -957,16 +1522,20 @@ export function TeamMatchClient({
                 if (data.teamId === newState.team1.teamId) {
                     newState.team1.currentSlot = data.currentSlot;
                     newState.team1.questionsInSlot = 0; // Reset questions for new slot
-                    // Reset isComplete for all players on this team when slot changes
+                    // Reset isComplete and update isActive for all players on this team
                     for (const playerId of Object.keys(newState.team1.players)) {
                         newState.team1.players[playerId].isComplete = false;
+                        // Set isActive based on activePlayerId from server
+                        newState.team1.players[playerId].isActive = playerId === data.activePlayerId;
                     }
                 } else if (data.teamId === newState.team2.teamId) {
                     newState.team2.currentSlot = data.currentSlot;
                     newState.team2.questionsInSlot = 0; // Reset questions for new slot
-                    // Reset isComplete for all players on this team when slot changes
+                    // Reset isComplete and update isActive for all players on this team
                     for (const playerId of Object.keys(newState.team2.players)) {
                         newState.team2.players[playerId].isComplete = false;
+                        // Set isActive based on activePlayerId from server
+                        newState.team2.players[playerId].isActive = playerId === data.activePlayerId;
                     }
                 }
                 // Also update match-level for backwards compatibility
@@ -1038,6 +1607,14 @@ export function TeamMatchClient({
             setBreakCountdownMs(breakDuration);
             // Set phaseInitialDuration directly for correct TacticalBreakPanel countdown
             setPhaseInitialDuration(breakDuration);
+            
+            // Clear Double Anchor indicator after the target round completes
+            // data.completedRound tells us which round just finished
+            setDoubleAnchorSlot(null);
+            setDoubleAnchorForRound(null);
+            setDoubleAnchorBenchedPlayer(null);
+            setDoubleAnchorPlayerName(null);
+            
             setMatchState(prev => {
                 if (!prev) return prev;
                 const newState = JSON.parse(JSON.stringify(prev));
@@ -1082,9 +1659,6 @@ export function TeamMatchClient({
         socket.on('halftime', (data) => {
             console.log('[TeamMatch] Halftime:', data);
             soundEngine.playHalftime();
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:halftime',message:'H5: halftime event received on client',data:{team1Score:data.team1Score,team2Score:data.team2Score,halftimeDurationMs:data.halftimeDurationMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
-            // #endregion
             const halftimeDuration = data.halftimeDurationMs || 120000; // Default 2 minutes
             setBreakCountdownMs(halftimeDuration);
             // IMPORTANT: Also set phaseInitialDuration directly since the useEffect depends on relayClockMs
@@ -1123,9 +1697,6 @@ export function TeamMatchClient({
         socket.on('double_callin_activated', (data) => {
             console.log('[TeamMatch] Double Call-In Activated:', data);
             soundEngine.playDoubleCallin();
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:double_callin_activated',message:'Double Call-In event received',data:{anchorName:data.anchorName,targetSlot:data.targetSlot,benchedPlayerName:data.benchedPlayerName,forRound:data.forRound},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'DC1'})}).catch(()=>{});
-            // #endregion
 
             // Update the appropriate half's usage state
             if (data.half === 1) {
@@ -1134,10 +1705,36 @@ export function TeamMatchClient({
                 setUsedDoubleCallinHalf2(true);
             }
             
-            // Show a toast notification
-            toast.success('Double Call-In Activated!', {
-                description: `${data.anchorName} will take over ${data.targetSlot} slot from ${data.benchedPlayerName} in Round ${data.forRound}`,
-                duration: 5000,
+            // Store Double Anchor slot info for visual indicator on slot card
+            const slotName = typeof data.targetSlot === 'string' ? data.targetSlot.toLowerCase() : '';
+            setDoubleAnchorSlot(slotName);
+            setDoubleAnchorForRound(data.forRound);
+            setDoubleAnchorBenchedPlayer(data.benchedPlayerName);
+            setDoubleAnchorPlayerName(data.anchorName);
+            
+            // Map slot name to operation symbol for cleaner display
+            const slotSymbols: Record<string, string> = {
+                'addition': '+',
+                'subtraction': '−',
+                'multiplication': '×',
+                'division': '÷',
+                'mixed': '±'
+            };
+            const slotSymbol = slotSymbols[slotName] || data.targetSlot;
+            
+            // Show a detailed toast notification with anchor icon
+            toast.success('⚓ Double Anchor Activated!', {
+                description: (
+                    <div className="space-y-1">
+                        <div className="font-bold text-primary">{data.anchorName}</div>
+                        <div>will play the <span className="font-bold text-white">{slotSymbol}</span> slot</div>
+                        <div className="text-sm opacity-80">
+                            (replacing {data.benchedPlayerName} in Round {data.forRound})
+                        </div>
+                    </div>
+                ),
+                duration: 8000,
+                icon: <Anchor className="w-5 h-5 text-primary" />,
             });
         });
         
@@ -1158,12 +1755,21 @@ export function TeamMatchClient({
             setRoundCountdownSeconds(Math.ceil(data.countdownMs / 1000));
             setMatchState(prev => {
                 if (!prev) return prev;
-                return {
-                    ...prev,
-                    phase: 'round_countdown',
-                    round: data.round,
-                    half: data.half,
-                };
+                const newState = JSON.parse(JSON.stringify(prev));
+                newState.phase = 'round_countdown';
+                newState.round = data.round;
+                newState.half = data.half;
+                
+                // Reset isComplete for all players when round countdown starts
+                // This clears the "SLOT COMPLETE!" message from the previous round
+                for (const playerId of Object.keys(newState.team1.players)) {
+                    newState.team1.players[playerId].isComplete = false;
+                }
+                for (const playerId of Object.keys(newState.team2.players)) {
+                    newState.team2.players[playerId].isComplete = false;
+                }
+                
+                return newState;
             });
         });
 
@@ -1184,9 +1790,6 @@ export function TeamMatchClient({
 
         socket.on('round_start', (data) => {
             console.log('[TeamMatch] Round start:', data);
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:round_start',message:'H7/H8: round_start event received on client',data:{round:data.round,half:data.half,currentSlot:data.currentSlot},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H7,H8'})}).catch(()=>{});
-            // #endregion
 
             // Check if current user is the slot 1 player - must check BEFORE state update
             setMatchState(prev => {
@@ -1218,14 +1821,20 @@ export function TeamMatchClient({
                 newState.team1.questionsInSlot = 0;
                 newState.team2.currentSlot = 1;
                 newState.team2.questionsInSlot = 0;
+                
+                // Reset isComplete for ALL players on both teams at round start
+                for (const playerId of Object.keys(newState.team1.players)) {
+                    newState.team1.players[playerId].isComplete = false;
+                }
+                for (const playerId of Object.keys(newState.team2.players)) {
+                    newState.team2.players[playerId].isComplete = false;
+                }
+                
                 return newState;
             });
         });
 
         socket.on('clock_update', (data) => {
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:clock_update',message:'H2A: clock values from server',data:{gameClockMs:data.gameClockMs,relayClockMs:data.relayClockMs,round:data.round},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2A'})}).catch(()=>{});
-            // #endregion
             setMatchState(prev => {
                 if (!prev) return prev;
                 return {
@@ -1456,22 +2065,28 @@ export function TeamMatchClient({
         previousSlotRef.current = currentSlot;
     }, [matchState?.phase, myTeam?.currentSlot, myTeam, currentUserId]);
 
-    // #region agent log - Debug Q6 issue
-    useEffect(() => {
-        if (isMyTurn && myPlayer?.currentQuestion && myTeam) {
-            const rawQNum = (myTeam.questionsInSlot || 0) + 1;
-            if (rawQNum > 5) {
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:Q6_useEffect',message:'Q6-CLIENT: Client displaying Q6+',data:{rawQNum,questionsInSlot:myTeam.questionsInSlot,currentSlot:myTeam.currentSlot,question:myPlayer.currentQuestion.question},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'Q6-CLIENT'})}).catch(()=>{});
-            }
-        }
-    }, [isMyTurn, myPlayer?.currentQuestion, myTeam?.questionsInSlot, myTeam?.currentSlot]);
-    // #endregion
+
+    // Handle solo decision (IGL only)
+    const handleSoloDecision = useCallback((decision: 'normal' | 'solo') => {
+        if (!socketRef.current || !matchState) return;
+        
+        socketRef.current.emit('anchor_solo_decision', {
+            matchId,
+            userId: currentUserId,
+            decision,
+        });
+        
+        console.log(`[TeamMatch] Solo decision submitted: ${decision}`);
+    }, [matchId, currentUserId, matchState]);
 
     // Handle answer submission
     const handleSubmit = useCallback((answer?: string) => {
         const answerToSubmit = answer?.trim() || currentInput.trim();
         if (!answerToSubmit || !isMyTurn) return;
-        
+
+        // Clear timeout warning since we're submitting
+        setTimeoutWarning(null);
+
         // For demo mode, simulate answer result
         if (isDemoMode && mockSimulatorRef.current) {
             const result = mockSimulatorRef.current.submitAnswer(answerToSubmit);
@@ -1559,7 +2174,11 @@ export function TeamMatchClient({
 
                     {/* Cancel / Back button for when stuck connecting */}
                     <button
-                        onClick={() => router.push('/arena/teams/setup?mode=5v5&fromQueue=true')}
+                        onClick={() => {
+                            // Use search param mode or default to 5v5
+                            const mode = searchParams.get('mode') || '5v5';
+                            router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
+                        }}
                         className="px-6 py-2 rounded-lg bg-white/5 hover:bg-white/10
                                    border border-white/10 text-white/60 hover:text-white/80
                                    font-medium transition-colors flex items-center gap-2 mx-auto"
@@ -1575,6 +2194,10 @@ export function TeamMatchClient({
     // If we have final state but no current state (server cleaned up), use final state
     const displayMatchState = effectiveMatchState!;
 
+    // During post_match, anyone can leave directly (match is over)
+    const isPostMatch = displayMatchState.phase === 'post_match';
+    const canLeaveDirectly = isSoloHumanWithAI || isPostMatch;
+
     // Derive team states from displayMatchState for consistent rendering
     const renderedMyTeam = displayMatchState.team1.players[currentUserId]
         ? displayMatchState.team1
@@ -1588,9 +2211,9 @@ export function TeamMatchClient({
     // Pre-match waiting state
     if (displayMatchState.phase === 'pre_match') {
         // Count connected players
-        const team1Connected = Object.values(matchState.team1.players).filter(p => p.odUserId).length;
-        const team2Connected = Object.values(matchState.team2.players).filter(p => p.odUserId).length;
-        const isAIMatch = matchState.team2.teamId?.startsWith('ai_team_') || matchState.team2.teamId?.startsWith('ai_party_');
+        const team1Connected = Object.values(displayMatchState.team1.players).filter(p => p.odUserId).length;
+        const team2Connected = Object.values(displayMatchState.team2.players).filter(p => p.odUserId).length;
+        const isAIMatch = displayMatchState.team2.teamId?.startsWith('ai_team_') || displayMatchState.team2.teamId?.startsWith('ai_party_');
         
         // Convert players to TeamPlayerCard format
         // Sort by operation order (addition, subtraction, multiplication, division, mixed)
@@ -1718,8 +2341,11 @@ export function TeamMatchClient({
                                         </div>
                                     </div>
 
-                                    {/* Players Grid */}
-                                    <div className="grid grid-cols-5 gap-2 mt-3">
+                                    {/* Players Grid - Dynamic columns based on team size */}
+                                    <div className={cn(
+                                        "grid gap-2 mt-3",
+                                        myTeamPlayers.length <= 2 ? "grid-cols-2 max-w-sm mx-auto" : "grid-cols-5"
+                                    )}>
                                         {myTeamPlayers.map((player, idx) => (
                                             <TeamPlayerCard
                                                 key={player.odUserId}
@@ -1750,8 +2376,11 @@ export function TeamMatchClient({
                                         </div>
                                     </div>
 
-                                    {/* Players Grid */}
-                                    <div className="grid grid-cols-5 gap-2 mt-3">
+                                    {/* Players Grid - Dynamic columns based on team size */}
+                                    <div className={cn(
+                                        "grid gap-2 mt-3",
+                                        opponentPlayers.length <= 2 ? "grid-cols-2 max-w-sm mx-auto" : "grid-cols-5"
+                                    )}>
                                         {opponentPlayers.map((player, idx) => (
                                             <TeamPlayerCard
                                                 key={player.odUserId}
@@ -1870,19 +2499,26 @@ export function TeamMatchClient({
     }
     
     // Strategy Phase: IGL assigns player slots before match starts
-    if (matchState.phase === 'strategy' && strategyPhase) {
+    if (displayMatchState.phase === 'strategy' && strategyPhase) {
         const isIGL = myPlayer?.isIgl;
-        const operationLabels = ['Addition', 'Subtraction', 'Multiplication', 'Division', 'Mixed'];
+        const teamSize = Object.keys(strategyPhase.mySlots).length;
+        
+        // Derive available operations from the strategy phase data
+        // For 2v2, only 2 random operations are available - extract them from current slot assignments
+        const assignedSlots = Object.values(strategyPhase.mySlots)
+            .map(assignment => assignment.slot)
+            .filter((slot): slot is string => typeof slot === 'string' && slot.length > 0);
+        const uniqueSlots = [...new Set(assignedSlots)];
+        
+        // Use derived slots if we have them and they match team size, otherwise fall back
+        const matchSlotOps = (uniqueSlots.length === teamSize && teamSize <= 2) 
+            ? uniqueSlots 
+            : (displayMatchState.slotOperations || DEFAULT_OPERATIONS);
+        const operationLabels = matchSlotOps.map(op => OPERATION_TO_LABEL[op] || op);
         const remainingSecs = Math.ceil(strategyPhase.remainingMs / 1000);
         
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:strategy_render',message:'H1-H5: Strategy phase render debug',data:{isIGL,myPlayerExists:!!myPlayer,myPlayerIsIgl:myPlayer?.isIgl,mySlotsCount:Object.keys(strategyPhase.mySlots).length,mySlots:strategyPhase.mySlots,selectedSlotPlayer,currentUserId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2,H5'})}).catch(()=>{});
-        // #endregion
         
         const handleSlotChange = (playerId: string, newSlotOp: string) => {
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'team-match-client.tsx:handleSlotChange',message:'H3-H4: Slot change clicked',data:{playerId,newSlotOp,isIGL,socketConnected:!!socketRef.current?.connected},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H3,H4'})}).catch(()=>{});
-            // #endregion
             if (!isIGL || !socketRef.current) return;
             socketRef.current.emit('update_slot_assignment', {
                 matchId,
@@ -1950,7 +2586,10 @@ export function TeamMatchClient({
                                 Your Team
                                 {isIGL && <span className="text-xs text-white/40 ml-auto">Click a player to select for reassignment</span>}
                             </h3>
-                        <div className="grid grid-cols-5 gap-2">
+                        <div className={cn(
+                            "grid gap-2",
+                            teamSize <= 2 ? "grid-cols-2 max-w-md mx-auto" : "grid-cols-5"
+                        )}>
                             {Object.entries(strategyPhase.mySlots).map(([playerId, assignment], idx) => {
                                 const slotOp = typeof assignment.slot === 'string' ? assignment.slot : '';
                                 return (
@@ -1977,9 +2616,12 @@ export function TeamMatchClient({
                         </div>
                     </div>
                     
-                    {/* Slot Assignment Grid */}
-                    <div className="grid grid-cols-5 gap-3 mb-4">
-                        {['addition', 'subtraction', 'multiplication', 'division', 'mixed'].map((slotOp, idx) => {
+                    {/* Slot Assignment Grid - Uses mode-aware operations */}
+                    <div className={cn(
+                        "grid gap-3 mb-4",
+                        matchSlotOps.length <= 2 ? "grid-cols-2 max-w-md mx-auto" : "grid-cols-5"
+                    )}>
+                        {matchSlotOps.map((slotOp, idx) => {
                             const op = operationLabels[idx];
                             // Server stores slot as operation name, not number
                             const playerInSlot = Object.entries(strategyPhase.mySlots).find(
@@ -2162,13 +2804,13 @@ export function TeamMatchClient({
                             >
                                 <Clock className="w-5 h-5 text-primary" />
                                 <span className="font-mono font-black text-2xl text-white">
-                                    {formatTime(matchState.gameClockMs)}
+                                    {formatTime(displayMatchState.gameClockMs)}
                                 </span>
                             </motion.div>
                             <div className="flex flex-col">
                                 <span className="text-xs text-white/40 uppercase tracking-wider">Round</span>
                                 <span className="text-lg font-bold text-white/80">
-                                    {matchState.round}/4 • {matchState.half === 1 ? '1st' : '2nd'} Half
+                                    {displayMatchState.round}/4 • {displayMatchState.half === 1 ? '1st' : '2nd'} Half
                                 </span>
                             </div>
                         </div>
@@ -2237,20 +2879,20 @@ export function TeamMatchClient({
                         {/* Phase indicator & Buttons - Right side */}
                         <div className="flex items-center gap-3">
                             <motion.div
-                                data-testid={`phase-${matchState.phase}`}
+                                data-testid={`phase-${displayMatchState.phase}`}
                                 className={cn(
                                     "px-5 py-2.5 rounded-xl font-black uppercase tracking-wider text-sm border-2",
-                                    matchState.phase === 'active' && "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
-                                    matchState.phase === 'break' && "bg-amber-500/20 text-amber-400 border-amber-500/40",
-                                    matchState.phase === 'halftime' && "bg-blue-500/20 text-blue-400 border-blue-500/40",
-                                    matchState.phase === 'post_match' && "bg-purple-500/20 text-purple-400 border-purple-500/40",
+                                    displayMatchState.phase === 'active' && "bg-emerald-500/20 text-emerald-400 border-emerald-500/40",
+                                    displayMatchState.phase === 'break' && "bg-amber-500/20 text-amber-400 border-amber-500/40",
+                                    displayMatchState.phase === 'halftime' && "bg-blue-500/20 text-blue-400 border-blue-500/40",
+                                    displayMatchState.phase === 'post_match' && "bg-purple-500/20 text-purple-400 border-purple-500/40",
                                 )}
-                                animate={matchState.phase === 'active' ? {
+                                animate={displayMatchState.phase === 'active' ? {
                                     boxShadow: ['0 0 10px rgba(34,197,94,0.3)', '0 0 20px rgba(34,197,94,0.5)', '0 0 10px rgba(34,197,94,0.3)']
                                 } : {}}
                                 transition={{ duration: 1.5, repeat: Infinity }}
                             >
-                                {matchState.phase === 'active' && (
+                                {displayMatchState.phase === 'active' && (
                                     <span className="flex items-center gap-2">
                                         <motion.span
                                             className="w-2 h-2 rounded-full bg-emerald-400"
@@ -2260,9 +2902,9 @@ export function TeamMatchClient({
                                         LIVE
                                     </span>
                                 )}
-                                {matchState.phase === 'break' && 'BREAK'}
-                                {matchState.phase === 'halftime' && 'HALFTIME'}
-                                {matchState.phase === 'post_match' && 'FINISHED'}
+                                {displayMatchState.phase === 'break' && 'BREAK'}
+                                {displayMatchState.phase === 'halftime' && 'HALFTIME'}
+                                {displayMatchState.phase === 'post_match' && 'FINISHED'}
                             </motion.div>
 
                             {/* Fullscreen Button */}
@@ -2278,18 +2920,20 @@ export function TeamMatchClient({
                                 {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
                             </motion.button>
 
-                            {/* Quit Button */}
-                            <motion.button
-                                onClick={() => setShowQuitConfirm(true)}
-                                className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30
-                                           text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/50
-                                           transition-all"
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                title="Leave Match"
-                            >
-                                <LogOut className="w-5 h-5" />
-                            </motion.button>
+                            {/* Quit Button - Hidden during post_match (use results buttons instead) */}
+                            {displayMatchState.phase !== 'post_match' && (
+                                <motion.button
+                                    onClick={() => setShowQuitConfirm(true)}
+                                    className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30
+                                               text-rose-400 hover:bg-rose-500/20 hover:border-rose-500/50
+                                               transition-all"
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    title="Leave Match"
+                                >
+                                    <LogOut className="w-5 h-5" />
+                                </motion.button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -2297,7 +2941,7 @@ export function TeamMatchClient({
 
             {/* Main Match Area */}
             <div className="max-w-7xl mx-auto px-4 py-6">
-                {matchState.phase === 'active' && (
+                {displayMatchState.phase === 'active' && (
                     <div className="grid grid-cols-12 gap-6">
                         {/* Teammate/My Turn View */}
                         <div className="col-span-8">
@@ -2325,8 +2969,52 @@ export function TeamMatchClient({
                                                 </motion.span>
                                             </motion.div>
                                         )}
+                                        {/* Timeout warning countdown */}
+                                        {timeoutWarning?.active && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.5 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0.5 }}
+                                                className="absolute top-4 right-4 z-50
+                                                           px-6 py-3 rounded-xl
+                                                           bg-amber-500 border-2 border-amber-300
+                                                           shadow-xl shadow-amber-500/50"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <motion.span
+                                                        animate={{ scale: [1, 1.2, 1] }}
+                                                        transition={{ duration: 0.3, repeat: Infinity }}
+                                                        className="text-2xl"
+                                                    >
+                                                        ⏰
+                                                    </motion.span>
+                                                    <span className="text-2xl font-black text-white">
+                                                        {timeoutWarning.secondsRemaining}s
+                                                    </span>
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                        {/* Timeout flash overlay */}
+                                        {showTimeoutFlash && (
+                                            <motion.div
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: [0, 0.5, 0] }}
+                                                transition={{ duration: 0.5 }}
+                                                className="absolute inset-0 z-50 bg-red-500/30 rounded-xl
+                                                           pointer-events-none flex items-center justify-center"
+                                            >
+                                                <motion.span
+                                                    initial={{ scale: 0.5 }}
+                                                    animate={{ scale: [0.5, 1.5, 1] }}
+                                                    className="text-4xl font-black text-red-500"
+                                                >
+                                                    TIME'S UP!
+                                                </motion.span>
+                                            </motion.div>
+                                        )}
                                     </AnimatePresence>
                                     <QuestionAnswerCard
+                                        key={myPlayerQuestion.question} // Force remount when question changes (e.g., after timeout)
                                         question={myPlayerQuestion.question}
                                         operation={myPlayerQuestion.operation || 'mixed'}
                                         questionNumber={Math.min((myTeam?.questionsInSlot || 0) + 1, 5)}
@@ -2435,13 +3123,13 @@ export function TeamMatchClient({
 
                         {/* Opponent Status */}
                         <div className="col-span-4">
-                            {opponentTeam && activeOpponent && (
+                            {opponentTeam && (
                                 <OpponentStatusPanel
                                     teamName={opponentTeam.teamName}
                                     teamTag={opponentTeam.teamTag}
                                     teamScore={opponentTeam.score}
                                     currentStreak={opponentTeam.currentStreak}
-                                    activePlayer={activeOpponent}
+                                    activePlayer={activeOpponent || null}
                                     slotNumber={opponentTeam.currentSlot || 1}
                                     questionInSlot={opponentTeam.questionsInSlot || 0}
                                     totalQuestionsPerSlot={5}
@@ -2459,7 +3147,7 @@ export function TeamMatchClient({
                 )}
 
                 {/* VS Relay Race Display - Full size with banners and animations */}
-                {matchState.phase === 'active' && myTeam && opponentTeam && (
+                {displayMatchState.phase === 'active' && myTeam && opponentTeam && (
                     <div className="mt-5 space-y-3">
                         {/* My Team Relay Lane */}
                         <motion.div
@@ -2518,18 +3206,36 @@ export function TeamMatchClient({
                                         if (!player) return <div key={idx} className="flex-1" />;
                                         const bannerStyle = BANNER_STYLES[resolveBannerStyle(player.odEquippedBanner)] || BANNER_STYLES.default;
 
+                                        // Determine slot position (1-5) based on operation order
+                                        const slotPosition = operations.indexOf(op) + 1;
+                                        const currentSlot = myTeam.currentSlot || 1;
+                                        const hasPlayed = slotPosition < currentSlot;
+                                        const isCurrentlyPlaying = player.isActive;
+                                        const isWaiting = slotPosition > currentSlot && !player.isComplete;
+                                        
+                                        // Check if Double Anchor is actively playing THIS slot in the CURRENT round
+                                        const isDoubleAnchorActive = doubleAnchorSlot === op && 
+                                                                      doubleAnchorForRound === displayMatchState.round &&
+                                                                      slotPosition === currentSlot;
+                                        
+                                        // Find the anchor player for overlay display
+                                        const anchorPlayer = isDoubleAnchorActive 
+                                            ? Object.values(myTeam.players).find(p => p.isAnchor)
+                                            : null;
+
                                         return (
                                             <motion.div
                                                 key={odUserId}
                                                 className={cn(
                                                     "flex-1 rounded-2xl overflow-hidden relative transition-all",
-                                                    player.isComplete && "ring-3 ring-emerald-500 ring-offset-2 ring-offset-slate-900 shadow-xl shadow-emerald-500/30",
-                                                    player.isActive && "ring-3 ring-primary ring-offset-2 ring-offset-slate-900 shadow-xl shadow-primary/50",
-                                                    !player.isActive && !player.isComplete && "opacity-50 grayscale-[30%]"
+                                                    // Only highlight if actively playing
+                                                    isCurrentlyPlaying && "ring-3 ring-primary ring-offset-2 ring-offset-slate-900 shadow-xl shadow-primary/50",
+                                                    // Grey out completed or waiting players
+                                                    (hasPlayed || isWaiting) && !isCurrentlyPlaying && "opacity-60 grayscale-[20%]"
                                                 )}
-                                                animate={player.isActive ? {
-                                                    scale: [1, 1.03, 1],
-                                                    y: [0, -4, 0]
+                                                animate={isCurrentlyPlaying ? {
+                                                    scale: [1, 1.02, 1],
+                                                    y: [0, -3, 0]
                                                 } : {}}
                                                 transition={{ duration: 1.2, repeat: Infinity }}
                                             >
@@ -2549,7 +3255,7 @@ export function TeamMatchClient({
                                                 )}
 
                                                 {/* Shimmer effect for active */}
-                                                {player.isActive && (
+                                                {isCurrentlyPlaying && (
                                                     <motion.div
                                                         className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
                                                         animate={{ x: ['-100%', '200%'] }}
@@ -2557,91 +3263,176 @@ export function TeamMatchClient({
                                                     />
                                                 )}
 
+                                                {/* Double Anchor Active Overlay - Shows anchor taking over this slot */}
+                                                {isDoubleAnchorActive && anchorPlayer && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, scale: 0.8 }}
+                                                        animate={{ opacity: 1, scale: 1 }}
+                                                        className="absolute inset-0 z-20 flex flex-col items-center justify-center
+                                                                   bg-gradient-to-br from-primary/90 to-primary/70 backdrop-blur-sm"
+                                                    >
+                                                        {/* Pulsing border effect */}
+                                                        <motion.div
+                                                            className="absolute inset-0 border-4 border-primary rounded-2xl"
+                                                            animate={{
+                                                                boxShadow: ['0 0 20px hsl(var(--primary) / 0.6)', '0 0 40px hsl(var(--primary) / 0.9)', '0 0 20px hsl(var(--primary) / 0.6)']
+                                                            }}
+                                                            transition={{ duration: 1, repeat: Infinity }}
+                                                        />
+                                                        
+                                                        {/* Anchor icon with pulse */}
+                                                        <motion.div
+                                                            animate={{ scale: [1, 1.15, 1] }}
+                                                            transition={{ duration: 0.8, repeat: Infinity }}
+                                                            className="mb-1"
+                                                        >
+                                                            <Anchor className="w-8 h-8 text-white drop-shadow-lg" />
+                                                        </motion.div>
+                                                        
+                                                        {/* Anchor player name */}
+                                                        <span className="text-sm font-black text-white drop-shadow-lg text-center px-2">
+                                                            {anchorPlayer.odName}
+                                                        </span>
+                                                        
+                                                        {/* "DOUBLE ANCHOR" label */}
+                                                        <motion.span 
+                                                            className="text-[10px] font-bold text-white/90 uppercase tracking-wider mt-0.5"
+                                                            animate={{ opacity: [0.7, 1, 0.7] }}
+                                                            transition={{ duration: 1.5, repeat: Infinity }}
+                                                        >
+                                                            Double Anchor
+                                                        </motion.span>
+                                                        
+                                                        {/* Original player (benched) indicator */}
+                                                        <span className="text-[9px] text-white/70 mt-1">
+                                                            (replaces {player.odName})
+                                                        </span>
+                                                    </motion.div>
+                                                )}
+
                                                 {/* Content */}
-                                                <div className="relative p-3 flex flex-col items-center justify-center min-h-[85px]">
-                                                    {/* Operation badge - Top left */}
-                                                    <div className={cn(
-                                                        "absolute top-2 left-2 w-8 h-8 rounded-lg flex items-center justify-center text-sm font-black",
-                                                        "bg-black/50 backdrop-blur-md border-2 border-white/30 shadow-lg",
-                                                        bannerStyle.textColor
-                                                    )}>
-                                                        {operationSymbols[op]}
+                                                <div className="relative p-3 flex flex-col items-center justify-between min-h-[100px]">
+                                                    {/* Top row: Operation + Roles */}
+                                                    <div className="w-full flex items-start justify-between">
+                                                        {/* Operation badge */}
+                                                        <div className={cn(
+                                                            "w-8 h-8 rounded-lg flex items-center justify-center text-sm font-black",
+                                                            "bg-black/50 backdrop-blur-md border-2 border-white/30 shadow-lg",
+                                                            bannerStyle.textColor
+                                                        )}>
+                                                            {operationSymbols[op]}
+                                                        </div>
+
+                                                        {/* Role badges */}
+                                                        <div className="flex gap-1">
+                                                            {player.isIgl && (
+                                                                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-amber-400 to-amber-600
+                                                                               flex items-center justify-center shadow-lg border border-amber-300">
+                                                                    <Crown className="w-3.5 h-3.5 text-white drop-shadow" />
+                                                                </div>
+                                                            )}
+                                                            {player.isAnchor && (
+                                                                <div className="w-6 h-6 rounded-md bg-gradient-to-br from-purple-400 to-purple-600
+                                                                               flex items-center justify-center shadow-lg border border-purple-300">
+                                                                    <Anchor className="w-3.5 h-3.5 text-white drop-shadow" />
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
 
-                                                    {/* Role badges - Top right */}
-                                                    <div className="absolute top-2 right-2 flex gap-1.5">
-                                                        {player.isIgl && (
+                                                    {/* Double Anchor Indicator - Shows when slot is targeted for Double Call-In */}
+                                                    {doubleAnchorSlot === op && doubleAnchorForRound && (
+                                                        <motion.div
+                                                            initial={{ scale: 0, opacity: 0 }}
+                                                            animate={{ scale: 1, opacity: 1 }}
+                                                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                                                        >
                                                             <motion.div
-                                                                className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600
-                                                                           flex items-center justify-center shadow-lg shadow-amber-500/50 border border-amber-300"
-                                                                animate={{ rotate: [0, 8, -8, 0] }}
-                                                                transition={{ duration: 2, repeat: Infinity }}
-                                                            >
-                                                                <Crown className="w-4 h-4 text-white drop-shadow" />
-                                                            </motion.div>
-                                                        )}
-                                                        {player.isAnchor && (
-                                                            <motion.div
-                                                                className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-400 to-purple-600
-                                                                           flex items-center justify-center shadow-lg shadow-purple-500/50 border border-purple-300"
-                                                                animate={{ y: [0, -2, 0] }}
+                                                                className="px-4 py-2 rounded-xl bg-gradient-to-br from-primary/95 to-primary-foreground/95 backdrop-blur-sm 
+                                                                           border-2 border-primary shadow-xl shadow-primary/60"
+                                                                animate={{
+                                                                    boxShadow: ['0 0 15px hsl(var(--primary) / 0.5)', '0 0 30px hsl(var(--primary) / 0.8)', '0 0 15px hsl(var(--primary) / 0.5)'],
+                                                                    scale: [1, 1.02, 1]
+                                                                }}
                                                                 transition={{ duration: 1.5, repeat: Infinity }}
                                                             >
-                                                                <Anchor className="w-4 h-4 text-white drop-shadow" />
+                                                                <div className="flex flex-col items-center gap-0.5">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <Anchor className="w-5 h-5 text-primary-foreground" />
+                                                                        <span className="text-sm font-black text-white whitespace-nowrap">
+                                                                            DOUBLE ANCHOR
+                                                                        </span>
+                                                                    </div>
+                                                                    {doubleAnchorPlayerName && (
+                                                                        <span className="text-xs font-bold text-primary-foreground whitespace-nowrap">
+                                                                            {doubleAnchorPlayerName} • R{doubleAnchorForRound}
+                                                                        </span>
+                                                                    )}
+                                                                    {doubleAnchorBenchedPlayer && (
+                                                                        <span className="text-[10px] text-white/80 whitespace-nowrap">
+                                                                            replaces {doubleAnchorBenchedPlayer}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </motion.div>
-                                                        )}
-                                                    </div>
+                                                        </motion.div>
+                                                    )}
 
                                                     {/* Player name - Center */}
                                                     <span className={cn(
-                                                        "text-base font-black truncate text-center mt-4 drop-shadow-lg",
+                                                        "text-sm font-black truncate text-center drop-shadow-lg w-full",
                                                         bannerStyle.textColor
                                                     )}>
                                                         {player.odName}
                                                     </span>
 
-                                                    {/* Status indicator - Bottom */}
-                                                    <div className="mt-2 flex items-center gap-2">
-                                                        {player.isComplete && (
-                                                            <motion.div
-                                                                initial={{ scale: 0, rotate: -180 }}
-                                                                animate={{ scale: 1, rotate: 0 }}
-                                                                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/40 backdrop-blur-sm border border-emerald-400/50"
-                                                            >
-                                                                <Check className="w-4 h-4 text-emerald-300" />
-                                                                <span className="text-sm font-black text-emerald-300">{player.score} pts</span>
-                                                            </motion.div>
+                                                    {/* Bottom: Status/Score */}
+                                                    <div className="w-full">
+                                                        {/* Currently playing - LIVE indicator */}
+                                                        {isCurrentlyPlaying && (
+                                                            <div className="flex flex-col items-center gap-1">
+                                                                <motion.div
+                                                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/40 backdrop-blur-sm border border-primary/50"
+                                                                    animate={{ boxShadow: ['0 0 8px var(--primary)', '0 0 16px var(--primary)', '0 0 8px var(--primary)'] }}
+                                                                    transition={{ duration: 0.8, repeat: Infinity }}
+                                                                >
+                                                                    <motion.span
+                                                                        className="w-2 h-2 rounded-full bg-primary"
+                                                                        animate={{ scale: [1, 1.4, 1] }}
+                                                                        transition={{ duration: 0.5, repeat: Infinity }}
+                                                                    />
+                                                                    <span className="text-xs font-black text-primary">LIVE</span>
+                                                                </motion.div>
+                                                                <div className="flex items-center gap-2 text-xs">
+                                                                    <span className="font-bold text-white">{player.score} pts</span>
+                                                                    {player.streak > 0 && (
+                                                                        <span className="flex items-center gap-0.5 text-orange-400 font-bold">
+                                                                            <Zap className="w-3 h-3" />{player.streak}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         )}
-                                                        {player.isActive && (
-                                                            <motion.div
-                                                                className="flex items-center gap-2 px-3 py-1 rounded-full bg-primary/40 backdrop-blur-sm border border-primary/50"
-                                                                animate={{ boxShadow: ['0 0 10px var(--primary)', '0 0 20px var(--primary)', '0 0 10px var(--primary)'] }}
-                                                                transition={{ duration: 0.8, repeat: Infinity }}
-                                                            >
-                                                                <motion.span
-                                                                    className="w-2 h-2 rounded-full bg-primary"
-                                                                    animate={{ scale: [1, 1.5, 1] }}
-                                                                    transition={{ duration: 0.5, repeat: Infinity }}
-                                                                />
-                                                                <span className="text-sm font-black text-primary">LIVE</span>
-                                                                {player.streak > 0 && (
-                                                                    <div className="flex items-center gap-1 text-orange-400">
-                                                                        <Zap className="w-4 h-4" />
-                                                                        <span className="text-sm font-black">{player.streak}</span>
-                                                                    </div>
-                                                                )}
-                                                            </motion.div>
+                                                        {/* Completed - Show score */}
+                                                        {hasPlayed && !isCurrentlyPlaying && (
+                                                            <div className="flex items-center justify-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/30 border border-emerald-400/40">
+                                                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                                                <span className="text-xs font-black text-emerald-400">+{player.score}</span>
+                                                            </div>
                                                         )}
-                                                        {!player.isActive && !player.isComplete && (
-                                                            <span className="text-sm text-white/50 font-bold uppercase tracking-wider">Next Up</span>
+                                                        {/* Waiting - Show slot number */}
+                                                        {isWaiting && !isCurrentlyPlaying && (
+                                                            <div className="text-center">
+                                                                <span className="text-[10px] text-white/40 font-bold uppercase">Slot {slotPosition}</span>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>
 
                                                 {/* Active border glow */}
-                                                {player.isActive && (
+                                                {isCurrentlyPlaying && (
                                                     <motion.div
-                                                        className="absolute inset-0 border-3 border-primary rounded-2xl"
+                                                        className="absolute inset-0 border-2 border-primary rounded-2xl"
                                                         animate={{ opacity: [0.4, 1, 0.4] }}
                                                         transition={{ duration: 0.8, repeat: Infinity }}
                                                     />
@@ -2652,34 +3443,37 @@ export function TeamMatchClient({
                                 </div>
                             </div>
 
-                            {/* Team Progress Bar - Enhanced */}
+                            {/* Team Progress Bar - Dynamic based on slot count */}
                             <div className="relative mt-3 h-2.5 bg-black/40 rounded-full overflow-hidden flex shadow-inner">
-                                {[1, 2, 3, 4, 5].map(slot => (
-                                    <motion.div
-                                        key={slot}
-                                        className={cn(
-                                            "flex-1 transition-all duration-500 relative",
-                                            slot < (myTeam.currentSlot || 1) && "bg-gradient-to-r from-emerald-500 to-emerald-400",
-                                            slot === (myTeam.currentSlot || 1) && "bg-gradient-to-r from-primary via-primary to-primary/70",
-                                            slot > (myTeam.currentSlot || 1) && "bg-white/10"
-                                        )}
-                                        animate={slot === (myTeam.currentSlot || 1) ? {
-                                            opacity: [1, 0.6, 1],
-                                        } : {}}
-                                        transition={{ duration: 0.8, repeat: Infinity }}
-                                    >
-                                        {slot === (myTeam.currentSlot || 1) && (
-                                            <motion.div
-                                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                                                animate={{ x: ['-100%', '100%'] }}
-                                                transition={{ duration: 1, repeat: Infinity }}
-                                            />
-                                        )}
-                                    </motion.div>
-                                ))}
+                                {getSlotLabels(matchState?.slotOperations).map((_, idx) => {
+                                    const slot = idx + 1;
+                                    return (
+                                        <motion.div
+                                            key={slot}
+                                            className={cn(
+                                                "flex-1 transition-all duration-500 relative",
+                                                slot < (myTeam.currentSlot || 1) && "bg-gradient-to-r from-emerald-500 to-emerald-400",
+                                                slot === (myTeam.currentSlot || 1) && "bg-gradient-to-r from-primary via-primary to-primary/70",
+                                                slot > (myTeam.currentSlot || 1) && "bg-white/10"
+                                            )}
+                                            animate={slot === (myTeam.currentSlot || 1) ? {
+                                                opacity: [1, 0.6, 1],
+                                            } : {}}
+                                            transition={{ duration: 0.8, repeat: Infinity }}
+                                        >
+                                            {slot === (myTeam.currentSlot || 1) && (
+                                                <motion.div
+                                                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                                                    animate={{ x: ['-100%', '100%'] }}
+                                                    transition={{ duration: 1, repeat: Infinity }}
+                                                />
+                                            )}
+                                        </motion.div>
+                                    );
+                                })}
                             </div>
                             <div className="flex justify-between mt-1 px-1">
-                                {SLOT_LABELS.map((label, idx) => (
+                                {getSlotLabels(matchState?.slotOperations).map((label, idx) => (
                                     <span key={label} className={cn(
                                         "text-[10px] font-bold uppercase tracking-wider",
                                         idx + 1 < (myTeam.currentSlot || 1) && "text-emerald-400",
@@ -2875,34 +3669,37 @@ export function TeamMatchClient({
                                 </div>
                             </div>
 
-                            {/* Team Progress Bar - Enhanced */}
+                            {/* Team Progress Bar - Dynamic based on slot count */}
                             <div className="relative mt-3 h-2.5 bg-black/40 rounded-full overflow-hidden flex shadow-inner">
-                                {[1, 2, 3, 4, 5].map(slot => (
-                                    <motion.div
-                                        key={slot}
-                                        className={cn(
-                                            "flex-1 transition-all duration-500 relative",
-                                            slot < (opponentTeam.currentSlot || 1) && "bg-gradient-to-r from-rose-500 to-rose-400",
-                                            slot === (opponentTeam.currentSlot || 1) && "bg-gradient-to-r from-rose-400 via-rose-400 to-rose-300",
-                                            slot > (opponentTeam.currentSlot || 1) && "bg-white/10"
-                                        )}
-                                        animate={slot === (opponentTeam.currentSlot || 1) ? {
-                                            opacity: [1, 0.6, 1],
-                                        } : {}}
-                                        transition={{ duration: 0.8, repeat: Infinity }}
-                                    >
-                                        {slot === (opponentTeam.currentSlot || 1) && (
-                                            <motion.div
-                                                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                                                animate={{ x: ['-100%', '100%'] }}
-                                                transition={{ duration: 1, repeat: Infinity }}
-                                            />
-                                        )}
-                                    </motion.div>
-                                ))}
+                                {getSlotLabels(matchState?.slotOperations).map((_, idx) => {
+                                    const slot = idx + 1;
+                                    return (
+                                        <motion.div
+                                            key={slot}
+                                            className={cn(
+                                                "flex-1 transition-all duration-500 relative",
+                                                slot < (opponentTeam.currentSlot || 1) && "bg-gradient-to-r from-rose-500 to-rose-400",
+                                                slot === (opponentTeam.currentSlot || 1) && "bg-gradient-to-r from-rose-400 via-rose-400 to-rose-300",
+                                                slot > (opponentTeam.currentSlot || 1) && "bg-white/10"
+                                            )}
+                                            animate={slot === (opponentTeam.currentSlot || 1) ? {
+                                                opacity: [1, 0.6, 1],
+                                            } : {}}
+                                            transition={{ duration: 0.8, repeat: Infinity }}
+                                        >
+                                            {slot === (opponentTeam.currentSlot || 1) && (
+                                                <motion.div
+                                                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                                                    animate={{ x: ['-100%', '100%'] }}
+                                                    transition={{ duration: 1, repeat: Infinity }}
+                                                />
+                                            )}
+                                        </motion.div>
+                                    );
+                                })}
                             </div>
                             <div className="flex justify-between mt-1 px-1">
-                                {SLOT_LABELS.map((label, idx) => (
+                                {getSlotLabels(matchState?.slotOperations).map((label, idx) => (
                                     <span key={label} className={cn(
                                         "text-[10px] font-bold uppercase tracking-wider",
                                         idx + 1 < (opponentTeam.currentSlot || 1) && "text-rose-400",
@@ -2919,10 +3716,10 @@ export function TeamMatchClient({
 
                 {/* Break Phase - Enhanced with MVP and insights */}
                 {/* Hide when round countdown is showing to prevent overlap */}
-                {matchState.phase === 'break' && !showRoundCountdown && myTeam && opponentTeam && (
+                {displayMatchState.phase === 'break' && !showRoundCountdown && myTeam && opponentTeam && (
                     <TacticalBreakPanel
                         durationMs={phaseInitialDuration || 20000}
-                        completedRound={matchState.round}
+                        completedRound={displayMatchState.round}
                         totalRounds={8}
                         myTeamScore={myTeam.score}
                         opponentScore={opponentTeam.score}
@@ -2969,7 +3766,7 @@ export function TeamMatchClient({
                             return insights;
                         })()}
                                     isIGL={isIGL}
-                                    half={matchState.half}
+                                    half={displayMatchState.half}
                                     usedDoubleCallinHalf1={usedDoubleCallinHalf1}
                                     usedDoubleCallinHalf2={usedDoubleCallinHalf2}
                                     timeoutsRemaining={timeoutsRemaining}
@@ -2985,7 +3782,7 @@ export function TeamMatchClient({
 
                 {/* Halftime Phase - Enhanced with player stats */}
                 {/* Hide when round countdown is showing to prevent overlap */}
-                {matchState.phase === 'halftime' && !showRoundCountdown && myTeam && opponentTeam && (
+                {displayMatchState.phase === 'halftime' && !showRoundCountdown && myTeam && opponentTeam && (
                     <HalftimePanel
                         durationMs={phaseInitialDuration || 30000}
                         myTeamName={myTeam.teamName}
@@ -3028,8 +3825,8 @@ export function TeamMatchClient({
                         }))}
                                     isIGL={isIGL}
                         currentUserId={currentUserId}
-                        round={matchState.round}
-                        half={matchState.half}
+                        round={displayMatchState.round}
+                        half={displayMatchState.half}
                                     usedDoubleCallinHalf1={usedDoubleCallinHalf1}
                                     timeoutsRemaining={timeoutsRemaining}
                         availableSlots={availableSlots.map(s => s.operation)}
@@ -3078,135 +3875,6 @@ export function TeamMatchClient({
                     const winnerAwards = getTeamAwards(winnerPlayers);
                     const loserAwards = getTeamAwards(loserPlayers);
 
-                    // Banner card component
-                    const ResultPlayerCard = ({ player, isWinner, index }: { player: PlayerState; isWinner: boolean; index: number }) => {
-                        const bannerGradient = isWinner
-                            ? 'from-fuchsia-600/80 via-purple-600/60 to-slate-900'
-                            : 'from-rose-600/80 via-red-600/60 to-slate-900';
-                        const borderColor = isWinner ? 'border-emerald-500' : 'border-rose-500';
-                        const isCurrentUser = player.odUserId === currentUserId;
-                        const avgTime = player.total > 0 ? (player.totalAnswerTimeMs / player.total / 1000).toFixed(1) : 'N/A';
-
-                        return (
-                            <motion.div
-                                initial={{ y: 30, opacity: 0 }}
-                                animate={{ y: 0, opacity: 1 }}
-                                transition={{ delay: index * 0.1 }}
-                                className={cn(
-                                    "relative flex flex-col rounded-xl overflow-hidden",
-                                    "bg-slate-900/90 border-2",
-                                    isCurrentUser ? "border-primary ring-2 ring-primary/30" : borderColor + "/40"
-                                )}
-                            >
-                                {/* Banner with equipped banner cosmetic */}
-                                <div
-                                    className={cn("h-16 bg-gradient-to-b relative", bannerGradient)}
-                                    style={player.odEquippedBanner && BANNER_STYLES[player.odEquippedBanner] ? {
-                                        background: BANNER_STYLES[player.odEquippedBanner].gradient
-                                    } : {}}
-                                >
-                                    {/* Role badges */}
-                                    <div className="absolute top-2 right-2 flex gap-1">
-                                        {player.isIgl && (
-                                            <div className="w-5 h-5 rounded bg-amber-500/30 backdrop-blur-sm flex items-center justify-center">
-                                                <Crown className="w-3 h-3 text-amber-400" />
-                                            </div>
-                                        )}
-                                        {player.isAnchor && (
-                                            <div className="w-5 h-5 rounded bg-purple-500/30 backdrop-blur-sm flex items-center justify-center">
-                                                <Anchor className="w-3 h-3 text-purple-400" />
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Avatar with frame */}
-                                <div className="flex flex-col items-center -mt-8 px-3 pb-3">
-                                    <div className="relative mb-2">
-                                        <div className={cn(
-                                            "w-14 h-14 rounded-full flex items-center justify-center text-xl font-black",
-                                            "bg-slate-800 border-3",
-                                            player.odEquippedFrame ? `ring-2 ring-offset-2 ring-offset-slate-900` : "",
-                                            isWinner ? "border-emerald-500" : "border-rose-500"
-                                        )}>
-                                            {player.odName?.charAt(0)?.toUpperCase() || '?'}
-                                        </div>
-                                        {/* Score badge */}
-                                        <div className={cn(
-                                            "absolute -bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-xs font-bold",
-                                            "bg-slate-900 border",
-                                            isWinner ? "border-emerald-500/50 text-emerald-400" : "border-rose-500/50 text-rose-400"
-                                        )}>
-                                            {player.score}
-                                        </div>
-                                    </div>
-
-                                    {/* Player name */}
-                                    <p className="font-bold text-white text-sm text-center truncate w-full mt-1">
-                                        {player.odName}
-                                    </p>
-
-                                    {/* Title if equipped */}
-                                    {player.odEquippedTitle && (
-                                        <p className="text-[10px] text-primary/80 truncate w-full text-center">
-                                            {player.odEquippedTitle}
-                                        </p>
-                                    )}
-
-                                    {/* Slot/Role badge */}
-                                    <div className={cn(
-                                        "text-[10px] font-semibold px-2 py-0.5 rounded mt-1",
-                                        isWinner ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                                    )}>
-                                        {player.slot || (player.isAnchor ? 'Anchor' : player.isIgl ? 'IGL' : 'Player')}
-                                    </div>
-
-                                    {/* Stats button */}
-                                    <button
-                                        onClick={() => setSelectedPlayerStats(player)}
-                                        className="w-full mt-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10
-                                                   text-xs font-semibold text-white/70 hover:text-white transition-all uppercase tracking-wider"
-                                    >
-                                        Stats
-                                    </button>
-                                </div>
-                            </motion.div>
-                        );
-                    };
-
-                    // Award card component
-                    const AwardCard = ({ icon: Icon, title, player, value, color }: {
-                        icon: any; title: string; player: PlayerState; value: string;
-                        color: 'amber' | 'cyan' | 'orange'
-                    }) => {
-                        const colorClasses = {
-                            amber: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
-                            cyan: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
-                            orange: 'bg-orange-500/10 border-orange-500/30 text-orange-400',
-                        };
-                        return (
-                            <motion.div
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className={cn("flex items-center gap-3 p-3 rounded-xl border", colorClasses[color])}
-                            >
-                                <div className={cn(
-                                    "w-10 h-10 rounded-lg flex items-center justify-center",
-                                    color === 'amber' && "bg-amber-500/20",
-                                    color === 'cyan' && "bg-cyan-500/20",
-                                    color === 'orange' && "bg-orange-500/20"
-                                )}>
-                                    <Icon className="w-5 h-5" />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-xs opacity-70">{title}</p>
-                                    <p className="font-bold text-white truncate">{player.odName}</p>
-                                </div>
-                                <p className="font-black text-lg">{value}</p>
-                            </motion.div>
-                        );
-                    };
-
                     const currentTeamData = resultsPage === 0 ? winningTeam : losingTeam;
                     const currentPlayers = resultsPage === 0 ? winnerPlayers : loserPlayers;
                     const currentAwards = resultsPage === 0 ? winnerAwards : loserAwards;
@@ -3216,44 +3884,63 @@ export function TeamMatchClient({
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
-                            className="w-full max-w-5xl mx-auto"
+                            className="w-full max-w-7xl mx-auto"
                         >
-                            {/* Header */}
-                            <div className="text-center mb-6">
-                                <h1 className="text-3xl font-black text-white mb-2">Match Results</h1>
-                                <div className={cn(
-                                    "inline-flex items-center gap-2 px-4 py-2 rounded-full",
-                                    userWon ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
-                                )}>
-                                    {userWon ? <Trophy className="w-5 h-5" /> : <Target className="w-5 h-5" />}
-                                    <span className="font-bold">{isDraw ? 'DRAW' : userWon ? 'VICTORY' : 'DEFEAT'}</span>
-                                </div>
+                            {/* Header - bigger and more impactful */}
+                            <div className="text-center mb-8">
+                                <motion.h1
+                                    initial={{ y: -20, opacity: 0 }}
+                                    animate={{ y: 0, opacity: 1 }}
+                                    className="text-4xl font-black text-white mb-4"
+                                >
+                                    Match Results
+                                </motion.h1>
+                                <motion.div
+                                    initial={{ scale: 0.8, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    transition={{ delay: 0.2 }}
+                                    className={cn(
+                                        "inline-flex items-center gap-3 px-6 py-3 rounded-2xl border-2",
+                                        userWon
+                                            ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
+                                            : "bg-rose-500/20 text-rose-400 border-rose-500/40"
+                                    )}
+                                >
+                                    {userWon ? <Trophy className="w-7 h-7" /> : <Target className="w-7 h-7" />}
+                                    <span className="font-black text-2xl uppercase tracking-wider">
+                                        {isDraw ? 'DRAW' : userWon ? 'VICTORY' : 'DEFEAT'}
+                                    </span>
+                                </motion.div>
                             </div>
 
-                            {/* Navigation arrows */}
+                            {/* Navigation arrows - larger and more visible */}
                             {!isDraw && (
                                 <>
                                     <button
                                         onClick={() => setResultsPage(0)}
                                         disabled={resultsPage === 0}
                                         className={cn(
-                                            "fixed left-4 top-1/2 -translate-y-1/2 z-40 p-3 rounded-full",
-                                            "bg-black/40 border border-white/10 transition-all",
-                                            resultsPage === 0 ? "opacity-30 cursor-not-allowed" : "hover:bg-white/10 hover:border-white/30"
+                                            "fixed left-6 top-1/2 -translate-y-1/2 z-40 p-4 rounded-2xl",
+                                            "bg-black/60 backdrop-blur-md border-2 border-white/20 transition-all",
+                                            resultsPage === 0
+                                                ? "opacity-30 cursor-not-allowed"
+                                                : "hover:bg-emerald-500/20 hover:border-emerald-500/50 hover:scale-110"
                                         )}
                                     >
-                                        <ChevronLeft className="w-6 h-6" />
+                                        <ChevronLeft className="w-8 h-8" />
                                     </button>
                                     <button
                                         onClick={() => setResultsPage(1)}
                                         disabled={resultsPage === 1}
                                         className={cn(
-                                            "fixed right-4 top-1/2 -translate-y-1/2 z-40 p-3 rounded-full",
-                                            "bg-black/40 border border-white/10 transition-all",
-                                            resultsPage === 1 ? "opacity-30 cursor-not-allowed" : "hover:bg-white/10 hover:border-white/30"
+                                            "fixed right-6 top-1/2 -translate-y-1/2 z-40 p-4 rounded-2xl",
+                                            "bg-black/60 backdrop-blur-md border-2 border-white/20 transition-all",
+                                            resultsPage === 1
+                                                ? "opacity-30 cursor-not-allowed"
+                                                : "hover:bg-rose-500/20 hover:border-rose-500/50 hover:scale-110"
                                         )}
                                     >
-                                        <ChevronRight className="w-6 h-6" />
+                                        <ChevronRight className="w-8 h-8" />
                                     </button>
                                 </>
                             )}
@@ -3274,60 +3961,72 @@ export function TeamMatchClient({
                                             ? "border-emerald-500/30 bg-gradient-to-b from-fuchsia-900/20 via-slate-900/90 to-slate-900"
                                             : "border-rose-500/30 bg-gradient-to-b from-rose-900/20 via-slate-900/90 to-slate-900"
                                     )}>
-                                        {/* Team header */}
+                                        {/* Team header - larger and more impactful */}
                                         <div className={cn(
-                                            "relative p-4 border-b flex items-center justify-between",
+                                            "relative p-6 border-b-2 flex items-center justify-between",
                                             isCurrentPageWinner
-                                                ? "border-emerald-500/20 bg-gradient-to-r from-fuchsia-600/20 via-purple-600/20 to-fuchsia-600/20"
-                                                : "border-rose-500/20 bg-gradient-to-r from-rose-600/20 via-red-600/20 to-rose-600/20"
+                                                ? "border-emerald-500/30 bg-gradient-to-r from-emerald-600/20 via-fuchsia-600/20 to-emerald-600/20"
+                                                : "border-rose-500/30 bg-gradient-to-r from-rose-600/20 via-red-600/20 to-rose-600/20"
                                         )}>
-                                            <div className="flex items-center gap-3">
-                                                {isCurrentPageWinner ? (
-                                                    <Trophy className="w-6 h-6 text-amber-400" />
-                                                ) : (
-                                                    <Target className="w-6 h-6 text-rose-400" />
-                                                )}
+                                            <div className="flex items-center gap-4">
+                                                <div className={cn(
+                                                    "w-14 h-14 rounded-xl flex items-center justify-center",
+                                                    isCurrentPageWinner
+                                                        ? "bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30"
+                                                        : "bg-gradient-to-br from-rose-500 to-rose-700 shadow-lg shadow-rose-500/30"
+                                                )}>
+                                                    {isCurrentPageWinner ? (
+                                                        <Trophy className="w-7 h-7 text-white" />
+                                                    ) : (
+                                                        <Target className="w-7 h-7 text-white" />
+                                                    )}
+                                                </div>
                                                 <div>
                                                     <p className={cn(
-                                                        "text-xs uppercase tracking-wider",
-                                                        isCurrentPageWinner ? "text-emerald-400/70" : "text-rose-400/70"
+                                                        "text-sm uppercase tracking-widest font-bold",
+                                                        isCurrentPageWinner ? "text-emerald-400" : "text-rose-400"
                                                     )}>
                                                         {isCurrentPageWinner ? 'Winner' : 'Defeated'}
                                                     </p>
-                                                    <p className="font-bold text-lg">
+                                                    <p className="font-black text-2xl text-white">
                                                         {currentTeamData.teamTag ? `[${currentTeamData.teamTag}] ` : ''}{currentTeamData.teamName}
                                                     </p>
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <p className={cn(
-                                                    "text-3xl font-black",
+                                                    "text-5xl font-black",
                                                     isCurrentPageWinner ? "text-emerald-400" : "text-rose-400"
                                                 )}>
                                                     {currentTeamData.score}
                                                 </p>
-                                                <p className="text-xs text-white/50">points</p>
+                                                <p className="text-sm text-white/50 uppercase tracking-wider">points</p>
                                             </div>
                                         </div>
 
-                                        {/* Player cards */}
-                                        <div className="relative p-6">
-                                            <div className="grid grid-cols-5 gap-3">
+                                        {/* Player cards - dynamic columns based on team size */}
+                                        <div className="relative px-4 py-8">
+                                            <div className={cn(
+                                                "grid gap-6",
+                                                currentPlayers.length <= 2 ? "grid-cols-2 max-w-md mx-auto" : "grid-cols-5"
+                                            )}>
                                                 {currentPlayers.map((player, idx) => (
                                                     <ResultPlayerCard
                                                         key={player.odUserId}
                                                         player={player}
                                                         isWinner={isCurrentPageWinner}
                                                         index={idx}
+                                                        currentUserId={currentUserId}
+                                                        onViewStats={setSelectedPlayerStats}
                                                     />
                                                 ))}
                                             </div>
                                         </div>
 
                                         {/* Awards */}
-                                        <div className="relative px-6 pb-6">
-                                            <p className="text-sm text-white/50 mb-3 text-center">Team Awards</p>
-                                            <div className="grid grid-cols-3 gap-3">
+                                        <div className="relative px-8 pb-8">
+                                            <p className="text-sm text-white/50 mb-4 text-center uppercase tracking-wider">Team Awards</p>
+                                            <div className="grid grid-cols-3 gap-4">
                                                 {currentAwards.mvp && (
                                                     <AwardCard
                                                         icon={Star}
@@ -3397,7 +4096,9 @@ export function TeamMatchClient({
                                         // Clear stored match state before navigating
                                         sessionStorage.removeItem(`match_results_${matchId}`);
                                         finalMatchStateRef.current = null;
-                                        router.push('/arena/teams/setup?mode=5v5');
+                                        // Use mode from match state or search params
+                                        const mode = matchState?.mode || searchParams.get('mode') || '5v5';
+                                        router.push(`/arena/teams/setup?mode=${mode}`);
                                     }}
                                     className="w-full max-w-xs py-3 rounded-xl bg-white/10 hover:bg-white/20
                                                text-white font-semibold text-center transition-colors"
@@ -3434,15 +4135,15 @@ export function TeamMatchClient({
                                 </div>
                                 <div>
                                     <h3 className="text-xl font-bold text-white">
-                                        {isSoloHumanWithAI 
+                                        {canLeaveDirectly 
                                             ? 'Leave Match?' 
                                             : isPartyLeader 
                                                 ? 'Start Quit Vote?' 
                                                 : 'Leave Match?'}
                                     </h3>
                                     <p className="text-white/60 text-sm">
-                                        {isSoloHumanWithAI
-                                            ? 'You can leave immediately'
+                                        {canLeaveDirectly
+                                            ? (isPostMatch ? 'Match is over' : 'You can leave immediately')
                                             : isPartyLeader 
                                                 ? 'Your team will vote on leaving' 
                                                 : 'Only the party leader can start a vote'}
@@ -3450,11 +4151,12 @@ export function TeamMatchClient({
                                 </div>
                             </div>
                             
-                            {isSoloHumanWithAI ? (
+                            {canLeaveDirectly ? (
                                 <>
                                     <p className="text-white/70 mb-6">
-                                        Since you&apos;re playing with AI teammates, you can leave the match immediately 
-                                        without a vote. Your team will forfeit the match.
+                                        {isPostMatch 
+                                            ? 'The match is over. You can return to the arena.' 
+                                            : 'Since you\'re playing with AI teammates, you can leave the match immediately without a vote. Your team will forfeit the match.'}
                                     </p>
                                     
                                     <div className="flex gap-3">
@@ -3463,16 +4165,16 @@ export function TeamMatchClient({
                                             className="flex-1 px-4 py-3 rounded-xl bg-white/10 text-white 
                                                        hover:bg-white/20 transition-colors font-medium"
                                         >
-                                            Stay in Match
+                                            {isPostMatch ? 'Stay' : 'Stay in Match'}
                                         </button>
                                         <button
-                                            onClick={handleInitiateQuitVote}
-                                            className="flex-1 px-4 py-3 rounded-xl bg-rose-600 text-white 
-                                                       hover:bg-rose-700 transition-colors font-medium
+                                            onClick={isPostMatch ? handleLeaveMatch : handleInitiateQuitVote}
+                                            className="flex-1 px-4 py-3 rounded-xl bg-primary text-black 
+                                                       hover:bg-primary/90 transition-colors font-medium
                                                        flex items-center justify-center gap-2"
                                         >
                                             <LogOut className="w-4 h-4" />
-                                            Leave Match
+                                            {isPostMatch ? 'Leave' : 'Leave Match'}
                                         </button>
                                     </div>
                                 </>
@@ -3653,12 +4355,12 @@ export function TeamMatchClient({
             </AnimatePresence>
 
             {/* Round Start Countdown (5-4-3-2-1-GO!) - only show when phase is round_countdown, NOT during break/halftime */}
-            {(showRoundCountdown || matchState.phase === 'round_countdown') &&
-             matchState.phase !== 'break' && matchState.phase !== 'halftime' && (
+            {(showRoundCountdown || displayMatchState.phase === 'round_countdown') &&
+             displayMatchState.phase !== 'break' && displayMatchState.phase !== 'halftime' && (
                 <RoundStartCountdown
-                    key={`countdown-${matchState.round}-${matchState.half}`}
-                    round={matchState.round || 1}
-                    half={matchState.half}
+                    key={`countdown-${displayMatchState.round}-${displayMatchState.half}`}
+                    round={displayMatchState.round || 1}
+                    half={displayMatchState.half}
                     isVisible={true}
                     countdownSeconds={roundCountdownSeconds}
                     myTeamName={myTeam?.teamName || 'Your Team'}
@@ -3672,13 +4374,13 @@ export function TeamMatchClient({
             {/* IGL Floating Action Button */}
             <IGLFAB
                 isIGL={isIGL}
-                half={matchState.half}
-                currentRound={matchState.round}
+                half={displayMatchState.half}
+                currentRound={displayMatchState.round}
                 usedDoubleCallinHalf1={usedDoubleCallinHalf1}
                 usedDoubleCallinHalf2={usedDoubleCallinHalf2}
                 timeoutsRemaining={timeoutsRemaining}
                 anchorName={anchorName}
-                phase={matchState.phase}
+                phase={displayMatchState.phase}
                 availableSlots={availableSlots}
                 teamPlayers={myTeam ? Object.values(myTeam.players).map(p => ({
                     playerId: p.odUserId,
@@ -3823,9 +4525,9 @@ export function TeamMatchClient({
                                     <div>
                                         <div className="font-bold text-lg">DEMO MODE</div>
                                         <div className="text-sm opacity-80">
-                                            Phase: {matchState.phase.toUpperCase()} | 
-                                            Round: {matchState.round} | 
-                                            Half: {matchState.half}
+                                            Phase: {displayMatchState.phase.toUpperCase()} | 
+                                            Round: {displayMatchState.round} | 
+                                            Half: {displayMatchState.half}
                                         </div>
                                     </div>
                                 </div>
@@ -3881,6 +4583,24 @@ export function TeamMatchClient({
                         </div>
                     </motion.div>
                 </div>
+            )}
+
+            {/* Anchor Solo Decision Modal */}
+            {soloDecisionPhase?.active && (
+                <AnchorSoloDecisionModal
+                    isOpen={soloDecisionPhase.active}
+                    isIgl={myPlayer?.isIgl || false}
+                    teamName={myTeam?.teamName || 'Your Team'}
+                    anchorInfo={{
+                        anchorId: myTeam?.slotAssignments ? Object.entries(myTeam.players).find(([, p]) => p.isAnchor)?.[0] || '' : '',
+                        anchorName: soloDecisionPhase.myAnchorName,
+                    }}
+                    durationMs={soloDecisionPhase.durationMs}
+                    mode={(matchState?.mode as '5v5' | '2v2') || '5v5'}
+                    onDecision={handleSoloDecision}
+                    myDecision={soloDecisionPhase.myDecision}
+                    opponentDecision={soloDecisionPhase.opponentDecision}
+                />
             )}
         </div>
     );
