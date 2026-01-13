@@ -1641,30 +1641,41 @@ export function TeamMatchClient({
             slotOperation: string;
             activePlayerId?: string;
             activePlayerName?: string;
+            questionText?: string;
+            questionId?: string;
         }) => {
             console.log('[TeamMatch] Slot change:', data);
             setMatchState(prev => {
                 if (!prev) return prev;
                 const newState = JSON.parse(JSON.stringify(prev));
+                
+                // Helper to update a team
+                const updateTeam = (team: typeof newState.team1) => {
+                    team.currentSlot = data.currentSlot;
+                    team.questionsInSlot = 0; // Reset questions for new slot
+                    // Reset isComplete and update isActive for all players on this team
+                    for (const playerId of Object.keys(team.players)) {
+                        team.players[playerId].isComplete = false;
+                        // Set isActive based on activePlayerId from server
+                        const isActive = playerId === data.activePlayerId;
+                        team.players[playerId].isActive = isActive;
+                        
+                        // If this is the active player AND we have a question, set it immediately
+                        // This prevents the "Relay in progress..." flash when it's the human's turn
+                        if (isActive && data.questionText) {
+                            team.players[playerId].currentQuestion = {
+                                question: data.questionText,
+                                operation: data.slotOperation,
+                            };
+                        }
+                    }
+                };
+                
                 // Update the specific team's currentSlot
                 if (data.teamId === newState.team1.teamId) {
-                    newState.team1.currentSlot = data.currentSlot;
-                    newState.team1.questionsInSlot = 0; // Reset questions for new slot
-                    // Reset isComplete and update isActive for all players on this team
-                    for (const playerId of Object.keys(newState.team1.players)) {
-                        newState.team1.players[playerId].isComplete = false;
-                        // Set isActive based on activePlayerId from server
-                        newState.team1.players[playerId].isActive = playerId === data.activePlayerId;
-                    }
+                    updateTeam(newState.team1);
                 } else if (data.teamId === newState.team2.teamId) {
-                    newState.team2.currentSlot = data.currentSlot;
-                    newState.team2.questionsInSlot = 0; // Reset questions for new slot
-                    // Reset isComplete and update isActive for all players on this team
-                    for (const playerId of Object.keys(newState.team2.players)) {
-                        newState.team2.players[playerId].isComplete = false;
-                        // Set isActive based on activePlayerId from server
-                        newState.team2.players[playerId].isActive = playerId === data.activePlayerId;
-                    }
+                    updateTeam(newState.team2);
                 }
                 // Also update match-level for backwards compatibility
                 newState.currentSlot = data.currentSlot;

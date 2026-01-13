@@ -44,13 +44,14 @@ import { Check, Save, Loader2 } from "lucide-react";
 
 export function ItemEditorRow({ item }: { item: Item }) {
     const [name, setName] = useState(item.name);
-    const [price, setPrice] = useState(item.price);
+    const [priceStr, setPriceStr] = useState(String(item.price));
     const [rarity, setRarity] = useState(item.rarity);
     const [isDirty, setIsDirty] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
     const handleSave = async () => {
         setIsSaving(true);
+        const price = parseInt(priceStr) || 0;
         const res = await updateItem(item.id, { name, price, rarity });
         setIsSaving(false);
         if (res.success) {
@@ -87,10 +88,9 @@ export function ItemEditorRow({ item }: { item: Item }) {
             <td className="p-4">
                 <input
                     type="number"
-                    value={price}
+                    value={priceStr}
                     onChange={(e) => {
-                        const val = parseInt(e.target.value);
-                        setPrice(isNaN(val) ? 0 : val);
+                        setPriceStr(e.target.value);
                         setIsDirty(true);
                     }}
                     className="bg-black/20 border border-white/10 rounded px-2 py-1 text-sm w-24"
