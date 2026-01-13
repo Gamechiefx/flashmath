@@ -77,6 +77,9 @@ export function IGLFAB({
     // Only show for IGL
     if (!isIGL) return null;
 
+    // Hide during post-match results screen
+    if (phase === 'post_match') return null;
+
     // IGL can take actions during active play, breaks, halftime, and strategy
     const actionablePhases = ['active', 'break', 'halftime', 'anchor_decision', 'strategy'];
     const canTakeAction = actionablePhases.includes(phase);

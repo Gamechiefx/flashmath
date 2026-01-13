@@ -1218,33 +1218,38 @@ export function TeamMatchClient({
                 setTimeout(() => setOpponentLastResult(null), 2500);
             }
             
-            // Add to points feed
-            const team = myTeam?.teamId === data.teamId ? myTeam : opponentTeam;
-            const player = team?.players[data.userId];
-            if (team && player) {
-                const event = createPointsEventFromResult(
-                    {
-                        teamId: data.teamId,
-                        userId: data.userId,
-                        isCorrect: data.isCorrect,
-                        pointsEarned: data.pointsEarned,
-                        speedBonus: data.speedBonus,
-                        streakMilestoneBonus: data.streakMilestoneBonus,
-                        teamStreak: data.teamStreak,
-                        newStreak: data.newStreak,
-                    },
-                    team.teamName || 'Team',
-                    player.odName || 'Player',
-                    myTeam?.teamId || ''
-                );
-                setPointsEvents(prev => [...prev.slice(-49), event]); // Keep last 50 events
-            }
-            
             // Update scores, questionsInSlot, AND track correct/total/answerTime for halftime stats
+            // Also add to points feed using current matchState
             setMatchState(prev => {
                 if (!prev) return prev;
                 const newState = JSON.parse(JSON.stringify(prev));
                 const team = newState.team1.teamId === data.teamId ? newState.team1 : newState.team2;
+                const myTeamIdFromState = prev.isMyTeam;
+                const player = team.players[data.userId];
+                
+                // Add to points feed (capture values before mutation)
+                if (player) {
+                    const event = createPointsEventFromResult(
+                        {
+                            teamId: data.teamId,
+                            userId: data.userId,
+                            isCorrect: data.isCorrect,
+                            pointsEarned: data.pointsEarned,
+                            speedBonus: data.speedBonus,
+                            streakMilestoneBonus: data.streakMilestoneBonus,
+                            teamStreak: data.teamStreak,
+                            newStreak: data.newStreak,
+                        },
+                        team.teamName || 'Team',
+                        player.odName || 'Player',
+                        myTeamIdFromState || ''
+                    );
+                    // Use setTimeout to defer state update (can't call setPointsEvents during render)
+                    setTimeout(() => {
+                        setPointsEvents(prevEvents => [...prevEvents.slice(-49), event]);
+                    }, 0);
+                }
+                
                 team.score = data.newTeamScore;
                 team.currentStreak = data.newStreak;
                 team.questionsInSlot = data.questionsInSlot; // Update team-specific progress
@@ -1368,26 +1373,28 @@ export function TeamMatchClient({
                     duration: 2000,
                 });
                 
-                // Add timeout event to points feed
-                if (myTeam) {
-                    const event = createTimeoutEvent(
-                        myTeam.teamId,
-                        myTeam.teamName || 'My Team',
-                        data.playerName,
-                        data.pointsLost || 3,
-                        myTeam.teamId
-                    );
-                    setPointsEvents(prev => [...prev.slice(-49), event]);
-                }
-                
                 // Update questionsInSlot to update progress dots and player stats
+                // Also add timeout event to points feed using current matchState
                 setMatchState(prev => {
                     if (!prev) return prev;
                     const newState = JSON.parse(JSON.stringify(prev));
+                    const myTeamIdFromState = prev.isMyTeam;
                     
                     // Find the team and update questionsInSlot
                     for (const team of [newState.team1, newState.team2]) {
                         if (team.players[currentUserId]) {
+                            // Add timeout event to points feed
+                            const event = createTimeoutEvent(
+                                team.teamId,
+                                team.teamName || 'My Team',
+                                data.playerName,
+                                data.pointsLost || 3,
+                                myTeamIdFromState || ''
+                            );
+                            setTimeout(() => {
+                                setPointsEvents(prevEvents => [...prevEvents.slice(-49), event]);
+                            }, 0);
+                            
                             team.questionsInSlot = data.questionsInSlot;
                             // Update scores if provided
                             if (data.newTeamScore !== undefined) {
@@ -1426,29 +1433,35 @@ export function TeamMatchClient({
                     duration: 1500,
                 });
                 
-                // Add timeout event to points feed
-                if (myTeam) {
+                // Add timeout event to points feed and update team score using current matchState
+                setMatchState(prev => {
+                    if (!prev) return prev;
+                    const newState = JSON.parse(JSON.stringify(prev));
+                    const myTeamIdFromState = prev.isMyTeam;
+                    
+                    // Find my team (the team that had the timeout)
+                    const myTeamData = newState.team1.teamId === myTeamIdFromState ? newState.team1 : newState.team2;
+                    
+                    // Add timeout event to points feed
                     const event = createTimeoutEvent(
-                        myTeam.teamId,
-                        myTeam.teamName || 'My Team',
+                        myTeamData.teamId,
+                        myTeamData.teamName || 'My Team',
                         data.playerName,
                         data.pointsLost || 3,
-                        myTeam.teamId
+                        myTeamIdFromState || ''
                     );
-                    setPointsEvents(prev => [...prev.slice(-49), event]);
+                    setTimeout(() => {
+                        setPointsEvents(prevEvents => [...prevEvents.slice(-49), event]);
+                    }, 0);
                     
                     // Update team score if provided
                     if (data.newTeamScore !== undefined) {
-                        setMatchState(prev => {
-                            if (!prev) return prev;
-                            const newState = JSON.parse(JSON.stringify(prev));
-                            const team = newState.team1.teamId === myTeam.teamId ? newState.team1 : newState.team2;
-                            team.score = data.newTeamScore;
-                            team.currentStreak = 0; // Reset team streak
-                            return newState;
-                        });
+                        myTeamData.score = data.newTeamScore;
+                        myTeamData.currentStreak = 0; // Reset team streak
                     }
-                }
+                    
+                    return newState;
+                });
             }
         });
 
@@ -1462,32 +1475,37 @@ export function TeamMatchClient({
         }) => {
             console.log('[TeamMatch] First to finish bonus:', data);
             
-            // Add to points feed
-            const event = createFirstToFinishEvent(
-                data.teamId,
-                data.teamName,
-                data.bonus,
-                data.round,
-                myTeam?.teamId || ''
-            );
-            setPointsEvents(prev => [...prev.slice(-49), event]);
-            
-            // Show toast
-            if (myTeam && data.teamId === myTeam.teamId) {
-                toast.success(`🏆 First to finish! +${data.bonus} points`, {
-                    duration: 3000,
-                });
-            } else {
-                toast.info(`${data.teamName} finished round first`, {
-                    duration: 2000,
-                });
-            }
-            
-            // Update team score
+            // Update team score and add to points feed using current matchState
             setMatchState(prev => {
                 if (!prev) return prev;
                 const newState = JSON.parse(JSON.stringify(prev));
+                const myTeamIdFromState = prev.isMyTeam;
                 const team = newState.team1.teamId === data.teamId ? newState.team1 : newState.team2;
+                const isMyTeamEvent = data.teamId === myTeamIdFromState;
+                
+                // Add to points feed
+                const event = createFirstToFinishEvent(
+                    data.teamId,
+                    data.teamName,
+                    data.bonus,
+                    data.round,
+                    myTeamIdFromState || ''
+                );
+                setTimeout(() => {
+                    setPointsEvents(prevEvents => [...prevEvents.slice(-49), event]);
+                }, 0);
+                
+                // Show toast
+                if (isMyTeamEvent) {
+                    toast.success(`🏆 First to finish! +${data.bonus} points`, {
+                        duration: 3000,
+                    });
+                } else {
+                    toast.info(`${data.teamName} finished round first`, {
+                        duration: 2000,
+                    });
+                }
+                
                 team.score = data.newTeamScore;
                 return newState;
             });
