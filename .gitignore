@@ -63,3 +63,12 @@ tests/e2e/.test-credentials.json
 # Nginx logs (keep structure)
 nginx/logs/*
 !nginx/logs/.gitignore
+
+# Nginx SSL certificates (sensitive)
+nginx/ssl/
+
+# IDE debug logs
+.cursor/debug.log
+
+# Archive files
+*.zip
