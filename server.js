@@ -2519,6 +2519,7 @@ app.prepare().then(async () => {
                 anchorId: teamData.odAnchorId,
                 timeoutsUsed: 0,
                 slotAssignments,
+                slotOperationsOrder: matchSlotOperations, // Store the ordered operations for this match
                 players: {},
                 currentSlot: 1,           // Each team tracks their own slot (1-N based on mode)
                 questionsInSlot: 0,       // Each team tracks their own progress
@@ -2678,20 +2679,30 @@ app.prepare().then(async () => {
     /**
      * Get ordered slot assignments for consistent turn order
      * Returns array of operation names in the order they should be played
+     * FIXED: Uses the match-specific slotOperationsOrder instead of global SLOT_OPERATIONS
+     * This ensures 2v2 matches respect the randomly picked operation order
      */
     function getOrderedSlotAssignments(teamState) {
-        // Use the predefined SLOT_OPERATIONS order, but only include slots that have assignments
+        // Use the team's stored slot operations order (set during match init)
+        // This preserves the random operation order picked for 2v2 matches
+        const operationsOrder = teamState.slotOperationsOrder || SLOT_OPERATIONS;
+        
         const orderedSlots = [];
         
-        for (const operation of SLOT_OPERATIONS) {
+        for (const operation of operationsOrder) {
             if (teamState.slotAssignments[operation]) {
                 orderedSlots.push(operation);
             }
         }
         
-        // Fallback: if no slots match SLOT_OPERATIONS, use whatever assignments exist
+        // Fallback: if no slots match, use whatever assignments exist
         if (orderedSlots.length === 0) {
             orderedSlots.push(...Object.keys(teamState.slotAssignments));
+        }
+        
+        // Debug: Log the ordering to verify it respects the random pick
+        if (teamState.slotOperationsOrder && teamState.slotOperationsOrder.length === 2) {
+            console.log(`[TeamMatch] 2v2 ordered slots: ${JSON.stringify(orderedSlots)} (from order: ${JSON.stringify(operationsOrder)})`);
         }
         
         return orderedSlots;

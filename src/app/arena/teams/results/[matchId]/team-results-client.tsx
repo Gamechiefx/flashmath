@@ -665,7 +665,7 @@ export function TeamResultsClient({
                         Back to Arena
                     </Link>
                     <Link
-                        href="/arena/teams/setup?mode=5v5"
+                        href="/arena/modes"
                         className="w-full max-w-xs py-3 rounded-xl bg-white/10 hover:bg-white/20
                                    text-white font-semibold text-center transition-colors"
                     >
