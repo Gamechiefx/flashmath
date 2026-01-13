@@ -3,6 +3,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { Zap, LogOut, LayoutDashboard, Settings, Volume2, VolumeX, Trophy, Swords, Maximize2, Minimize2, Shield } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { soundEngine } from "@/lib/sound-engine";
 import { UserAvatar } from "@/components/user-avatar";
@@ -15,10 +16,21 @@ interface AuthHeaderProps {
 export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
     const { data: clientSession } = useSession();
     const session = clientSession || initialSession;
+    const pathname = usePathname();
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
     const [showAchievements, setShowAchievements] = useState(false);
     const isEmailVerified = (session?.user as any)?.emailVerified;
+    
+    // Check if currently on an arena page (entrance music might be playing)
+    const isOnArenaPage = pathname?.startsWith('/arena');
+    
+    // Stop arena entrance music when navigating away from arena pages
+    const handleNavAwayFromArena = () => {
+        if (isOnArenaPage) {
+            soundEngine.stopArenaEntranceMusic(300);
+        }
+    };
 
     useEffect(() => {
         setIsMuted(!soundEngine.isEnabled());
@@ -85,11 +97,24 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                         <div className="h-8 w-[1px] bg-white/10 hidden md:block" />
 
                         <div className="hidden md:flex items-center gap-6">
-                            <Link href="/dashboard" className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                            <Link 
+                                href="/dashboard" 
+                                className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+                                onClick={handleNavAwayFromArena}
+                            >
                                 <LayoutDashboard size={14} />
                                 Dashboard
                             </Link>
-                            <Link href={isEmailVerified ? "/practice" : "/arena/verify-email"} className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+                            <Link 
+                                href={isEmailVerified ? "/practice" : "/arena/verify-email"} 
+                                className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors"
+                                onClick={() => {
+                                    // Only stop music if going to practice (not verify-email which is in arena)
+                                    if (isEmailVerified) {
+                                        handleNavAwayFromArena();
+                                    }
+                                }}
+                            >
                                 <Zap size={14} />
                                 Practice
                             </Link>
@@ -166,6 +191,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                                     <Link
                                         href="/settings"
                                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+                                        onClick={handleNavAwayFromArena}
                                     >
                                         <Settings size={16} />
                                         <span className="text-sm font-bold uppercase tracking-widest">Settings</span>
@@ -177,6 +203,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                                         <Link
                                             href="/admin"
                                             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-500/10 transition-colors text-purple-400"
+                                            onClick={handleNavAwayFromArena}
                                         >
                                             <Shield size={16} />
                                             <span className="text-sm font-bold uppercase tracking-widest">Admin Console</span>
@@ -188,6 +215,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                                     {/* Logout */}
                                     <button
                                         onClick={async () => {
+                                            handleNavAwayFromArena();
                                             await signOut({ redirect: false });
                                             window.location.href = "/";
                                         }}

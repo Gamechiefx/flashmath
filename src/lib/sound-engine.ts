@@ -76,6 +76,9 @@ class SoundEngine {
     // Audio buffer cache for file-based sounds
     private audioCache: Map<string, AudioBuffer> = new Map();
     private loadingPromises: Map<string, Promise<AudioBuffer | null>> = new Map();
+    
+    // Track which ambient music should be playing (for resuming when sound is re-enabled)
+    private desiredAmbientMusic: 'arenaEntrance' | 'queue' | 'strategy' | 'match' | 'halftime' | null = null;
 
     constructor() {
         if (typeof window !== 'undefined') {
@@ -91,10 +94,72 @@ class SoundEngine {
             this.ctx.resume();
         }
     }
+    
+    // Async version of init that waits for AudioContext to resume
+    // Use this when enabling sound from a user gesture to ensure context is ready
+    private async initAsync(): Promise<boolean> {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        if (this.ctx.state === 'suspended') {
+            try {
+                await this.ctx.resume();
+                return true;
+            } catch (e) {
+                console.error('[SoundEngine] Failed to resume AudioContext:', e);
+                return false;
+            }
+        }
+        return true;
+    }
 
     setEnabled(enabled: boolean) {
         this.enabled = enabled;
         localStorage.setItem('sound_enabled', enabled ? 'true' : 'false');
+        
+        // When disabling sound, stop all currently playing music immediately
+        // BUT preserve the desiredAmbientMusic tracker so we can resume when re-enabled
+        if (!enabled) {
+            const savedDesiredMusic = this.desiredAmbientMusic;
+            this.stopAllPhaseMusic(0);
+            this.stopArenaEntranceMusic(0);
+            this.stopBGM();
+            // Restore the tracker - we still want to resume this music when re-enabled
+            this.desiredAmbientMusic = savedDesiredMusic;
+        } else {
+            // When re-enabling sound, we need to resume the AudioContext first (async)
+            // This is called from a user gesture (click), so resume should work
+            this.resumeAmbientMusic();
+        }
+    }
+    
+    // Resume the appropriate ambient music after re-enabling sound
+    // This properly awaits AudioContext resume before playing
+    private async resumeAmbientMusic() {
+        if (!this.desiredAmbientMusic) return;
+        
+        // First, ensure AudioContext is resumed (we have a user gesture from the toggle click)
+        const ready = await this.initAsync();
+        if (!ready) return;
+        
+        // Now play the appropriate music
+        switch (this.desiredAmbientMusic) {
+            case 'arenaEntrance':
+                this.playArenaEntranceMusic();
+                break;
+            case 'queue':
+                this.playQueueMusic();
+                break;
+            case 'strategy':
+                this.playStrategyMusic();
+                break;
+            case 'match':
+                this.playMatchMusic();
+                break;
+            case 'halftime':
+                this.playHalftimeMusic();
+                break;
+        }
     }
 
     isEnabled() {
@@ -1209,13 +1274,28 @@ class SoundEngine {
     private halftimeGain: GainNode | null = null;
     private halftimeBuffer: AudioBuffer | null = null;
 
+    // Strategy music loading/stopped flags for race condition protection
+    private strategyLoading: boolean = false;
+    private strategyStopped: boolean = false;
+
     async playStrategyMusic() {
+        // Track that strategy music should be playing (for resume on re-enable)
+        this.desiredAmbientMusic = 'strategy';
+        
+        // Clear stopped flag - we're intentionally starting playback
+        this.strategyStopped = false;
+        
         if (!this.enabled) return;
         this.init();
         if (!this.ctx) return;
 
-        // Don't restart if already playing
-        if (this.strategySource) return;
+        // Don't restart if already playing OR loading (prevents race condition)
+        if (this.strategySource || this.strategyLoading) {
+            return;
+        }
+
+        // Set loading flag BEFORE any async operations
+        this.strategyLoading = true;
 
         try {
             // Load buffer if not cached
@@ -1223,10 +1303,23 @@ class SoundEngine {
                 const response = await fetch('/sounds/countdown-tension.mp3');
                 if (!response.ok) {
                     console.warn('[SoundEngine] Strategy music not found');
+                    this.strategyLoading = false;
                     return;
                 }
                 const arrayBuffer = await response.arrayBuffer();
                 this.strategyBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            }
+
+            // Check if stop was called while loading - abort if so
+            if (this.strategyStopped) {
+                this.strategyLoading = false;
+                return;
+            }
+
+            // Double-check we haven't started playing while loading
+            if (this.strategySource) {
+                this.strategyLoading = false;
+                return;
             }
 
             const source = this.ctx.createBufferSource();
@@ -1245,6 +1338,7 @@ class SoundEngine {
 
             this.strategySource = source;
             this.strategyGain = gain;
+            this.strategyLoading = false;
 
             // Handle when source ends (for cleanup if not looping)
             source.onended = () => {
@@ -1255,10 +1349,24 @@ class SoundEngine {
             };
         } catch (e) {
             console.error('[SoundEngine] Failed to play strategy music:', e);
+            this.strategyLoading = false;
         }
     }
 
     stopStrategyMusic(fadeOutMs: number = 1500) {
+        // Clear the desired ambient music tracker
+        if (this.desiredAmbientMusic === 'strategy') {
+            this.desiredAmbientMusic = null;
+        }
+        
+        // Mark as stopped - prevents music from starting if still loading
+        this.strategyStopped = true;
+        this.strategyLoading = false;
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopStrategyMusic',message:'Stop strategy music called',data:{hasSource:!!this.strategySource,fadeOutMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         if (this.strategySource && this.strategyGain && this.ctx) {
             const now = this.ctx.currentTime;
             const fadeOutSec = fadeOutMs / 1000;
@@ -1283,14 +1391,36 @@ class SoundEngine {
         }
     }
 
+    // #region agent log - match music loading/stopped flags for race condition protection
+    private matchLoading: boolean = false;
+    private matchStopped: boolean = false;
+    // #endregion
+
     // Match Music (high energy during active gameplay)
     async playMatchMusic() {
+        // Track that match music should be playing (for resume on re-enable)
+        this.desiredAmbientMusic = 'match';
+        
+        // Clear stopped flag - we're intentionally starting playback
+        this.matchStopped = false;
+        
         if (!this.enabled) return;
         this.init();
         if (!this.ctx) return;
 
-        // Don't restart if already playing
-        if (this.matchSource) return;
+        // Don't restart if already playing OR loading (prevents race condition)
+        if (this.matchSource || this.matchLoading) {
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playMatchMusic',message:'Skipped - already playing or loading',data:{hasSource:!!this.matchSource,isLoading:this.matchLoading},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            return;
+        }
+
+        // Set loading flag BEFORE any async operations
+        this.matchLoading = true;
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playMatchMusic',message:'Started loading match music',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
 
         try {
             // Load buffer if not cached
@@ -1298,10 +1428,26 @@ class SoundEngine {
                 const response = await fetch('/sounds/match-music.mp3');
                 if (!response.ok) {
                     console.warn('[SoundEngine] Match music not found');
+                    this.matchLoading = false;
                     return;
                 }
                 const arrayBuffer = await response.arrayBuffer();
                 this.matchBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            }
+
+            // Check if stop was called while loading - abort if so
+            if (this.matchStopped) {
+                // #region agent log
+                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playMatchMusic',message:'Aborted - stop was called during loading',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+                // #endregion
+                this.matchLoading = false;
+                return;
+            }
+
+            // Double-check we haven't started playing while loading
+            if (this.matchSource) {
+                this.matchLoading = false;
+                return;
             }
 
             const source = this.ctx.createBufferSource();
@@ -1309,9 +1455,9 @@ class SoundEngine {
             source.loop = true; // Loop during match
 
             const gain = this.ctx.createGain();
-            // Fade in over 1.5 seconds
+            // Fade in over 1.5 seconds (volume reduced by 25% from 0.35 to 0.26)
             gain.gain.setValueAtTime(0, this.ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(0.35 * this.volume, this.ctx.currentTime + 1.5);
+            gain.gain.linearRampToValueAtTime(0.26 * this.volume, this.ctx.currentTime + 1.5);
 
             source.connect(gain);
             gain.connect(this.ctx.destination);
@@ -1320,6 +1466,11 @@ class SoundEngine {
 
             this.matchSource = source;
             this.matchGain = gain;
+            this.matchLoading = false;
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playMatchMusic',message:'Match music started playing',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
 
             source.onended = () => {
                 if (this.matchSource === source) {
@@ -1329,10 +1480,24 @@ class SoundEngine {
             };
         } catch (e) {
             console.error('[SoundEngine] Failed to play match music:', e);
+            this.matchLoading = false;
         }
     }
 
     stopMatchMusic(fadeOutMs: number = 1500) {
+        // Clear the desired ambient music tracker
+        if (this.desiredAmbientMusic === 'match') {
+            this.desiredAmbientMusic = null;
+        }
+        
+        // Mark as stopped - prevents music from starting if still loading
+        this.matchStopped = true;
+        this.matchLoading = false;
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopMatchMusic',message:'Stop match music called',data:{hasSource:!!this.matchSource,fadeOutMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         if (this.matchSource && this.matchGain && this.ctx) {
             const now = this.ctx.currentTime;
             const fadeOutSec = fadeOutMs / 1000;
@@ -1355,14 +1520,30 @@ class SoundEngine {
         }
     }
 
+    // #region agent log - halftime music loading/stopped flags for race condition protection
+    private halftimeLoading: boolean = false;
+    private halftimeStopped: boolean = false;
+    // #endregion
+
     // Halftime Music (relaxing during halftime break)
     async playHalftimeMusic() {
+        // Track that halftime music should be playing (for resume on re-enable)
+        this.desiredAmbientMusic = 'halftime';
+        
+        // Clear stopped flag - we're intentionally starting playback
+        this.halftimeStopped = false;
+        
         if (!this.enabled) return;
         this.init();
         if (!this.ctx) return;
 
-        // Don't restart if already playing
-        if (this.halftimeSource) return;
+        // Don't restart if already playing OR loading (prevents race condition)
+        if (this.halftimeSource || this.halftimeLoading) {
+            return;
+        }
+
+        // Set loading flag BEFORE any async operations
+        this.halftimeLoading = true;
 
         try {
             // Load buffer if not cached
@@ -1370,10 +1551,23 @@ class SoundEngine {
                 const response = await fetch('/sounds/halftime-music.mp3');
                 if (!response.ok) {
                     console.warn('[SoundEngine] Halftime music not found');
+                    this.halftimeLoading = false;
                     return;
                 }
                 const arrayBuffer = await response.arrayBuffer();
                 this.halftimeBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            }
+
+            // Check if stop was called while loading - abort if so
+            if (this.halftimeStopped) {
+                this.halftimeLoading = false;
+                return;
+            }
+
+            // Double-check we haven't started playing while loading
+            if (this.halftimeSource) {
+                this.halftimeLoading = false;
+                return;
             }
 
             const source = this.ctx.createBufferSource();
@@ -1392,6 +1586,7 @@ class SoundEngine {
 
             this.halftimeSource = source;
             this.halftimeGain = gain;
+            this.halftimeLoading = false;
 
             source.onended = () => {
                 if (this.halftimeSource === source) {
@@ -1401,10 +1596,20 @@ class SoundEngine {
             };
         } catch (e) {
             console.error('[SoundEngine] Failed to play halftime music:', e);
+            this.halftimeLoading = false;
         }
     }
 
     stopHalftimeMusic(fadeOutMs: number = 1500) {
+        // Clear the desired ambient music tracker
+        if (this.desiredAmbientMusic === 'halftime') {
+            this.desiredAmbientMusic = null;
+        }
+        
+        // Mark as stopped - prevents music from starting if still loading
+        this.halftimeStopped = true;
+        this.halftimeLoading = false;
+        
         if (this.halftimeSource && this.halftimeGain && this.ctx) {
             const now = this.ctx.currentTime;
             const fadeOutSec = fadeOutMs / 1000;
@@ -1432,6 +1637,302 @@ class SoundEngine {
         this.stopStrategyMusic(fadeOutMs);
         this.stopMatchMusic(fadeOutMs);
         this.stopHalftimeMusic(fadeOutMs);
+        this.stopQueueMusic(fadeOutMs);
+    }
+
+    // Queue Music (relaxing guitar while waiting in queue)
+    private queueSource: AudioBufferSourceNode | null = null;
+    private queueGain: GainNode | null = null;
+    private queueBuffer: AudioBuffer | null = null;
+
+    // #region agent log - queue music loading/stopped flags for race condition protection
+    private queueLoading: boolean = false;
+    private queueStopped: boolean = false;
+    // #endregion
+
+    async playQueueMusic() {
+        // Track that queue music should be playing (for resume on re-enable)
+        this.desiredAmbientMusic = 'queue';
+        
+        // Clear stopped flag - we're intentionally starting playback
+        this.queueStopped = false;
+        
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+
+        // Don't restart if already playing OR loading (prevents race condition)
+        if (this.queueSource || this.queueLoading) {
+            return;
+        }
+
+        // Set loading flag BEFORE any async operations
+        this.queueLoading = true;
+
+        try {
+            // Load buffer if not cached - uses halftime music (relaxing guitar)
+            if (!this.queueBuffer) {
+                const response = await fetch('/sounds/halftime-music.mp3');
+                const arrayBuffer = await response.arrayBuffer();
+                this.queueBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            }
+
+            // Check if stop was called while loading - abort if so
+            if (this.queueStopped) {
+                this.queueLoading = false;
+                return;
+            }
+
+            // Double-check we haven't started playing while loading
+            if (this.queueSource) {
+                this.queueLoading = false;
+                return;
+            }
+
+            const source = this.ctx.createBufferSource();
+            source.buffer = this.queueBuffer;
+            source.loop = true;
+
+            const gain = this.ctx.createGain();
+            // Fade in over 2 seconds
+            gain.gain.setValueAtTime(0, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.25 * this.volume, this.ctx.currentTime + 2);
+
+            source.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            source.start(0);
+
+            this.queueSource = source;
+            this.queueGain = gain;
+            this.queueLoading = false;
+
+            source.onended = () => {
+                if (this.queueSource === source) {
+                    this.queueSource = null;
+                    this.queueGain = null;
+                }
+            };
+        } catch (e) {
+            console.error('[SoundEngine] Failed to play queue music:', e);
+            this.queueLoading = false;
+        }
+    }
+
+    stopQueueMusic(fadeOutMs: number = 1500) {
+        // Clear the desired ambient music tracker
+        if (this.desiredAmbientMusic === 'queue') {
+            this.desiredAmbientMusic = null;
+        }
+        
+        // Mark as stopped - prevents music from starting if still loading
+        this.queueStopped = true;
+        this.queueLoading = false;
+        
+        if (this.queueSource && this.queueGain && this.ctx) {
+            const now = this.ctx.currentTime;
+            const fadeOutSec = fadeOutMs / 1000;
+
+            this.queueGain.gain.cancelScheduledValues(now);
+            this.queueGain.gain.setValueAtTime(this.queueGain.gain.value, now);
+            this.queueGain.gain.linearRampToValueAtTime(0, now + fadeOutSec);
+
+            const sourceToStop = this.queueSource;
+            setTimeout(() => {
+                try {
+                    sourceToStop.stop();
+                } catch (e) {
+                    // Already stopped
+                }
+            }, fadeOutMs);
+
+            this.queueSource = null;
+            this.queueGain = null;
+        }
+    }
+
+    // Lobby Music (tense build-up before match starts)
+    // Uses the same track as strategy music (countdown tension)
+    async playLobbyMusic() {
+        // Reuse strategy music for the lobby countdown
+        await this.playStrategyMusic();
+    }
+
+    stopLobbyMusic(fadeOutMs: number = 1500) {
+        this.stopStrategyMusic(fadeOutMs);
+    }
+
+    // Arena Entrance Music (with audio analyser for visualization)
+    private arenaEntranceSource: AudioBufferSourceNode | null = null;
+    private arenaEntranceGain: GainNode | null = null;
+    private arenaEntranceBuffer: AudioBuffer | null = null;
+    private arenaEntranceAnalyser: AnalyserNode | null = null;
+    private arenaEntranceLoading: boolean = false; // Prevent race condition with multiple calls
+    private arenaEntranceFadingOut: boolean = false; // Prevent new starts during fade-out
+
+    async playArenaEntranceMusic(): Promise<AnalyserNode | null> {
+        // Track that arena entrance music should be playing (for resume on re-enable)
+        this.desiredAmbientMusic = 'arenaEntrance';
+        
+        // Clear the stopped flag - we're intentionally starting playback
+        this.arenaEntranceStopped = false;
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic:entry',message:'Play entrance music called',data:{enabled:this.enabled,hasSource:!!this.arenaEntranceSource,isLoading:this.arenaEntranceLoading,isStopped:this.arenaEntranceStopped},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
+        if (!this.enabled) return null;
+        this.init();
+        if (!this.ctx) return null;
+
+        // Don't restart if already playing, loading, OR fading out (prevents overlap during fade)
+        if (this.arenaEntranceSource || this.arenaEntranceLoading || this.arenaEntranceFadingOut) {
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic:skip',message:'Skipped - already playing, loading, or fading',data:{hasSource:!!this.arenaEntranceSource,isLoading:this.arenaEntranceLoading,isFadingOut:this.arenaEntranceFadingOut},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+            return this.arenaEntranceAnalyser;
+        }
+
+        // Set loading flag BEFORE any async operations
+        this.arenaEntranceLoading = true;
+
+        try {
+            // Load buffer if not cached
+            if (!this.arenaEntranceBuffer) {
+                const response = await fetch('/sounds/arena-entrance.mp3');
+                const arrayBuffer = await response.arrayBuffer();
+                this.arenaEntranceBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            }
+
+            // Check if stop was called while we were loading - abort if so
+            if (this.arenaEntranceStopped) {
+                // #region agent log
+                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic',message:'Aborted - stop was called during loading',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+                // #endregion
+                this.arenaEntranceLoading = false;
+                return null;
+            }
+
+            // Double-check we haven't started playing while loading (another caller might have)
+            if (this.arenaEntranceSource) {
+                this.arenaEntranceLoading = false;
+                return this.arenaEntranceAnalyser;
+            }
+
+            const source = this.ctx.createBufferSource();
+            source.buffer = this.arenaEntranceBuffer;
+            source.loop = true;
+
+            // Create analyser for visualization
+            const analyser = this.ctx.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.8;
+
+            const gain = this.ctx.createGain();
+            // Fade in over 1.5 seconds (louder for mode selection page)
+            gain.gain.setValueAtTime(0, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.9 * this.volume, this.ctx.currentTime + 1.5);
+
+            // Connect: source -> analyser -> gain -> destination
+            source.connect(analyser);
+            analyser.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            source.start(0);
+
+            this.arenaEntranceSource = source;
+            this.arenaEntranceGain = gain;
+            this.arenaEntranceAnalyser = analyser;
+            this.arenaEntranceLoading = false;
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic:started',message:'Arena entrance music started playing',data:{sourceId:Date.now()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+            // #endregion
+
+            // NOTE: For looped audio, onended should only fire when we explicitly stop() it.
+            // We do NOT clear references in onended because:
+            // 1. We already clear them in stopArenaEntranceMusic
+            // 2. onended might fire unexpectedly due to audio errors or context issues
+            // 3. Clearing here would allow duplicate music to start
+            source.onended = () => {
+                // #region agent log
+                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic:onended',message:'Source onended fired (no-op for looped audio)',data:{isCurrentSource:this.arenaEntranceSource===source,arenaEntranceStopped:this.arenaEntranceStopped},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+                // #endregion
+                // Only clear if this was an intentional stop (arenaEntranceStopped is true)
+                // This prevents unexpected onended events from clearing the source
+                if (this.arenaEntranceStopped && this.arenaEntranceSource === source) {
+                    this.arenaEntranceSource = null;
+                    this.arenaEntranceGain = null;
+                    this.arenaEntranceAnalyser = null;
+                }
+            };
+
+            return analyser;
+        } catch (e) {
+            console.error('[SoundEngine] Failed to play arena entrance music:', e);
+            this.arenaEntranceLoading = false;
+            return null;
+        }
+    }
+
+    getArenaEntranceAnalyser(): AnalyserNode | null {
+        return this.arenaEntranceAnalyser;
+    }
+
+    // Flag to prevent music from starting after stop is called during loading
+    private arenaEntranceStopped: boolean = false;
+
+    stopArenaEntranceMusic(fadeOutMs: number = 1500) {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopArenaEntranceMusic:entry',message:'Stop arena entrance music called',data:{hasSource:!!this.arenaEntranceSource,hasGain:!!this.arenaEntranceGain,fadeOutMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
+        // Clear the desired ambient music tracker (user/component explicitly stopped this)
+        if (this.desiredAmbientMusic === 'arenaEntrance') {
+            this.desiredAmbientMusic = null;
+        }
+        
+        // Mark as stopped - this prevents music from starting if it's still loading
+        this.arenaEntranceStopped = true;
+        
+        // Clear loading flag so music can be restarted after stopping
+        this.arenaEntranceLoading = false;
+        
+        if (this.arenaEntranceSource && this.arenaEntranceGain && this.ctx) {
+            const now = this.ctx.currentTime;
+            const fadeOutSec = fadeOutMs / 1000;
+
+            this.arenaEntranceGain.gain.cancelScheduledValues(now);
+            this.arenaEntranceGain.gain.setValueAtTime(this.arenaEntranceGain.gain.value, now);
+            this.arenaEntranceGain.gain.linearRampToValueAtTime(0, now + fadeOutSec);
+
+            const sourceToStop = this.arenaEntranceSource;
+            
+            // Set fading flag - prevents new music from starting during fadeout
+            this.arenaEntranceFadingOut = true;
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopArenaEntranceMusic:fading',message:'Starting fade out',data:{fadeOutMs,fadingOut:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+            // #endregion
+            
+            // Clear the source references now (for state tracking)
+            this.arenaEntranceSource = null;
+            this.arenaEntranceGain = null;
+            this.arenaEntranceAnalyser = null;
+            
+            setTimeout(() => {
+                // #region agent log
+                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopArenaEntranceMusic:stopped',message:'Fade complete, clearing fadingOut flag',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+                // #endregion
+                // Clear fading flag - new music can start now
+                this.arenaEntranceFadingOut = false;
+                try {
+                    sourceToStop.stop();
+                } catch (e) {
+                    // Already stopped
+                }
+            }, fadeOutMs);
+        }
     }
 
     // Background Music

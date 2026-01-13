@@ -26,33 +26,124 @@ const OPERATION_ICONS: Record<Operation, { symbol: string; label: string; color:
     mixed: { symbol: '?', label: 'Mix', color: 'text-pink-400 hover:bg-pink-500/20 border-pink-500/30' },
 };
 
-function ParticleBackground() {
+// Audio-reactive particle that dances to the music and floats upward
+function AudioReactiveParticle({
+    index,
+    symbol,
+    frequencyData,
+    baseX,
+}: {
+    index: number;
+    symbol: string;
+    frequencyData: Uint8Array | null;
+    baseX: number;
+}) {
+    // Use multiple frequency bands and average them for smoother response
+    const bandSize = Math.floor((frequencyData?.length || 128) / 10);
+    const bandIndex = index % 10;
+    let intensity = 0;
+
+    if (frequencyData) {
+        // Average a range of frequencies for this particle
+        const startIdx = bandIndex * bandSize;
+        let sum = 0;
+        for (let i = 0; i < bandSize; i++) {
+            sum += frequencyData[startIdx + i] || 0;
+        }
+        intensity = (sum / bandSize) / 255;
+
+        // Also add some of the bass frequencies for all particles (everyone feels the beat)
+        const bassSum = (frequencyData[0] + frequencyData[1] + frequencyData[2] + frequencyData[3]) / 4;
+        intensity = Math.min(1, intensity * 0.6 + (bassSum / 255) * 0.4);
+    }
+
+    // Calculate dance movements based on audio intensity (vertical bounce only)
+    const scale = 1 + intensity * 1.2;
+    const rotation = intensity * 40 * (index % 2 === 0 ? 1 : -1);
+    const bounceY = -intensity * 45;
+
+    // Opacity and glow based on audio
+    const opacity = 0.15 + intensity * 0.65;
+    const glowIntensity = intensity * 30;
+
+    // Animation duration varies per particle for variety
+    const animDuration = 15 + (index % 10) * 2;
+
+    return (
+        <div
+            className="absolute font-black pointer-events-none animate-float-up"
+            style={{
+                left: `${baseX}%`,
+                top: '110%', // Start off-screen at bottom (animation will take over)
+                fontSize: `${18 + (index % 24)}px`,
+                transform: `translateY(${bounceY}px) scale(${scale}) rotate(${rotation}deg)`,
+                opacity,
+                color: intensity > 0.4 ? 'var(--primary)' : 'currentColor',
+                textShadow: intensity > 0.2 ? `0 0 ${glowIntensity}px var(--primary)` : 'none',
+                animationDuration: `${animDuration}s`,
+                animationDelay: `${(index * 0.7) % animDuration}s`,
+                animationFillMode: 'backwards', // Use 0% keyframe values during delay
+                transition: 'transform 0.1s ease-out, opacity 0.15s ease-out, color 0.2s ease-out, text-shadow 0.2s ease-out',
+            }}
+        >
+            {symbol}
+        </div>
+    );
+}
+
+// Pre-computed stable particle positions (seeded for consistency)
+const PARTICLE_POSITIONS = [
+    { x: 5, y: 12 }, { x: 92, y: 8 }, { x: 23, y: 45 }, { x: 67, y: 22 }, { x: 45, y: 78 },
+    { x: 12, y: 67 }, { x: 78, y: 34 }, { x: 34, y: 89 }, { x: 89, y: 56 }, { x: 56, y: 15 },
+    { x: 15, y: 38 }, { x: 72, y: 82 }, { x: 38, y: 5 }, { x: 82, y: 72 }, { x: 8, y: 55 },
+    { x: 55, y: 28 }, { x: 28, y: 95 }, { x: 95, y: 42 }, { x: 42, y: 18 }, { x: 18, y: 65 },
+    { x: 65, y: 32 }, { x: 32, y: 85 }, { x: 85, y: 48 }, { x: 48, y: 3 }, { x: 3, y: 75 },
+    { x: 75, y: 58 }, { x: 58, y: 25 }, { x: 25, y: 92 }, { x: 88, y: 15 }, { x: 52, y: 68 },
+];
+
+function ParticleBackground({ analyser }: { analyser: AnalyserNode | null }) {
     const [mounted, setMounted] = useState(false);
+    const [frequencyData, setFrequencyData] = useState<Uint8Array | null>(null);
     const symbols = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '−', '×', '÷'];
+    const animationRef = useRef<number | null>(null);
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
+    // Audio data loop - only updates when analyser is available
+    useEffect(() => {
+        if (!mounted || !analyser) return;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const updateAudio = () => {
+            analyser.getByteFrequencyData(dataArray);
+            setFrequencyData(new Uint8Array(dataArray));
+            animationRef.current = requestAnimationFrame(updateAudio);
+        };
+
+        updateAudio();
+
+        return () => {
+            if (animationRef.current) {
+                cancelAnimationFrame(animationRef.current);
+            }
+        };
+    }, [analyser, mounted]);
+
     if (!mounted) return null;
 
     return (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
-            {[...Array(20)].map((_, i) => (
-                <div
+        <div className="absolute inset-0 pointer-events-none overflow-hidden select-none text-primary/20">
+            {PARTICLE_POSITIONS.map((pos, i) => (
+                <AudioReactiveParticle
                     key={i}
-                    className="absolute text-primary/20 font-black animate-float-particle pointer-events-none"
-                    style={{
-                        left: `${Math.random() * 100}%`,
-                        top: `${Math.random() * 100}%`,
-                        fontSize: `${Math.random() * 20 + 20}px`,
-                        animationDelay: `${Math.random() * 20}s`,
-                        animationDuration: `${Math.random() * 10 + 15}s`,
-                        opacity: 0
-                    }}
-                >
-                    {symbols[i % symbols.length]}
-                </div>
+                    index={i}
+                    symbol={symbols[i % symbols.length]}
+                    frequencyData={frequencyData}
+                    baseX={pos.x}
+                />
             ))}
         </div>
     );
@@ -501,6 +592,61 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     const [isInParty, setIsInParty] = useState(false);
     const [partyId, setPartyId] = useState<string | null>(null);
     const [isBannerDismissed, setIsBannerDismissed] = useState(false);
+    const [audioAnalyser, setAudioAnalyser] = useState<AnalyserNode | null>(null);
+
+    // Play arena entrance music with audio visualization on mount
+    // NOTE: We intentionally don't stop the music on unmount here
+    // The music continues playing through team-setup and stops when entering the match
+    useEffect(() => {
+        let mounted = true;
+        let interactionListenerAdded = false;
+        
+        const startMusic = async () => {
+            const analyser = await soundEngine.playArenaEntranceMusic();
+            if (mounted && analyser) {
+                setAudioAnalyser(analyser);
+                return true; // Music started successfully
+            }
+            return false;
+        };
+        
+        // Handler for first user interaction - starts music if not already playing
+        const handleFirstInteraction = async () => {
+            if (!mounted) return;
+            
+            // Remove listeners immediately to prevent multiple calls
+            document.removeEventListener('click', handleFirstInteraction);
+            document.removeEventListener('touchstart', handleFirstInteraction);
+            document.removeEventListener('keydown', handleFirstInteraction);
+            interactionListenerAdded = false;
+            
+            // Try to start music now that we have a user gesture
+            await startMusic();
+        };
+        
+        // Try to start music immediately
+        startMusic().then((started) => {
+            // If music didn't start (likely due to autoplay policy), 
+            // wait for first user interaction
+            if (!started && mounted && soundEngine.isEnabled()) {
+                document.addEventListener('click', handleFirstInteraction, { once: true });
+                document.addEventListener('touchstart', handleFirstInteraction, { once: true });
+                document.addEventListener('keydown', handleFirstInteraction, { once: true });
+                interactionListenerAdded = true;
+            }
+        });
+        
+        // Cleanup - remove listeners if component unmounts before interaction
+        return () => {
+            mounted = false;
+            if (interactionListenerAdded) {
+                document.removeEventListener('click', handleFirstInteraction);
+                document.removeEventListener('touchstart', handleFirstInteraction);
+                document.removeEventListener('keydown', handleFirstInteraction);
+            }
+            // No music cleanup - music continues to team-setup page
+        };
+    }, []);
 
     // Request fullscreen for immersive arena experience
     const requestFullscreen = async () => {
@@ -605,7 +751,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
 
     return (
         <div className="h-full flex flex-col max-w-[1400px] mx-auto px-6 py-4 overflow-hidden relative">
-            <ParticleBackground />
+            <ParticleBackground analyser={audioAnalyser} />
 
             {/* Party Mode Banner - Shows when user is in a party (Theme-aware, Responsive) */}
             <AnimatePresence>
@@ -894,7 +1040,14 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                     )}
                 </AnimatePresence>
 
-                <Link href="/dashboard" className="flex items-center gap-2 group">
+                <Link 
+                    href="/dashboard" 
+                    className="flex items-center gap-2 group"
+                    onClick={() => {
+                        // Stop arena entrance music when leaving arena pages
+                        soundEngine.stopArenaEntranceMusic(300);
+                    }}
+                >
                     <span className="text-xs font-black text-white/60 group-hover:text-white uppercase tracking-[0.2em] transition-colors">
                         ← Go To Dashboard
                     </span>
