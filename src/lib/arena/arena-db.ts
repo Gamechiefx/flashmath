@@ -38,23 +38,27 @@ try {
  * ELO thresholds for each rank
  * Based on percentile distribution
  */
+/**
+ * Rank thresholds (aligned with LEAGUES in constants.js)
+ * These MUST match the values in src/lib/arena/constants.js LEAGUES
+ */
 const RANK_THRESHOLDS = {
-    DIAMOND: 1800,
-    PLATINUM: 1500,
-    GOLD: 1200,
-    SILVER: 900,
+    DIAMOND: 2000,
+    PLATINUM: 1700,
+    GOLD: 1400,
+    SILVER: 1100,
     BRONZE: 0,
 };
 
 /**
  * Division thresholds within each rank (as % of rank range)
- * I = top, IV = bottom
+ * Uses 3 divisions to match LEAGUE_CONFIG.DIVISIONS_PER_LEAGUE
+ * I = highest (about to promote), III = lowest (just entered rank)
  */
 const DIVISION_RANGES = {
-    I: 0.75,
-    II: 0.50,
-    III: 0.25,
-    IV: 0,
+    I: 0.667,   // 66.7-100% of rank = Division I (highest)
+    II: 0.333,  // 33.3-66.7% of rank = Division II (middle)
+    III: 0,     // 0-33.3% of rank = Division III (lowest)
 };
 
 /**
@@ -68,7 +72,7 @@ export function getRankFromElo(elo: number): { rank: string; division: string } 
     if (elo >= RANK_THRESHOLDS.DIAMOND) {
         rank = 'DIAMOND';
         currentThreshold = RANK_THRESHOLDS.DIAMOND;
-        nextThreshold = 2400; // Cap for Diamond divisions
+        nextThreshold = 2600; // Cap for Diamond divisions (aligned with LEAGUES)
     } else if (elo >= RANK_THRESHOLDS.PLATINUM) {
         rank = 'PLATINUM';
         currentThreshold = RANK_THRESHOLDS.PLATINUM;
@@ -83,15 +87,15 @@ export function getRankFromElo(elo: number): { rank: string; division: string } 
         nextThreshold = RANK_THRESHOLDS.GOLD;
     }
     
-    // Calculate division within rank
+    // Calculate division within rank (3 divisions: I, II, III)
+    // I = highest (about to promote), III = lowest (just entered rank)
     const rankRange = nextThreshold - currentThreshold;
     const positionInRank = elo - currentThreshold;
     const percentInRank = positionInRank / rankRange;
     
-    let division = 'IV';
+    let division = 'III';  // Default to lowest division
     if (percentInRank >= DIVISION_RANGES.I) division = 'I';
     else if (percentInRank >= DIVISION_RANGES.II) division = 'II';
-    else if (percentInRank >= DIVISION_RANGES.III) division = 'III';
     
     return { rank, division };
 }
@@ -312,12 +316,18 @@ export async function updatePlayerTier(
  * 
  * Uses Redis cache with 60-second TTL for fast repeated access.
  * Cache is automatically invalidated after ELO updates.
+ * 
+ * @param limit - Number of entries to return
+ * @param operation - Filter by operation: 'overall', 'addition', 'subtraction', 'multiplication', 'division'
  */
-export async function getDuelLeaderboard(limit: number = 100): Promise<ArenaPlayer[]> {
+export async function getDuelLeaderboard(
+    limit: number = 100,
+    operation: 'overall' | 'addition' | 'subtraction' | 'multiplication' | 'division' = 'overall'
+): Promise<ArenaPlayer[]> {
     // Try cache first
     if (arenaRedis) {
         try {
-            const cached = await arenaRedis.getCachedLeaderboard('duel', 'overall');
+            const cached = await arenaRedis.getCachedLeaderboard('duel', operation);
             if (cached && cached.length >= limit) {
                 return cached.slice(0, limit);
             }
@@ -326,12 +336,12 @@ export async function getDuelLeaderboard(limit: number = 100): Promise<ArenaPlay
         }
     }
     
-    // Fetch from PostgreSQL
-    const data = await arenaPostgres.getLeaderboard(limit);
+    // Fetch from PostgreSQL with operation filter
+    const data = await arenaPostgres.getLeaderboard(limit, operation);
     
     // Cache the result
     if (arenaRedis && data && data.length > 0) {
-        arenaRedis.cacheLeaderboard('duel', 'overall', data).catch(() => {});
+        arenaRedis.cacheLeaderboard('duel', operation, data).catch(() => {});
     }
     
     return data;
@@ -444,6 +454,10 @@ export async function getArenaDisplayStats(userId: string): Promise<ArenaDisplay
 export async function getArenaDisplayStatsBatch(
     userIds: string[]
 ): Promise<Map<string, ArenaDisplayStats>> {
+    // #region agent log
+    const startTime = Date.now();
+    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arena-db.ts:getArenaDisplayStatsBatch',message:'getArenaDisplayStatsBatch called',data:{userCount:userIds.length},timestamp:startTime,sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     const result = new Map<string, ArenaDisplayStats>();
     
     if (userIds.length === 0) return result;
@@ -489,6 +503,9 @@ export async function getArenaDisplayStatsBatch(
     }
     
     try {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arena-db.ts:getArenaDisplayStatsBatch',message:'Calling getPlayersBatch',data:{uncachedCount:uncachedIds.length,durationSoFarMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         // Fetch uncached players in one query
         const players = await arenaPostgres.getPlayersBatch(uncachedIds);
         const playerMap = new Map(players.map((p: ArenaPlayer) => [p.user_id, p]));
@@ -524,6 +541,9 @@ export async function getArenaDisplayStatsBatch(
             }
         }
     } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arena-db.ts:getArenaDisplayStatsBatch',message:'getArenaDisplayStatsBatch CATCH ERROR',data:{error:String(error),durationMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         console.error(`[ArenaDB] Failed to batch get display stats:`, error);
         // Return defaults for uncached on error
         for (const userId of uncachedIds) {

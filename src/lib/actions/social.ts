@@ -873,6 +873,10 @@ import {
 } from "@/lib/party/party-redis";
 
 export async function getPartyData(): Promise<{ party: Party | null; invites: PartyInvite[]; error?: string }> {
+    // #region agent log
+    const startTime = Date.now();
+    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'social.ts:getPartyData',message:'getPartyData START',data:{},timestamp:startTime,sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     const session = await auth();
     if (!session?.user) {
         return { party: null, invites: [], error: 'Unauthorized' };
@@ -882,6 +886,9 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
     const db = getDatabase();
 
     try {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'social.ts:getPartyData',message:'Calling validateUserPartyState',data:{userId,durationSoFarMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         // Get party from Redis (primary source)
         const redisPartyData = await validateUserPartyState(userId);
         
@@ -1011,6 +1018,9 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
         
         return result;
     } catch (error: any) {
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'social.ts:getPartyData',message:'getPartyData CATCH ERROR',data:{error:String(error),stack:error.stack?.slice(0,500),durationMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
         console.error('[Social] getPartyData error:', error);
         return { party: null, invites: [], error: error.message };
     }

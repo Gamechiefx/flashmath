@@ -26,6 +26,11 @@ let pool = null;
  * Get or create PostgreSQL connection pool
  */
 function getPool() {
+    // #region agent log
+    const startTime = Date.now();
+    const hasExistingPool = !!pool;
+    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'postgres.js:getPool',message:'getPool called',data:{hasExistingPool},timestamp:startTime,sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (pool) {
         return pool;
     }
@@ -55,11 +60,21 @@ function getPool() {
 
     pool.on('error', (err) => {
         console.error('[PostgreSQL] Unexpected error:', err);
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'postgres.js:pool.error',message:'PostgreSQL pool error',data:{error:String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
     });
 
     pool.on('connect', () => {
         console.log('[PostgreSQL] New client connected');
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'postgres.js:pool.connect',message:'PostgreSQL client connected',data:{durationMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
     });
+
+    // #region agent log
+    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'postgres.js:getPool',message:'PostgreSQL pool created',data:{host:poolConfig.host||'via-connection-string',durationMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     return pool;
 }
@@ -444,10 +459,16 @@ async function updatePlayerOperationElo(userId, operation, newElo, eloChange, wo
     const eloColumn = `elo_${operation}`;
     
     // First update the operation-specific ELO
+    // IMPORTANT: Also update matches_played for leaderboard filtering (WHERE matches_played >= 5)
     await pool.query(`
         UPDATE arena_players
         SET 
             ${eloColumn} = $2,
+            matches_played = matches_played + 1,
+            matches_won = matches_won + CASE WHEN $3 THEN 1 ELSE 0 END,
+            matches_lost = matches_lost + CASE WHEN $3 THEN 0 ELSE 1 END,
+            current_streak = CASE WHEN $3 THEN current_streak + 1 ELSE 0 END,
+            best_streak = CASE WHEN $3 THEN GREATEST(best_streak, current_streak + 1) ELSE best_streak END,
             duel_wins = duel_wins + CASE WHEN $3 THEN 1 ELSE 0 END,
             duel_losses = duel_losses + CASE WHEN $3 THEN 0 ELSE 1 END,
             duel_win_streak = CASE WHEN $3 THEN duel_win_streak + 1 ELSE 0 END,
@@ -742,13 +763,26 @@ async function getTeamLeaderboard(limit = 50) {
 }
 
 /**
- * Get leaderboard
+ * Get leaderboard filtered by operation
  * @param {number} limit - Number of players to return
+ * @param {string} operation - Operation filter: 'overall', 'addition', 'subtraction', 'multiplication', 'division'
  */
-async function getLeaderboard(limit = 100) {
+async function getLeaderboard(limit = 100, operation = 'overall') {
+    // Determine which ELO column to use based on operation
+    let eloColumn = 'elo';
+    let filterCondition = 'matches_played >= 1';
+    
+    if (operation !== 'overall') {
+        eloColumn = `elo_${operation}`;
+        // Only show players who have played this specific operation
+        // A player has played an operation if their ELO differs from 300 (default)
+        // This works because ELO changes after every match (+/- some amount)
+        filterCondition = `${eloColumn} != 300`;
+    }
+    
     const result = await getPool().query(`
         SELECT 
-            user_id, username, elo, peak_elo, 
+            user_id, username, ${eloColumn} as elo, peak_elo, 
             matches_played, matches_won, matches_lost,
             current_streak, best_streak, practice_tier,
             CASE WHEN matches_played > 0 
@@ -756,8 +790,8 @@ async function getLeaderboard(limit = 100) {
                 ELSE 0 
             END as win_rate
         FROM arena_players
-        WHERE matches_played >= 5
-        ORDER BY elo DESC
+        WHERE ${filterCondition}
+        ORDER BY ${eloColumn} DESC
         LIMIT $1
     `, [limit]);
 

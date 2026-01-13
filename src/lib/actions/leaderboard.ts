@@ -241,134 +241,66 @@ export async function getDuelLeaderboard(
     let entries: LeaderboardEntry[] = [];
     let totalPlayers = 0;
 
+    // #region agent log
+    console.log('[Leaderboard] getDuelLeaderboard called:', { operation, timeFilter, limit, currentUserId });
+    // #endregion
+
+    // Use PostgreSQL as the source of truth for arena leaderboard
     if (timeFilter === 'alltime') {
-        // All-time leaderboard: direct query on users table with performance stats
-        const countResult = db.prepare(`
-            SELECT COUNT(*) as count FROM users 
-            WHERE (arena_duel_wins > 0 OR arena_duel_losses > 0)
-        `).get() as { count: number };
-        totalPlayers = countResult.count;
+        try {
+            const { getDuelLeaderboard: getPgLeaderboard } = await import('@/lib/arena/arena-db');
+            // Pass operation to filter by specific operation (addition, subtraction, multiplication, division, or overall)
+            const pgData = await getPgLeaderboard(limit, operation) as any[];
+            
+            // #region agent log
+            console.log('[Leaderboard] PostgreSQL leaderboard data:', pgData?.length || 0, 'players');
+            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'leaderboard.ts:getDuelLeaderboard',message:'Leaderboard data fetched',data:{totalPlayers:pgData?.length,firstPlayer:pgData?.[0]?{elo:pgData[0].elo,user_id:pgData[0].user_id,wins:pgData[0].matches_won,losses:pgData[0].matches_lost}:null,currentUserId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
+            // #endregion
+            
+            totalPlayers = pgData?.length || 0;
+            
+            // Map PostgreSQL data to LeaderboardEntry format
+            entries = (pgData || []).map((row: any, index: number) => {
+                // PostgreSQL fields: user_id, username, elo, peak_elo, matches_played, matches_won, matches_lost,
+                //                    current_streak, best_streak, practice_tier, win_rate
+                const league = getLeagueFromElo(row.elo || 300);
+                const winRate = parseFloat(row.win_rate) || 0;
+                const isCurrentUser = row.user_id === currentUserId;
+                
+                // Use PostgreSQL streak data
+                const currentStreak = row.current_streak || 0;
+                const bestStreak = row.best_streak || 0;
+                
+                // Simple APS calculation based on available data
+                const apsScore = calculateApsScore(winRate, 2500, bestStreak); // Use winRate as proxy for accuracy
 
-        // Query with aggregated performance stats from arena_matches
-        // Filter by operation if not 'overall'
-        const operationFilter = operation !== 'overall' ? `AND operation = '${operation}'` : '';
-        
-        const rows = db.prepare(`
-            WITH user_perf AS (
-                SELECT 
-                    user_id,
-                    AVG(accuracy) as avg_accuracy,
-                    AVG(avg_speed_ms) as avg_speed,
-                    MAX(max_streak) as best_streak_match
-                FROM (
-                    SELECT 
-                        winner_id as user_id,
-                        winner_accuracy as accuracy,
-                        winner_avg_speed_ms as avg_speed_ms,
-                        winner_max_streak as max_streak
-                    FROM arena_matches WHERE mode = '1v1' AND winner_accuracy IS NOT NULL ${operationFilter}
-                    UNION ALL
-                    SELECT 
-                        loser_id as user_id,
-                        loser_accuracy as accuracy,
-                        loser_avg_speed_ms as avg_speed_ms,
-                        loser_max_streak as max_streak
-                    FROM arena_matches WHERE mode = '1v1' AND loser_accuracy IS NOT NULL ${operationFilter}
-                )
-                GROUP BY user_id
-            )
-            SELECT 
-                u.id,
-                u.name,
-                u.level,
-                u.${eloColumn} as elo,
-                u.arena_duel_wins as wins,
-                u.arena_duel_losses as losses,
-                u.arena_duel_win_streak as streak,
-                u.arena_duel_best_win_streak as best_streak,
-                u.equipped_items,
-                COALESCE(p.avg_accuracy, 0) as avg_accuracy,
-                COALESCE(p.avg_speed, 0) as avg_speed,
-                COALESCE(p.best_streak_match, 0) as best_streak_match
-            FROM users u
-            LEFT JOIN user_perf p ON p.user_id = u.id
-            WHERE (u.arena_duel_wins > 0 OR u.arena_duel_losses > 0)
-            ORDER BY u.${eloColumn} DESC
-            LIMIT ?
-        `).all(limit) as any[];
-
-        entries = rows.map((row, index) => {
-            const equippedItems = row.equipped_items ? JSON.parse(row.equipped_items) : {};
-            const league = getLeagueFromElo(row.elo);
-            const winRate = row.wins + row.losses > 0 
-                ? Math.round((row.wins / (row.wins + row.losses)) * 100) 
-                : 0;
-            
-            // Use performance data from arena_matches (best_streak_match is in-match answer streak)
-            const accuracy = row.avg_accuracy || 0;
-            const avgSpeedMs = row.avg_speed || 0;
-            const bestAnswerStreak = row.best_streak_match || 0;  // Best answer streak within matches
-            
-            const apsScore = calculateApsScore(accuracy * 100, avgSpeedMs, bestAnswerStreak);
-            const isCurrentUser = row.id === currentUserId;
-            
-            // Get strongest operation for Overall view
-            const strongestOp = operation === 'overall' ? getStrongestOperation(db, row.id) : null;
-            
-            // Get extended data for current user
-            let extendedData = {};
-            if (isCurrentUser) {
-                const breakdown = calculateApsBreakdown(accuracy * 100, avgSpeedMs, bestAnswerStreak);
-                const { strengths, weaknesses } = analyzeStrengthsWeaknesses(
-                    accuracy * 100, avgSpeedMs, bestAnswerStreak, winRate
-                );
-                
-                // Get recent ELO changes for trend
-                const recentMatches = db.prepare(`
-                    SELECT 
-                        CASE WHEN winner_id = ? THEN winner_elo_change ELSE loser_elo_change END as elo_change
-                    FROM arena_matches
-                    WHERE (winner_id = ? OR loser_id = ?) AND mode = '1v1'
-                    ORDER BY created_at DESC
-                    LIMIT 5
-                `).all(currentUserId, currentUserId, currentUserId) as { elo_change: number }[];
-                
-                const recentEloChanges = recentMatches.map(m => m.elo_change);
-                const trend = calculateTrend(recentEloChanges);
-                
-                extendedData = {
-                    odApsBreakdown: breakdown,
-                    odRecentTrend: trend,
-                    odStrengths: strengths,
-                    odWeaknesses: weaknesses,
-                    odRecentEloChanges: recentEloChanges,
+                return {
+                    rank: index + 1,
+                    odUserId: row.user_id,
+                    odName: row.username || 'Unknown',
+                    odLevel: row.practice_tier || 1,
+                    odElo: row.elo || 300,
+                    odWins: row.matches_won || 0,
+                    odLosses: row.matches_lost || 0,
+                    odWinRate: Math.round(winRate),
+                    odStreak: currentStreak,
+                    odBestStreak: bestStreak,
+                    odLeague: league.league,
+                    odDivision: league.divisionRoman,
+                    odEquippedFrame: null,
+                    odEquippedTitle: null,
+                    odEquippedBanner: null,
+                    odIsCurrentUser: isCurrentUser,
+                    odAccuracy: Math.round(winRate),
+                    odAvgSpeedMs: 2500,
+                    odApsScore: apsScore,
                 };
-            }
-
-            return {
-                rank: index + 1,
-                odUserId: row.id,
-                odName: row.name,
-                odLevel: row.level,
-                odElo: row.elo,
-                odWins: row.wins,
-                odLosses: row.losses,
-                odWinRate: winRate,
-                odStreak: row.streak,
-                odBestStreak: bestAnswerStreak,  // Use in-match answer streak, not match win streak
-                odLeague: league.league,
-                odDivision: league.division,
-                odEquippedFrame: equippedItems.frame || null,
-                odEquippedTitle: equippedItems.title || null,
-                odEquippedBanner: equippedItems.banner || null,
-                odIsCurrentUser: isCurrentUser,
-                odAccuracy: Math.round(accuracy * 100),
-                odAvgSpeedMs: Math.round(avgSpeedMs),
-                odApsScore: apsScore,
-                odStrongestOperation: strongestOp || undefined,  // Strongest operation for Overall view
-                ...extendedData,
-            };
-        });
+            });
+        } catch (e: any) {
+            console.log('[Leaderboard] PostgreSQL query failed, using empty result:', e?.message);
+            entries = [];
+            totalPlayers = 0;
+        }
     } else {
         // Weekly leaderboard: aggregate from arena_matches in last 7 days
         const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -411,7 +343,6 @@ export async function getDuelLeaderboard(
                 u.id,
                 u.name,
                 u.level,
-                u.${eloColumn} as elo,
                 u.arena_duel_wins as wins,
                 u.arena_duel_losses as losses,
                 u.arena_duel_win_streak as streak,
@@ -432,8 +363,14 @@ export async function getDuelLeaderboard(
 
         totalPlayers = rows.length;
 
-        // Get performance stats for weekly entries
+        // Get user IDs for fetching ELO from PostgreSQL
         const userIds = rows.map((r: any) => r.id);
+        
+        // Fetch ELO from PostgreSQL (source of truth)
+        const { getArenaDisplayStatsBatch } = await import('@/lib/arena/arena-db');
+        const pgStats = await getArenaDisplayStatsBatch(userIds);
+        
+        // Get performance stats for weekly entries
         const perfStats = new Map<string, { accuracy: number; avgSpeed: number; bestStreak: number }>();
         
         if (userIds.length > 0) {
@@ -471,7 +408,10 @@ export async function getDuelLeaderboard(
 
         entries = rows.map((row: any, index: number) => {
             const equippedItems = row.equipped_items ? JSON.parse(row.equipped_items) : {};
-            const league = getLeagueFromElo(row.elo);
+            // Get ELO from PostgreSQL (source of truth), fallback to 300
+            const playerPgStats = pgStats.get(row.id);
+            const playerElo = playerPgStats?.odDuelElo || 300;
+            const league = getLeagueFromElo(playerElo);
             const winRate = row.wins + row.losses > 0 
                 ? Math.round((row.wins / (row.wins + row.losses)) * 100) 
                 : 0;
@@ -517,14 +457,14 @@ export async function getDuelLeaderboard(
                 odUserId: row.id,
                 odName: row.name,
                 odLevel: row.level,
-                odElo: row.elo,
-                odWins: row.wins,
-                odLosses: row.losses,
+                odElo: playerElo,
+                odWins: playerPgStats?.odDuelWins || row.wins,
+                odLosses: playerPgStats?.odDuelLosses || row.losses,
                 odWinRate: winRate,
                 odStreak: row.streak,
                 odBestStreak: bestAnswerStreak,  // Use in-match answer streak
                 odLeague: league.league,
-                odDivision: league.division,
+                odDivision: league.divisionRoman,
                 odEquippedFrame: equippedItems.frame || null,
                 odEquippedTitle: equippedItems.title || null,
                 odEquippedBanner: equippedItems.banner || null,
@@ -626,7 +566,7 @@ export async function getDuelLeaderboard(
                 odStreak: userRow.streak,
                 odBestStreak: bestAnswerStreak,  // Use in-match answer streak
                 odLeague: league.league,
-                odDivision: league.division,
+                odDivision: league.divisionRoman,
                 odEquippedFrame: equippedItems.frame || null,
                 odEquippedTitle: equippedItems.title || null,
                 odEquippedBanner: equippedItems.banner || null,
@@ -726,7 +666,7 @@ export async function getTeamLeaderboard(
                 odStreak: row.streak,
                 odBestStreak: row.best_streak,
                 odLeague: league.league,
-                odDivision: league.division,
+                odDivision: league.divisionRoman,
                 odEquippedFrame: equippedItems.frame || null,
                 odEquippedTitle: equippedItems.title || null,
                 odEquippedBanner: equippedItems.banner || null,
@@ -820,7 +760,7 @@ export async function getTeamLeaderboard(
                 odStreak: row.streak,
                 odBestStreak: row.best_streak,
                 odLeague: league.league,
-                odDivision: league.division,
+                odDivision: league.divisionRoman,
                 odEquippedFrame: equippedItems.frame || null,
                 odEquippedTitle: equippedItems.title || null,
                 odEquippedBanner: equippedItems.banner || null,
@@ -884,7 +824,7 @@ export async function getTeamLeaderboard(
                 odStreak: userRow.streak,
                 odBestStreak: userRow.best_streak,
                 odLeague: league.league,
-                odDivision: league.division,
+                odDivision: league.divisionRoman,
                 odEquippedFrame: equippedItems.frame || null,
                 odEquippedTitle: equippedItems.title || null,
                 odEquippedBanner: equippedItems.banner || null,

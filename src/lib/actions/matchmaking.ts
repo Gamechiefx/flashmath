@@ -1788,6 +1788,10 @@ export async function getArenaStats(userId?: string): Promise<ArenaStatsResult> 
         // Get stats from PostgreSQL (source of truth)
         const pgStats = await getFullArenaStats(targetId);
         
+        // #region agent log
+        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'matchmaking.ts:getArenaStats',message:'FAB stats fetched',data:{targetId,hasStats:!!pgStats,duelElo:pgStats?.duel?.elo,duelRank:pgStats?.duel?.rank,duelWins:pgStats?.duel?.wins,duelLosses:pgStats?.duel?.losses},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        
         if (!pgStats) {
             // Player doesn't exist in PostgreSQL yet, create them
             const { getDatabase } = await import("@/lib/db");

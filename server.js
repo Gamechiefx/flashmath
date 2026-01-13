@@ -5980,9 +5980,16 @@ app.prepare().then(async () => {
     console.log('[TeamMatch] Team match namespace initialized at /arena/teams');
 
     // Initialize PostgreSQL schema for arena data
-    arenaPostgres.initSchema()
-        .then(() => console.log('[PostgreSQL] Arena database schema initialized'))
-        .catch(err => console.error('[PostgreSQL] Schema init failed:', err.message));
+    // IMPORTANT: Await this before starting HTTP server to prevent 503 errors on first requests
+    try {
+        await arenaPostgres.initSchema();
+        console.log('[PostgreSQL] Arena database schema initialized');
+    } catch (err) {
+        console.error('[PostgreSQL] Schema init failed:', err.message);
+        // Continue anyway - PostgreSQL errors shouldn't prevent server start
+        // but log the warning so we know there's an issue
+        console.warn('[PostgreSQL] Server starting without PostgreSQL - some features may be unavailable');
+    }
 
     httpServer.listen(port, hostname, () => {
         console.log(`> Ready on http://${hostname}:${port}`);

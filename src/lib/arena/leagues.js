@@ -36,18 +36,18 @@ function getLeagueFromElo(elo) {
     }
 
     // Calculate division within league (I, II, III)
-    // Division I = lowest, Division III = highest (about to promote)
+    // Standard gaming convention: Division I = highest (about to promote), Division III = lowest
     const leagueRange = currentLeague.maxElo - currentLeague.minElo;
     const divisionSize = Math.floor(leagueRange / LEAGUE_CONFIG.DIVISIONS_PER_LEAGUE);
     const eloInLeague = elo - currentLeague.minElo;
 
     let division;
-    if (eloInLeague < divisionSize) {
-        division = 1;  // Division I
-    } else if (eloInLeague < divisionSize * 2) {
-        division = 2;  // Division II
+    if (eloInLeague >= divisionSize * 2) {
+        division = 1;  // Division I (highest, about to promote)
+    } else if (eloInLeague >= divisionSize) {
+        division = 2;  // Division II (middle)
     } else {
-        division = 3;  // Division III (about to promote)
+        division = 3;  // Division III (lowest, just entered rank)
     }
 
     // Progress within division (0-100%)
@@ -88,8 +88,8 @@ function getLeagueFromElo(elo) {
 function checkPromotion(currentElo, practiceTierLevel) {
     const current = getLeagueFromElo(currentElo);
 
-    // Check if at top of current league (Division III, high progress)
-    const atPromotionThreshold = current.division === 3 && current.progress >= 80;
+    // Check if at top of current league (Division I = highest, high progress)
+    const atPromotionThreshold = current.division === 1 && current.progress >= 80;
 
     // Get next league
     const nextLeagueId = current.leagueId + 1;
@@ -136,11 +136,11 @@ function checkPromotion(currentElo, practiceTierLevel) {
 function checkDemotion(currentElo, gamesAtCurrentDivision = 0) {
     const current = getLeagueFromElo(currentElo);
 
-    // Can't demote from Bronze I
-    if (current.leagueId === 0 && current.division === 1) {
+    // Can't demote from Bronze III (lowest division)
+    if (current.leagueId === 0 && current.division === 3) {
         return {
             protected: true,
-            reason: 'Cannot demote below Bronze I',
+            reason: 'Cannot demote below Bronze III',
             current: current
         };
     }
@@ -149,8 +149,8 @@ function checkDemotion(currentElo, gamesAtCurrentDivision = 0) {
     const protectionGames = LEAGUE_CONFIG.DEMOTION_PROTECTION_GAMES;
     const hasProtection = gamesAtCurrentDivision < protectionGames;
 
-    // Check if at bottom of division
-    const atDemotionThreshold = current.division === 1 && current.progress <= 10;
+    // Check if at bottom of division (Division III = lowest)
+    const atDemotionThreshold = current.division === 3 && current.progress <= 10;
 
     return {
         protected: hasProtection,
