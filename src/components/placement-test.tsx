@@ -22,6 +22,15 @@ interface TestResult {
 // Band sample tiers - test from middle of each band for fair assessment
 const BAND_SAMPLE_TIERS = [10, 30, 50, 70, 90]; // Foundation, Intermediate, Advanced, Expert, Master
 
+// Time limits per band (ms) - harder bands get more time
+const BAND_TIME_LIMITS = [
+    15000,   // Foundation: 15 seconds
+    20000,   // Intermediate: 20 seconds
+    30000,   // Advanced: 30 seconds
+    105000,  // Expert: 1:45
+    120000,  // Master: 2:00
+];
+
 // Speed thresholds (ms) - faster = better placement within band
 const SPEED_THRESHOLDS = {
     fast: 3000,      // Under 3s = excellent
@@ -49,6 +58,10 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
     const currentOp = ops[currentOpIndex];
     const currentBand = BANDS[currentBandIndex];
 
+    // Get current time limit for this band
+    const currentTimeLimit = BAND_TIME_LIMITS[currentBandIndex];
+    const timeRemaining = Math.max(0, currentTimeLimit / 1000 - timer);
+
     // Timer effect
     useEffect(() => {
         const interval = setInterval(() => {
@@ -56,6 +69,49 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
         }, 100);
         return () => clearInterval(interval);
     }, [questionStartTime]);
+
+    // Auto-fail if time runs out
+    useEffect(() => {
+        if (timer * 1000 >= currentTimeLimit && !showFeedback && currentProblem) {
+            handleTimeout();
+        }
+    }, [timer, currentTimeLimit, showFeedback, currentProblem]);
+
+    const handleTimeout = () => {
+        // Time ran out - count as incorrect
+        const newResult: TestResult = {
+            correct: false,
+            timeMs: currentTimeLimit,
+            band: currentBandIndex + 1,
+        };
+
+        setResults(prev => ({
+            ...prev,
+            [currentOp]: [...prev[currentOp], newResult],
+        }));
+
+        setShowFeedback('incorrect');
+
+        setTimeout(() => {
+            setShowFeedback(null);
+            setInputValue("");
+
+            // Move to next question
+            if (currentBandIndex < 4) {
+                setCurrentBandIndex(prev => prev + 1);
+            } else {
+                if (currentOpIndex < 3) {
+                    setCurrentOpIndex(prev => prev + 1);
+                    setCurrentBandIndex(0);
+                } else {
+                    calculateFinalTiers({
+                        ...results,
+                        [currentOp]: [...results[currentOp], newResult],
+                    });
+                }
+            }
+        }, 500);
+    };
 
     // Generate problem when operation or band changes
     useEffect(() => {
@@ -214,8 +270,17 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
                     </div>
                     <div className="flex items-center gap-4">
                         <div className="text-right">
-                            <div className="text-xs uppercase tracking-widest text-zinc-500">Timer</div>
-                            <div className="text-2xl font-mono text-zinc-300">{timer.toFixed(1)}s</div>
+                            <div className="text-xs uppercase tracking-widest text-zinc-500">Time Left</div>
+                            <div className={`text-2xl font-mono ${
+                                timeRemaining <= 10 ? 'text-red-400 animate-pulse' :
+                                timeRemaining <= 30 ? 'text-yellow-400' :
+                                'text-zinc-300'
+                            }`}>
+                                {timeRemaining >= 60
+                                    ? `${Math.floor(timeRemaining / 60)}:${String(Math.floor(timeRemaining % 60)).padStart(2, '0')}`
+                                    : `${timeRemaining.toFixed(1)}s`
+                                }
+                            </div>
                         </div>
                         <button
                             onClick={onComplete}
@@ -312,7 +377,12 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
                 <div className="flex justify-between items-center text-sm text-zinc-500">
                     <div className="flex items-center gap-2">
                         <Zap size={14} className="text-yellow-400" />
-                        <span>Speed affects your starting tier</span>
+                        <span>
+                            {currentBandIndex >= 3
+                                ? `${currentTimeLimit >= 60000 ? `${currentTimeLimit / 60000} min` : `${currentTimeLimit / 1000}s`} limit for ${currentBand.name} questions`
+                                : 'Speed affects your starting tier'
+                            }
+                        </span>
                     </div>
                     <div>
                         Question {answeredQuestions + 1} of {totalQuestions}

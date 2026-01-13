@@ -25,4 +25,5 @@ export * from './slot-assignment-board';
 export * from './tactical-break-panel';
 export * from './team-formation-progress';
 export * from './teammate-spectator-view';
+export * from './points-feed-fab';
 

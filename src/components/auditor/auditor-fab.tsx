@@ -10,10 +10,21 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, AlertTriangle, Activity, TrendingDown } from 'lucide-react';
 import { useAuditor } from './auditor-provider';
 import { cn } from '@/lib/utils';
+import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 
 export function AuditorFab() {
     const { togglePanel, isPanelOpen, stats, hasWarning } = useAuditor();
     const [isHovered, setIsHovered] = React.useState(false);
+    const { data: session } = useSession();
+    const pathname = usePathname();
+
+    // Don't show if not logged in
+    if (!session?.user) return null;
+
+    // Don't show during matches
+    const isInMatch = pathname?.startsWith('/arena/match/') || pathname?.startsWith('/arena/teams/match/');
+    if (isInMatch) return null;
 
     // Don't show if panel is open
     if (isPanelOpen) return null;
@@ -134,6 +145,15 @@ export function AuditorFab() {
 // Compact version that just shows the icon
 export function AuditorFabCompact() {
     const { togglePanel, isPanelOpen, hasWarning } = useAuditor();
+    const { data: session } = useSession();
+    const pathname = usePathname();
+
+    // Don't show if not logged in
+    if (!session?.user) return null;
+
+    // Don't show during matches
+    const isInMatch = pathname?.startsWith('/arena/match/') || pathname?.startsWith('/arena/teams/match/');
+    if (isInMatch) return null;
 
     if (isPanelOpen) return null;
 

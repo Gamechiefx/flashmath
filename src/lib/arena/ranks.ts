@@ -167,7 +167,7 @@ export function getRankColors(rank: string): { bg: string; border: string; text:
         },
     };
 
-    return colors[rank] || colors.Silver;
+    return colors[rank] || colors.Bronze;
 }
 
 /**

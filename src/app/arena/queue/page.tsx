@@ -1,9 +1,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { getMatchmakingData } from "@/lib/actions/arena";
+import { getMatchmakingData, checkUserArenaEligibility } from "@/lib/actions/arena";
 import { getArenaStats } from "@/lib/actions/matchmaking";
 import { ArenaQueueClient } from "@/components/arena/arena-queue-client";
-import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
@@ -19,10 +18,10 @@ export default async function ArenaQueuePage({ searchParams }: PageProps) {
         redirect("/auth/login");
     }
 
-    // Check email verification - required for Arena access
-    const verified = await isEmailVerified();
-    if (!verified) {
-        redirect("/arena/verify-email");
+    // Check full arena eligibility (email, age, practice sessions)
+    const eligibility = await checkUserArenaEligibility((session.user as any).id);
+    if (!eligibility.isEligible) {
+        redirect("/arena");
     }
 
     const matchmakingData = await getMatchmakingData();

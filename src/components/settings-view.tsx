@@ -288,7 +288,7 @@ export function SettingsView({ user }: SettingsViewProps) {
                                             </span>
                                         ) : (
                                             <Link
-                                                href={`/verify-email?email=${encodeURIComponent(user?.email || '')}`}
+                                                href="/arena/verify-email"
                                                 className="flex items-center gap-1 text-xs text-yellow-400 bg-yellow-500/10 px-3 py-1.5 rounded-full hover:bg-yellow-500/20 transition-colors"
                                             >
                                                 <Mail size={12} />

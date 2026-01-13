@@ -2,7 +2,7 @@ import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { TeamQueueClient } from './team-queue-client';
 import { getPartyData } from '@/lib/actions/social';
-import { isEmailVerified } from '@/lib/actions/verification';
+import { checkUserArenaEligibility } from '@/lib/actions/arena';
 
 // Disable Next.js router cache to prevent stale queueStatus during navigation
 export const dynamic = 'force-dynamic';
@@ -13,15 +13,15 @@ export default async function TeamQueuePage({
     searchParams: Promise<{ partyId?: string; phase?: string; mode?: string }>;
 }) {
     const session = await auth();
-    
+
     if (!session?.user) {
         redirect('/auth/login?callbackUrl=/arena/teams/queue');
     }
 
-    // Check email verification - required for Arena access
-    const verified = await isEmailVerified();
-    if (!verified) {
-        redirect('/arena/verify-email');
+    // Check full arena eligibility (email, age, practice sessions)
+    const eligibility = await checkUserArenaEligibility((session.user as any).id);
+    if (!eligibility.isEligible) {
+        redirect('/arena');
     }
 
     // Await searchParams (Next.js 16+ requirement)

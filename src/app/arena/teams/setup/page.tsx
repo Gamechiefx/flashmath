@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { TeamSetupClient } from './team-setup-client';
 import { getPartyData } from '@/lib/actions/social';
 import { getUserTeams } from '@/lib/actions/teams';
-import { isEmailVerified } from '@/lib/actions/verification';
+import { checkUserArenaEligibility } from '@/lib/actions/arena';
 
 // Disable Next.js router cache to prevent stale queueStatus during navigation
 export const dynamic = 'force-dynamic';
@@ -14,15 +14,15 @@ export default async function TeamSetupPage({
     searchParams: Promise<{ mode?: string; fromQueue?: string }>;
 }) {
     const session = await auth();
-    
+
     if (!session?.user) {
         redirect('/auth/login?callbackUrl=/arena/teams/setup');
     }
 
-    // Check email verification - required for Arena access
-    const verified = await isEmailVerified();
-    if (!verified) {
-        redirect('/arena/verify-email');
+    // Check full arena eligibility (email, age, practice sessions)
+    const eligibility = await checkUserArenaEligibility((session.user as any).id);
+    if (!eligibility.isEligible) {
+        redirect('/arena');
     }
 
     // Await searchParams (Next.js 16+ requirement)

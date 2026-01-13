@@ -136,6 +136,11 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
     const { data: session, update } = useSession();
     const isEmailVerified = (session?.user as any)?.emailVerified;
 
+    // Refresh session on mount to get latest emailVerified status
+    useEffect(() => {
+        update();
+    }, []);
+
     const handlePlacementComplete = async () => {
         setShowPlacementTest(false);
         await update();

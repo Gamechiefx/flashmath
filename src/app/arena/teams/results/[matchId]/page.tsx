@@ -1,7 +1,7 @@
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import { TeamResultsClient } from './team-results-client';
-import { isEmailVerified } from '@/lib/actions/verification';
+import { checkUserArenaEligibility } from '@/lib/actions/arena';
 import { getDatabase } from '@/lib/db/sqlite';
 
 // Import the PostgreSQL module for arena data
@@ -31,10 +31,10 @@ export default async function TeamResultsPage({
         redirect('/auth/login');
     }
 
-    // Check email verification - required for Arena access
-    const verified = await isEmailVerified();
-    if (!verified) {
-        redirect('/arena/verify-email');
+    // Check full arena eligibility (email, age, practice sessions)
+    const eligibility = await checkUserArenaEligibility((session.user as any).id);
+    if (!eligibility.isEligible) {
+        redirect('/arena');
     }
 
     // Await params (Next.js 16+ requirement)

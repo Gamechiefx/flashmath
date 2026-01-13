@@ -237,12 +237,12 @@ export function CareerStatsView({ stats }: CareerStatsViewProps) {
                         <GlassCard className="p-6 flex items-center gap-6">
                             <div className={cn(
                                 "w-16 h-16 rounded-xl bg-gradient-to-br flex items-center justify-center text-2xl font-black text-white shadow-lg",
-                                stats.arenaStats.duel?.rank === 'Bronze' && "from-amber-700 to-amber-900",
-                                stats.arenaStats.duel?.rank === 'Silver' && "from-slate-400 to-slate-600",
-                                stats.arenaStats.duel?.rank === 'Gold' && "from-yellow-400 to-yellow-600",
-                                stats.arenaStats.duel?.rank === 'Platinum' && "from-cyan-400 to-cyan-600",
-                                stats.arenaStats.duel?.rank === 'Diamond' && "from-blue-400 to-indigo-600",
-                                stats.arenaStats.duel?.rank === 'Master' && "from-purple-400 to-pink-600",
+                                stats.arenaStats.duel?.rank === 'Silver' ? "from-slate-400 to-slate-600" :
+                                stats.arenaStats.duel?.rank === 'Gold' ? "from-yellow-400 to-yellow-600" :
+                                stats.arenaStats.duel?.rank === 'Platinum' ? "from-cyan-400 to-cyan-600" :
+                                stats.arenaStats.duel?.rank === 'Diamond' ? "from-blue-400 to-indigo-600" :
+                                stats.arenaStats.duel?.rank === 'Master' ? "from-purple-400 to-pink-600" :
+                                "from-amber-700 to-amber-900" // Bronze (default)
                             )}>
                                 {stats.arenaStats.duel?.rank?.charAt(0) || 'B'}
                             </div>

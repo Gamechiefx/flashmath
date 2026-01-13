@@ -65,8 +65,9 @@ function RankBadge({ rank, division, elo }: { rank: string; division: string; el
         Gold: { bg: 'from-yellow-400 to-yellow-600', border: 'border-yellow-300/50', glow: 'shadow-yellow-300/20' },
         Platinum: { bg: 'from-cyan-400 to-cyan-600', border: 'border-cyan-300/50', glow: 'shadow-cyan-300/20' },
         Diamond: { bg: 'from-blue-400 to-indigo-600', border: 'border-blue-300/50', glow: 'shadow-blue-300/20' },
+        Master: { bg: 'from-purple-400 to-pink-600', border: 'border-purple-300/50', glow: 'shadow-purple-300/20' },
     };
-    const colors = rankColors[rank] || rankColors.Silver;
+    const colors = rankColors[rank] || rankColors.Bronze;
 
     return (
         <motion.div
@@ -696,11 +697,11 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                                 {/* Rank Letter Badge */}
                                 <div className={cn(
                                     "absolute -bottom-1 -left-2 w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-black",
-                                    arenaStats.duel.rank === 'Diamond' && "bg-blue-500 text-white",
-                                    arenaStats.duel.rank === 'Platinum' && "bg-cyan-400 text-black",
-                                    arenaStats.duel.rank === 'Gold' && "bg-yellow-400 text-black",
-                                    arenaStats.duel.rank === 'Silver' && "bg-slate-400 text-black",
-                                    arenaStats.duel.rank === 'Bronze' && "bg-amber-600 text-white",
+                                    arenaStats.duel.rank === 'Diamond' ? "bg-blue-500 text-white" :
+                                    arenaStats.duel.rank === 'Platinum' ? "bg-cyan-400 text-black" :
+                                    arenaStats.duel.rank === 'Gold' ? "bg-yellow-400 text-black" :
+                                    arenaStats.duel.rank === 'Silver' ? "bg-slate-400 text-black" :
+                                    "bg-amber-600 text-white" // Bronze (default)
                                 )}>
                                     {arenaStats.duel.rank.charAt(0)}
                                 </div>
