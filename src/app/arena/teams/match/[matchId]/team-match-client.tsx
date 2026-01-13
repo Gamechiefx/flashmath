@@ -1714,6 +1714,26 @@ export function TeamMatchClient({
             // NOTE: Removed blocking RelayHandoff animation
         });
 
+        // Round complete - brief pause before break to show results
+        socket.on('round_complete', (data: {
+            round: number;
+            half: number;
+            team1Score: number;
+            team2Score: number;
+            team1Name: string;
+            team2Name: string;
+            delayMs: number;
+        }) => {
+            console.log('[TeamMatch] Round complete:', data);
+            // Show round complete toast so players can see the results
+            const team1Lead = data.team1Score > data.team2Score;
+            const tie = data.team1Score === data.team2Score;
+            toast.info(
+                `Round ${data.round} Complete! ${tie ? 'Tied' : team1Lead ? `${data.team1Name} leads` : `${data.team2Name} leads`}`,
+                { duration: data.delayMs }
+            );
+        });
+
         socket.on('round_break', (data) => {
             console.log('[TeamMatch] Round break:', data);
             soundEngine.playRoundEnd();

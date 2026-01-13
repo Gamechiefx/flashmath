@@ -2283,6 +2283,7 @@ app.prepare().then(async () => {
             QUESTION_TIMEOUT_MS: 15000,      // 15 seconds per question before auto-skip
             TIMEOUT_WARNING_MS: 5000,        // Show warning at 5s remaining
             SOLO_DECISION_DURATION_MS: 10000, // 10 seconds for IGL to choose Normal vs Anchor Solo
+            ROUND_END_DELAY_MS: 3000,        // 3 second delay before break to show first-to-finish bonus
         },
         '2v2': {
             TEAM_SIZE: 2,
@@ -2305,6 +2306,7 @@ app.prepare().then(async () => {
             QUESTION_TIMEOUT_MS: 15000,      // 15 seconds per question before auto-skip
             TIMEOUT_WARNING_MS: 5000,        // Show warning at 5s remaining
             SOLO_DECISION_DURATION_MS: 10000, // 10 seconds for IGL to choose Normal vs Anchor Solo
+            ROUND_END_DELAY_MS: 3000,        // 3 second delay before break to show first-to-finish bonus
         },
     };
     
@@ -5222,19 +5224,19 @@ app.prepare().then(async () => {
      */
     function endRound(match, ns) {
         console.log(`[TeamMatch] endRound called for round ${match.round}, half ${match.half}`);
-        
+
         // Ensure roundScores array exists (safety check for matches that may have been restored)
         if (!match.roundScores) {
             match.roundScores = [];
         }
-        
+
         // Store round scores
         match.roundScores.push({
             round: match.round,
             team1: match.team1.score,
             team2: match.team2.score,
         });
-        
+
         // Deactivate all players, clear question timers, and reset Double Call-In ONLY if it was used this round
         for (const team of [match.team1, match.team2]) {
             for (const player of Object.values(team.players)) {
@@ -5254,10 +5256,41 @@ app.prepare().then(async () => {
                 console.log(`[TeamMatch] Preserving Double Call-In for team ${team.teamId}: scheduled for round ${team.doubleCallinForRound}, current round is ${match.round}`);
             }
         }
-        
+
         // Use mode-specific config for round/half checking
         const roundConfig = getMatchConfig(match.mode || '5v5');
-        
+        const roundEndDelay = roundConfig.ROUND_END_DELAY_MS || 3000;
+
+        // Emit round_complete event so clients can show the summary before break
+        // This gives players time to see the first-to-finish bonus and round results
+        ns.to(match.matchId).emit('round_complete', {
+            round: match.round,
+            half: match.half,
+            team1Score: match.team1.score,
+            team2Score: match.team2.score,
+            team1Name: match.team1.teamName,
+            team2Name: match.team2.teamName,
+            delayMs: roundEndDelay,
+        });
+
+        // Delay before transitioning to break/halftime
+        setTimeout(() => {
+            // Safety check: ensure match still exists and is in expected state
+            if (!match || match.phase === TEAM_MATCH_PHASES.POST_MATCH) {
+                console.log(`[TeamMatch] Match ended or not found during round end delay, skipping transition`);
+                return;
+            }
+            
+            proceedToBreakOrHalftime(match, ns, roundConfig);
+        }, roundEndDelay);
+    }
+    
+    /**
+     * Proceed to break, halftime, or match end after round complete delay
+     */
+    function proceedToBreakOrHalftime(match, ns, roundConfig) {
+        console.log(`[TeamMatch] proceedToBreakOrHalftime for round ${match.round}, half ${match.half}`);
+
         if (match.round === roundConfig.ROUNDS_PER_HALF && match.half === 1) {
             // End of 1st Half - go to Halftime
             match.phase = TEAM_MATCH_PHASES.HALFTIME;
