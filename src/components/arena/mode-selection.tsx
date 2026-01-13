@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { soundEngine } from '@/lib/sound-engine';
-import { Trophy, ChevronRight, Users, AlertCircle } from 'lucide-react';
+import { Trophy, ChevronRight, Users, AlertCircle, X } from 'lucide-react';
 import { getPartyData } from '@/lib/actions/social';
 
 interface GameMode {
@@ -499,6 +499,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     const [isRankFabExpanded, setIsRankFabExpanded] = useState(false);
     const [isInParty, setIsInParty] = useState(false);
     const [partyId, setPartyId] = useState<string | null>(null);
+    const [isBannerDismissed, setIsBannerDismissed] = useState(false);
 
     // Request fullscreen for immersive arena experience
     const requestFullscreen = async () => {
@@ -535,6 +536,8 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                     if (!hasAutoSelectedRef.current || previousPartyIdRef.current !== newPartyId) {
                         hasAutoSelectedRef.current = true;
                         previousPartyIdRef.current = newPartyId;
+                        // Reset banner dismissed state for new party
+                        setIsBannerDismissed(false);
                         // Auto-select 5v5 mode when first joining a party
                         setSelectedMode((currentMode) => {
                             // If already on a valid team mode, keep it
@@ -605,7 +608,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
 
             {/* Party Mode Banner - Shows when user is in a party (Theme-aware, Responsive) */}
             <AnimatePresence>
-                {isInParty && (
+                {isInParty && !isBannerDismissed && (
                     <motion.div
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -628,20 +631,32 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                                     • Party queue is 5v5 only
                                 </span>
                             </div>
-                            <Link
-                                href="/arena/teams/setup?mode=5v5"
-                                onClick={() => {
-                                    soundEngine.playClick();
-                                    requestFullscreen();
-                                }}
-                                className="px-3 py-1 rounded-full text-xs font-bold transition-all hover:opacity-80"
-                                style={{
-                                    backgroundColor: 'var(--accent)',
-                                    color: 'var(--primary-foreground)'
-                                }}
-                            >
-                                Go to Setup →
-                            </Link>
+                            <div className="flex items-center gap-2">
+                                <Link
+                                    href="/arena/teams/setup?mode=5v5"
+                                    onClick={() => {
+                                        soundEngine.playClick();
+                                        requestFullscreen();
+                                    }}
+                                    className="px-3 py-1 rounded-full text-xs font-bold transition-all hover:opacity-80"
+                                    style={{
+                                        backgroundColor: 'var(--accent)',
+                                        color: 'var(--primary-foreground)'
+                                    }}
+                                >
+                                    Go to Setup →
+                                </Link>
+                                <button
+                                    onClick={() => {
+                                        soundEngine.playClick();
+                                        setIsBannerDismissed(true);
+                                    }}
+                                    className="p-1 rounded-full transition-all hover:bg-white/10"
+                                    aria-label="Dismiss banner"
+                                >
+                                    <X className="w-4 h-4 text-muted-foreground hover:text-white" />
+                                </button>
+                            </div>
                         </div>
                     </motion.div>
                 )}
