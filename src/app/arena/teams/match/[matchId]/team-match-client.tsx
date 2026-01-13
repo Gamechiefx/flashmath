@@ -3263,9 +3263,21 @@ export function TeamMatchClient({
                                     isCurrentUser={false}
                                 />
                             ) : (
-                                <div className="bg-white/5 rounded-2xl border border-white/10 p-8 text-center">
-                                    <p className="text-white/50">Waiting for next player...</p>
-                                </div>
+                                /* Brief transition state - show loading instead of jarring "waiting" message */
+                                <motion.div 
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="bg-gradient-to-b from-slate-800/50 to-slate-900/90 
+                                               rounded-2xl border border-primary/20 p-8 flex flex-col items-center justify-center min-h-[200px]"
+                                >
+                                    <motion.div
+                                        animate={{ rotate: 360 }}
+                                        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                                        className="w-12 h-12 border-3 border-primary/30 border-t-primary rounded-full mb-4"
+                                    />
+                                    <p className="text-white/70 font-medium">Relay in progress...</p>
+                                    <p className="text-white/40 text-sm mt-1">Next teammate starting soon</p>
+                                </motion.div>
                             )}
                         </div>
 

@@ -88,7 +88,11 @@ export function ItemEditorRow({ item }: { item: Item }) {
                 <input
                     type="number"
                     value={price}
-                    onChange={(e) => { setPrice(parseInt(e.target.value)); setIsDirty(true); }}
+                    onChange={(e) => {
+                        const val = parseInt(e.target.value);
+                        setPrice(isNaN(val) ? 0 : val);
+                        setIsDirty(true);
+                    }}
                     className="bg-black/20 border border-white/10 rounded px-2 py-1 text-sm w-24"
                 />
             </td>
