@@ -1194,6 +1194,246 @@ class SoundEngine {
         });
     }
 
+    // Strategy/Countdown Music (for match starting phase)
+    private strategySource: AudioBufferSourceNode | null = null;
+    private strategyGain: GainNode | null = null;
+    private strategyBuffer: AudioBuffer | null = null;
+
+    // Match Music (during active gameplay)
+    private matchSource: AudioBufferSourceNode | null = null;
+    private matchGain: GainNode | null = null;
+    private matchBuffer: AudioBuffer | null = null;
+
+    // Halftime Music (during halftime break)
+    private halftimeSource: AudioBufferSourceNode | null = null;
+    private halftimeGain: GainNode | null = null;
+    private halftimeBuffer: AudioBuffer | null = null;
+
+    async playStrategyMusic() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+
+        // Don't restart if already playing
+        if (this.strategySource) return;
+
+        try {
+            // Load buffer if not cached
+            if (!this.strategyBuffer) {
+                const response = await fetch('/sounds/countdown-tension.mp3');
+                if (!response.ok) {
+                    console.warn('[SoundEngine] Strategy music not found');
+                    return;
+                }
+                const arrayBuffer = await response.arrayBuffer();
+                this.strategyBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            }
+
+            const source = this.ctx.createBufferSource();
+            source.buffer = this.strategyBuffer;
+            source.loop = true; // Loop if song ends before phase completes
+
+            const gain = this.ctx.createGain();
+            // Fade in over 1 second
+            gain.gain.setValueAtTime(0, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.4 * this.volume, this.ctx.currentTime + 1);
+
+            source.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            source.start(0);
+
+            this.strategySource = source;
+            this.strategyGain = gain;
+
+            // Handle when source ends (for cleanup if not looping)
+            source.onended = () => {
+                if (this.strategySource === source) {
+                    this.strategySource = null;
+                    this.strategyGain = null;
+                }
+            };
+        } catch (e) {
+            console.error('[SoundEngine] Failed to play strategy music:', e);
+        }
+    }
+
+    stopStrategyMusic(fadeOutMs: number = 1500) {
+        if (this.strategySource && this.strategyGain && this.ctx) {
+            const now = this.ctx.currentTime;
+            const fadeOutSec = fadeOutMs / 1000;
+
+            // Cancel any scheduled changes and fade out
+            this.strategyGain.gain.cancelScheduledValues(now);
+            this.strategyGain.gain.setValueAtTime(this.strategyGain.gain.value, now);
+            this.strategyGain.gain.linearRampToValueAtTime(0, now + fadeOutSec);
+
+            // Stop after fade completes
+            const sourceToStop = this.strategySource;
+            setTimeout(() => {
+                try {
+                    sourceToStop.stop();
+                } catch (e) {
+                    // Already stopped
+                }
+            }, fadeOutMs);
+
+            this.strategySource = null;
+            this.strategyGain = null;
+        }
+    }
+
+    // Match Music (high energy during active gameplay)
+    async playMatchMusic() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+
+        // Don't restart if already playing
+        if (this.matchSource) return;
+
+        try {
+            // Load buffer if not cached
+            if (!this.matchBuffer) {
+                const response = await fetch('/sounds/match-music.mp3');
+                if (!response.ok) {
+                    console.warn('[SoundEngine] Match music not found');
+                    return;
+                }
+                const arrayBuffer = await response.arrayBuffer();
+                this.matchBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            }
+
+            const source = this.ctx.createBufferSource();
+            source.buffer = this.matchBuffer;
+            source.loop = true; // Loop during match
+
+            const gain = this.ctx.createGain();
+            // Fade in over 1.5 seconds
+            gain.gain.setValueAtTime(0, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.35 * this.volume, this.ctx.currentTime + 1.5);
+
+            source.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            source.start(0);
+
+            this.matchSource = source;
+            this.matchGain = gain;
+
+            source.onended = () => {
+                if (this.matchSource === source) {
+                    this.matchSource = null;
+                    this.matchGain = null;
+                }
+            };
+        } catch (e) {
+            console.error('[SoundEngine] Failed to play match music:', e);
+        }
+    }
+
+    stopMatchMusic(fadeOutMs: number = 1500) {
+        if (this.matchSource && this.matchGain && this.ctx) {
+            const now = this.ctx.currentTime;
+            const fadeOutSec = fadeOutMs / 1000;
+
+            this.matchGain.gain.cancelScheduledValues(now);
+            this.matchGain.gain.setValueAtTime(this.matchGain.gain.value, now);
+            this.matchGain.gain.linearRampToValueAtTime(0, now + fadeOutSec);
+
+            const sourceToStop = this.matchSource;
+            setTimeout(() => {
+                try {
+                    sourceToStop.stop();
+                } catch (e) {
+                    // Already stopped
+                }
+            }, fadeOutMs);
+
+            this.matchSource = null;
+            this.matchGain = null;
+        }
+    }
+
+    // Halftime Music (relaxing during halftime break)
+    async playHalftimeMusic() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+
+        // Don't restart if already playing
+        if (this.halftimeSource) return;
+
+        try {
+            // Load buffer if not cached
+            if (!this.halftimeBuffer) {
+                const response = await fetch('/sounds/halftime-music.mp3');
+                if (!response.ok) {
+                    console.warn('[SoundEngine] Halftime music not found');
+                    return;
+                }
+                const arrayBuffer = await response.arrayBuffer();
+                this.halftimeBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            }
+
+            const source = this.ctx.createBufferSource();
+            source.buffer = this.halftimeBuffer;
+            source.loop = true; // Loop during halftime
+
+            const gain = this.ctx.createGain();
+            // Fade in over 2 seconds (more relaxed transition)
+            gain.gain.setValueAtTime(0, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0.3 * this.volume, this.ctx.currentTime + 2);
+
+            source.connect(gain);
+            gain.connect(this.ctx.destination);
+
+            source.start(0);
+
+            this.halftimeSource = source;
+            this.halftimeGain = gain;
+
+            source.onended = () => {
+                if (this.halftimeSource === source) {
+                    this.halftimeSource = null;
+                    this.halftimeGain = null;
+                }
+            };
+        } catch (e) {
+            console.error('[SoundEngine] Failed to play halftime music:', e);
+        }
+    }
+
+    stopHalftimeMusic(fadeOutMs: number = 1500) {
+        if (this.halftimeSource && this.halftimeGain && this.ctx) {
+            const now = this.ctx.currentTime;
+            const fadeOutSec = fadeOutMs / 1000;
+
+            this.halftimeGain.gain.cancelScheduledValues(now);
+            this.halftimeGain.gain.setValueAtTime(this.halftimeGain.gain.value, now);
+            this.halftimeGain.gain.linearRampToValueAtTime(0, now + fadeOutSec);
+
+            const sourceToStop = this.halftimeSource;
+            setTimeout(() => {
+                try {
+                    sourceToStop.stop();
+                } catch (e) {
+                    // Already stopped
+                }
+            }, fadeOutMs);
+
+            this.halftimeSource = null;
+            this.halftimeGain = null;
+        }
+    }
+
+    // Stop all phase-based music (for cleanup)
+    stopAllPhaseMusic(fadeOutMs: number = 0) {
+        this.stopStrategyMusic(fadeOutMs);
+        this.stopMatchMusic(fadeOutMs);
+        this.stopHalftimeMusic(fadeOutMs);
+    }
+
     // Background Music
     private bgmSource: AudioBufferSourceNode | null = null;
     private bgmGain: GainNode | null = null;

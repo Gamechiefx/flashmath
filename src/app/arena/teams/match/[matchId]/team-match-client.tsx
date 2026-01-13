@@ -640,8 +640,9 @@ export function TeamMatchClient({
         const usedThisHalf = matchState.half === 1 ? usedDoubleCallinHalf1 : usedDoubleCallinHalf2;
         if (usedThisHalf) return;
         
-        // Convert slot name to slot number
-        const slotNumber = operations.indexOf(targetSlot.toLowerCase()) + 1;
+        // Convert slot name to slot number (use match's slot operations order)
+        const opsOrder = matchState.slotOperations || DEFAULT_OPERATIONS;
+        const slotNumber = opsOrder.indexOf(targetSlot.toLowerCase()) + 1;
         
         
         console.log('[TeamMatch] IGL activating Double Call-In for round:', targetRound, 'slot:', targetSlot, 'Half:', matchState.half, 'UserId:', currentUserId);
@@ -872,6 +873,7 @@ export function TeamMatchClient({
         socket.on('pre_match_countdown_start', (data: { durationMs: number; endsAt: number }) => {
             console.log('[TeamMatch] Pre-match countdown started:', data);
             setPreMatchCountdownMs(data.durationMs);
+            soundEngine.playStrategyMusic(); // Start countdown tension music
         });
 
         socket.on('pre_match_countdown_tick', (data: { remainingMs: number }) => {
@@ -886,7 +888,7 @@ export function TeamMatchClient({
         // STRATEGY PHASE: IGL slot assignment before match starts
         socket.on('strategy_phase_start', (data) => {
             console.log('[TeamMatch] Strategy phase started:', data);
-            soundEngine.playGo();
+            // Music already playing from pre_match phase, continues through strategy
             
             // Determine which team is mine by checking if currentUserId is in team1Slots or team2Slots
             // This avoids stale closure issues with matchState
@@ -1073,6 +1075,9 @@ export function TeamMatchClient({
 
         socket.on('match_start', (data) => {
             console.log('[TeamMatch] Match started:', data);
+            soundEngine.stopStrategyMusic(); // Fade out countdown tension music
+            soundEngine.playGo(); // Play the GO! sound
+            soundEngine.playMatchMusic(); // Start high-energy match music
             // CRITICAL: Update phase to 'active' and set active players
             setMatchState(prev => {
                 if (!prev) return prev;
@@ -1820,6 +1825,8 @@ export function TeamMatchClient({
         socket.on('halftime', (data) => {
             console.log('[TeamMatch] Halftime:', data);
             soundEngine.playHalftime();
+            soundEngine.stopMatchMusic(); // Fade out match music
+            soundEngine.playHalftimeMusic(); // Start relaxing halftime music
             const halftimeDuration = data.halftimeDurationMs || 120000; // Default 2 minutes
             setBreakCountdownMs(halftimeDuration);
             // IMPORTANT: Also set phaseInitialDuration directly since the useEffect depends on relayClockMs
@@ -1952,6 +1959,12 @@ export function TeamMatchClient({
         socket.on('round_start', (data) => {
             console.log('[TeamMatch] Round start:', data);
 
+            // If starting second half, transition from halftime music to match music
+            if (data.half === 2 && data.round === 1) {
+                soundEngine.stopHalftimeMusic(); // Fade out halftime music
+                soundEngine.playMatchMusic(); // Resume high-energy match music
+            }
+
             // Check if current user is the slot 1 player - must check BEFORE state update
             setMatchState(prev => {
                 if (!prev) return prev;
@@ -2009,6 +2022,8 @@ export function TeamMatchClient({
 
         socket.on('match_end', (data) => {
             console.log('[TeamMatch] Match ended:', data);
+            soundEngine.stopMatchMusic(); // Fade out match music
+            soundEngine.stopHalftimeMusic(); // Also stop halftime music if somehow still playing
 
             // Determine win/lose and play appropriate sound
             setMatchState(prev => {
@@ -2127,6 +2142,7 @@ export function TeamMatchClient({
 
         return () => {
             socket.disconnect();
+            soundEngine.stopAllPhaseMusic(0); // Stop all phase music immediately on unmount
         };
     }, [matchId, currentUserId, router]);
 
@@ -2355,6 +2371,10 @@ export function TeamMatchClient({
     // If we have final state but no current state (server cleaned up), use final state
     const displayMatchState = effectiveMatchState!;
 
+    // Get the correct operations order for this match (respects random pick for 2v2)
+    // This ensures visual left-to-right order matches the actual turn order
+    const matchOperationsOrder = displayMatchState.slotOperations || DEFAULT_OPERATIONS;
+
     // During post_match, anyone can leave directly (match is over)
     const isPostMatch = displayMatchState.phase === 'post_match';
     const canLeaveDirectly = isSoloHumanWithAI || isPostMatch;
@@ -2377,9 +2397,9 @@ export function TeamMatchClient({
         const isAIMatch = displayMatchState.team2.teamId?.startsWith('ai_team_') || displayMatchState.team2.teamId?.startsWith('ai_party_');
         
         // Convert players to TeamPlayerCard format
-        // Sort by operation order (addition, subtraction, multiplication, division, mixed)
+        // Sort by operation order (respects random pick for 2v2)
         const myTeamPlayers = myTeam ? Object.entries(myTeam.slotAssignments || {})
-            .sort(([opA], [opB]) => operations.indexOf(opA) - operations.indexOf(opB))
+            .sort(([opA], [opB]) => matchOperationsOrder.indexOf(opA) - matchOperationsOrder.indexOf(opB))
             .map(([op, userId]) => {
             const player = myTeam.players[userId];
             return {
@@ -2397,9 +2417,9 @@ export function TeamMatchClient({
             };
         }) : [];
         
-        // Sort opponent players by operation order as well
+        // Sort opponent players by operation order as well (respects random pick for 2v2)
         const opponentPlayers = opponentTeam ? Object.entries(opponentTeam.slotAssignments || {})
-            .sort(([opA], [opB]) => operations.indexOf(opA) - operations.indexOf(opB))
+            .sort(([opA], [opB]) => matchOperationsOrder.indexOf(opA) - matchOperationsOrder.indexOf(opB))
             .map(([op, userId]) => {
             const player = opponentTeam.players[userId];
             return {
@@ -2691,6 +2711,7 @@ export function TeamMatchClient({
         
         const handleConfirmSlots = () => {
             if (!isIGL || !socketRef.current) return;
+            soundEngine.stopStrategyMusic(); // Fade out countdown tension music on confirm
             socketRef.current.emit('confirm_slots', {
                 matchId,
                 userId: currentUserId,
@@ -3295,8 +3316,8 @@ export function TeamMatchClient({
                                     questionInSlot={opponentTeam.questionsInSlot || 0}
                                     totalQuestionsPerSlot={5}
                                     lastAnswerResult={opponentLastResult}
-                                    players={Object.values(opponentTeam.players).sort((a, b) => 
-                                        operations.indexOf(a.slot) - operations.indexOf(b.slot)
+                                    players={Object.values(opponentTeam.players).sort((a, b) =>
+                                        matchOperationsOrder.indexOf(a.slot) - matchOperationsOrder.indexOf(b.slot)
                                     )}
                                 />
                             )}
@@ -3361,14 +3382,14 @@ export function TeamMatchClient({
                                 {/* Relay Track with Full Banner Cards */}
                                 <div className="flex-1 flex items-stretch gap-3">
                                     {Object.entries(myTeam.slotAssignments || {})
-                                        .sort(([opA], [opB]) => operations.indexOf(opA) - operations.indexOf(opB))
+                                        .sort(([opA], [opB]) => matchOperationsOrder.indexOf(opA) - matchOperationsOrder.indexOf(opB))
                                         .map(([op, odUserId], idx) => {
                                         const player = myTeam.players[odUserId];
                                         if (!player) return <div key={idx} className="flex-1" />;
                                         const bannerStyle = BANNER_STYLES[resolveBannerStyle(player.odEquippedBanner)] || BANNER_STYLES.default;
 
-                                        // Determine slot position (1-5) based on operation order
-                                        const slotPosition = operations.indexOf(op) + 1;
+                                        // Determine slot position (1-N) based on match operation order
+                                        const slotPosition = matchOperationsOrder.indexOf(op) + 1;
                                         const currentSlot = myTeam.currentSlot || 1;
                                         const hasPlayed = slotPosition < currentSlot;
                                         const isCurrentlyPlaying = player.isActive;
@@ -3698,7 +3719,7 @@ export function TeamMatchClient({
                                 {/* Relay Track with Full Banner Cards */}
                                 <div className="flex-1 flex items-stretch gap-3">
                                     {Object.entries(opponentTeam.slotAssignments || {})
-                                        .sort(([opA], [opB]) => operations.indexOf(opA) - operations.indexOf(opB))
+                                        .sort(([opA], [opB]) => matchOperationsOrder.indexOf(opA) - matchOperationsOrder.indexOf(opB))
                                         .map(([op, odUserId], idx) => {
                                         const player = opponentTeam.players[odUserId];
                                         if (!player) return <div key={idx} className="flex-1" />;
