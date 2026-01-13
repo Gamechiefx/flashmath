@@ -10,7 +10,7 @@ import { PlayerBanner } from '@/components/arena/player-banner';
 import { soundEngine } from '@/lib/sound-engine';
 import { SoundToggle } from '@/components/sound-toggle';
 import { AuthHeader } from '@/components/auth-header';
-import { LogOut, UserPlus, Check, Loader2 } from 'lucide-react';
+import { LogOut, UserPlus, Check, Loader2, Maximize, Minimize } from 'lucide-react';
 import { 
     checkFriendshipStatus, 
     sendFriendRequestToUser 
@@ -84,6 +84,42 @@ export function RealTimeMatch({
     } | null>(null);
     const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
     const [friendRequestSent, setFriendRequestSent] = useState(false);
+
+    // Fullscreen state
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    // Track fullscreen state changes
+    useEffect(() => {
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        setIsFullscreen(!!document.fullscreenElement);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+            document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+        };
+    }, []);
+
+    // Toggle fullscreen
+    const toggleFullscreen = async () => {
+        soundEngine.playClick();
+        try {
+            if (document.fullscreenElement) {
+                await document.exitFullscreen();
+            } else {
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    await elem.requestFullscreen();
+                } else if ((elem as any).webkitRequestFullscreen) {
+                    await (elem as any).webkitRequestFullscreen();
+                }
+            }
+        } catch (err) {
+            console.log('[Arena] Fullscreen toggle failed:', err);
+        }
+    };
 
     const {
         connected,
@@ -875,6 +911,15 @@ export function RealTimeMatch({
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Fullscreen Toggle Button - Top Left */}
+            <button
+                onClick={toggleFullscreen}
+                className="fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-black/40 border border-white/10 hover:border-primary/50 text-white/60 hover:text-primary transition-all backdrop-blur-sm hover:bg-primary/10"
+                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            >
+                {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+            </button>
 
             {/* Header: Pro Scoreboard - Clean No-Box Design */}
             <div className="relative z-20 mb-4 w-full max-w-[1600px] mx-auto shrink-0">

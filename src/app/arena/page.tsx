@@ -23,7 +23,7 @@ export default async function ArenaPage() {
     const eligibilityData = await getArenaEligibilityData();
 
     return (
-        <main className="min-h-screen bg-background text-foreground flex flex-col relative">
+        <main className="min-h-screen bg-background text-foreground flex flex-col relative overflow-x-hidden">
             {/* Auth Header */}
             <AuthHeader session={session} />
 

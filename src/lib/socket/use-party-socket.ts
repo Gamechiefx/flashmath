@@ -110,6 +110,7 @@ function getOrCreateSocket(): Socket {
     if (!partySocket) {
         const socketUrl = typeof window !== 'undefined' ? window.location.origin : '';
         partySocket = io(`${socketUrl}/presence`, {
+            path: '/api/socket/arena',
             transports: ['websocket', 'polling'],
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,

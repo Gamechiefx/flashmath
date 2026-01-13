@@ -26,10 +26,10 @@ interface IGLControlsProps {
     usedDoubleCallinHalf2: boolean;
     timeoutsRemaining: number;
     anchorName: string;
-    onDoubleCallin: (targetSlot: number) => void;
+    onDoubleCallin: (round: number, slot: string) => void;
     onTimeout: () => void;
     availableSlots: { slot: number; operation: string; playerName: string }[];
-    phase: 'break' | 'halftime' | 'anchor_decision';
+    phase: 'active' | 'break' | 'halftime' | 'anchor_decision';
 }
 
 export function IGLControls({
@@ -104,8 +104,8 @@ export function IGLControls({
         setShowSlotSelection(false);
     };
     
-    const handleSlotSelect = (slot: number) => {
-        onDoubleCallin(slot);
+    const handleSlotSelect = (slot: number, operation: string) => {
+        onDoubleCallin(nextRound, operation);
         setShowSlotSelection(false);
     };
     
@@ -159,8 +159,8 @@ export function IGLControls({
                     </div>
                     
                     <p className="text-xs text-white/50 mb-3">
-                        Call in <span className="text-purple-400 font-semibold">{anchorName}</span> (Anchor) 
-                        to play an additional slot. One player sits out that round.
+                        <span className="text-purple-400 font-semibold">{anchorName}</span> (Anchor) 
+                        answers for 2 slots instead of 1. The player whose slot is taken over sits out that round.
                     </p>
                     
                     {/* Round availability indicator for 1st half */}
@@ -273,7 +273,7 @@ export function IGLControls({
                             >
                                 <div className="flex items-center justify-between">
                                     <p className="text-xs text-white/60">
-                                        Select slot for <span className="text-purple-400">{anchorName}</span> to take over in Round {nextRound}:
+                                        Which slot should <span className="text-purple-400">{anchorName}</span> take over in Round {nextRound}?
                                     </p>
                                     <button
                                         onClick={handleCancel}
@@ -288,7 +288,7 @@ export function IGLControls({
                                         <button
                                             key={slot}
                                             data-testid={`callin-slot-${slot}`}
-                                            onClick={() => handleSlotSelect(slot)}
+                                            onClick={() => handleSlotSelect(slot, operation)}
                                             className="p-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/40 
                                                        text-purple-400 text-xs font-bold transition-all
                                                        flex flex-col items-center border border-purple-500/30
@@ -311,7 +311,7 @@ export function IGLControls({
                                 </div>
                                 
                                 <p className="text-[10px] text-white/30 text-center">
-                                    {anchorName} will play their slot + this slot. Selected player sits out Round {nextRound}.
+                                    {anchorName} answers for both their own slot AND the selected slot. That player sits out Round {nextRound}.
                                 </p>
                             </motion.div>
                         )}
@@ -319,40 +319,53 @@ export function IGLControls({
                 </div>
 
                 {/* Timeout */}
-                <div className={cn(
-                    "p-3 rounded-lg border transition-all",
-                    timeoutsRemaining > 0
-                        ? "bg-blue-500/10 border-blue-500/30"
-                        : "bg-white/5 border-white/10 opacity-50"
-                )}>
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-blue-400" />
-                            <span className="font-semibold text-sm">Call Timeout</span>
-                        </div>
-                        <span className={cn(
-                            "text-xs px-2 py-0.5 rounded",
-                            timeoutsRemaining > 0 ? "bg-blue-500/20 text-blue-400" : "bg-white/10 text-white/50"
+                {(() => {
+                    // Calculate what the timeout affects
+                    const roundsInHalf = 4;
+                    const isLastRoundOfHalf = half === 1 
+                        ? nextRound > roundsInHalf 
+                        : nextRound > roundsInHalf * 2;
+                    const timeoutTarget = isLastRoundOfHalf 
+                        ? (half === 1 ? 'halftime' : 'the final break')
+                        : `the break after Round ${nextRound}`;
+                    
+                    return (
+                        <div className={cn(
+                            "p-3 rounded-lg border transition-all",
+                            timeoutsRemaining > 0
+                                ? "bg-blue-500/10 border-blue-500/30"
+                                : "bg-white/5 border-white/10 opacity-50"
                         )}>
-                            {timeoutsRemaining} remaining
-                        </span>
-                    </div>
-                    <p className="text-xs text-white/50 mb-3">
-                        Adds +1 minute to the current half. Use strategically!
-                    </p>
-                    {timeoutsRemaining > 0 && (
-                        <button
-                            data-testid="timeout-button"
-                            onClick={onTimeout}
-                            className="w-full py-2 rounded bg-blue-500/20 hover:bg-blue-500/30 
-                                       text-blue-400 text-sm font-bold transition-colors 
-                                       flex items-center justify-center gap-2"
-                        >
-                            <Clock className="w-4 h-4" />
-                            Call Timeout (+1 min)
-                        </button>
-                    )}
-                </div>
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-blue-400" />
+                                    <span className="font-semibold text-sm">Call Timeout</span>
+                                </div>
+                                <span className={cn(
+                                    "text-xs px-2 py-0.5 rounded",
+                                    timeoutsRemaining > 0 ? "bg-blue-500/20 text-blue-400" : "bg-white/10 text-white/50"
+                                )}>
+                                    {timeoutsRemaining} remaining
+                                </span>
+                            </div>
+                            <p className="text-xs text-white/50 mb-3">
+                                Adds +30 seconds to {timeoutTarget}. Use strategically!
+                            </p>
+                            {timeoutsRemaining > 0 && (
+                                <button
+                                    data-testid="timeout-button"
+                                    onClick={onTimeout}
+                                    className="w-full py-2 rounded bg-blue-500/20 hover:bg-blue-500/30 
+                                               text-blue-400 text-sm font-bold transition-colors 
+                                               flex items-center justify-center gap-2"
+                                >
+                                    <Clock className="w-4 h-4" />
+                                    Call Timeout (+30s to {isLastRoundOfHalf ? (half === 1 ? 'halftime' : 'end') : 'next break'})
+                                </button>
+                            )}
+                        </div>
+                    );
+                })()}
 
                 {/* Slot Reassignment hint during halftime */}
                 {phase === 'halftime' && (

@@ -17,7 +17,6 @@ import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Swords, Clock, X } from 'lucide-react';
-import { toast } from 'sonner';
 
 interface MatchAlert {
     matchId: string;
@@ -35,13 +34,15 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
     const countdownRef = useRef<NodeJS.Timeout | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    // Check if already on match page
+    // Check if already on match page or queue page (queue page has its own match found UI)
     const isOnMatchPage = pathname?.includes('/arena/teams/match/') || 
                           pathname?.includes('/arena/match/');
+    const isOnQueuePage = pathname?.includes('/arena/teams/queue/');
 
     // Poll for match found status when user is in a party queue
+    // Skip if on match page (already in match) or queue page (has its own match found UI)
     useEffect(() => {
-        if (!session?.user?.id || isOnMatchPage) return;
+        if (!session?.user?.id || isOnMatchPage || isOnQueuePage) return;
 
         const checkForMatch = async () => {
             try {
@@ -67,8 +68,15 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
                 
                 // Check for human match via Redis
                 if (queueStatus === 'finding_opponents') {
-                    const { checkTeamQueueStatus } = await import('@/lib/actions/team-matchmaking');
-                    const queueResult = await checkTeamQueueStatus(result.party.id);
+                    // #region agent log - H1: Verify correct function import
+                    // #endregion
+                    
+                    // FIXED: Use checkTeamMatch (not checkTeamQueueStatus which doesn't exist)
+                    const { checkTeamMatch } = await import('@/lib/actions/team-matchmaking');
+                    const queueResult = await checkTeamMatch(result.party.id);
+                    
+                    // #region agent log - H1: Log result of match check
+                    // #endregion
                     
                     if (queueResult.match) {
                         setMatchAlert({
@@ -91,7 +99,7 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
         checkForMatch();
 
         return () => clearInterval(interval);
-    }, [session?.user?.id, isOnMatchPage]);
+    }, [session?.user?.id, isOnMatchPage, isOnQueuePage]);
 
     // Handle countdown when match is found
     useEffect(() => {
@@ -109,15 +117,8 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
             audioRef.current.play().catch(() => {}); // Ignore autoplay errors
         }
 
-        // Show toast notification
-        toast.success('Match Found!', {
-            description: 'Click to join your match',
-            duration: 10000,
-            action: {
-                label: 'Join Now',
-                onClick: () => handleJoinMatch(),
-            },
-        });
+        // Note: We don't show a toast here since the modal overlay is more prominent
+        // and provides the same functionality. Showing both would be redundant.
 
         setCountdown(matchAlert.countdown);
 
@@ -151,7 +152,7 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
 
     const handleDismiss = useCallback(() => {
         setMatchAlert(null);
-        toast.info('Match dismissed. You may miss this match.');
+        // User explicitly dismissed - they've been warned via the modal already
     }, []);
 
     return (
@@ -159,8 +160,9 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
             {children}
             
             {/* Global Match Found Overlay - Theme-aware styling */}
+            {/* Only show when NOT on match page and NOT on queue page (queue has its own UI) */}
             <AnimatePresence>
-                {matchAlert && !isOnMatchPage && (
+                {matchAlert && !isOnMatchPage && !isOnQueuePage && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}

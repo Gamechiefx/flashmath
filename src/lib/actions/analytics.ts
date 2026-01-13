@@ -870,7 +870,7 @@ export async function createShareableCard(
 /**
  * Get social sharing text for achievements and progress
  */
-export function generateSocialShareText(card: ShareableCard): string {
+export async function generateSocialShareText(card: ShareableCard): Promise<string> {
     if (card.type === 'achievement') {
         const achievement = card.data as ShareableAchievement;
         return `🎉 Just unlocked "${achievement.title}" in FlashMath! ${achievement.description} ${achievement.icon} #FlashMath #MathSkills`;

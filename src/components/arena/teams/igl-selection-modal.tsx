@@ -17,6 +17,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Crown, Anchor, Check, Clock, Users, Vote, UserCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { UserAvatar } from '@/components/user-avatar';
+import { BANNER_STYLES } from './team-player-card';
 
 export interface TeamMember {
     odUserId: string;
@@ -27,10 +29,20 @@ export interface TeamMember {
     odDuelRank?: string;
     odDuelDivision?: string;
     odEquippedFrame?: string;
+    odEquippedBanner?: string;
+    odEquippedTitle?: string;
     isLeader: boolean;
     odOnline: boolean;
     willingToIGL?: boolean;
     willingToAnchor?: boolean;
+}
+
+// Helper to resolve banner ID to style key
+function resolveBannerStyle(bannerId: string | undefined): string {
+    if (!bannerId || bannerId === 'default') return 'default';
+    if (!bannerId.startsWith('banner_')) return bannerId;
+    // Extract style from "banner_synthwave" -> "synthwave"
+    return bannerId.replace('banner_', '');
 }
 
 interface IGLSelectionModalProps {

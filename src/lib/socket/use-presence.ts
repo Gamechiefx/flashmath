@@ -110,7 +110,6 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     useEffect(() => {
         // #region agent log - H2: Track effect trigger count
         socketConnectionCount++;
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:SOCKET_EFFECT_TRIGGER',message:'Socket useEffect triggered',data:{socketConnectionCount,autoConnect,effectiveUserId:effectiveUserId?.slice(-8),effectiveUserName},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H2'})}).catch(()=>{});
         // #endregion
         
         // Use effective user info (props take precedence over session)
@@ -211,7 +210,6 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             console.log('[Presence] queueStatus:', data.queueStatus);
             console.log('[Presence] updaterId:', data.updaterId);
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:SOCKET_RECEIVED',message:'Received queue status change via socket',data:{partyId:data.partyId,queueStatus:data.queueStatus,updaterId:data.updaterId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SOCKET'})}).catch(()=>{});
             // #endregion
             setLatestQueueStatusUpdate(data);
             setPartyChanged(prev => prev + 1);
@@ -220,7 +218,6 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         // Register handlers
         // #region agent log - H5: Track handler registration
         handlerRegistrationCount++;
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:HANDLER_REGISTER',message:'Registering socket handlers',data:{handlerRegistrationCount,userId:userId.slice(-8),socketConnected:socket.connected},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
         // #endregion
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
@@ -247,7 +244,6 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         // Cleanup
         return () => {
             // #region agent log - H5: Track handler cleanup
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:HANDLER_CLEANUP',message:'Cleaning up socket handlers',data:{handlerRegistrationCount,userId:userId.slice(-8)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
             // #endregion
             socket.off('connect', handleConnect);
             socket.off('disconnect', handleDisconnect);
@@ -314,7 +310,6 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         console.log('[Presence] socket connected:', presenceSocket?.connected);
         
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'use-presence.ts:SOCKET_EMIT',message:'Emitting queue status change notification',data:{partyId,queueStatus,targetIds:partyMemberIds,socketConnected:presenceSocket?.connected},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'SOCKET'})}).catch(()=>{});
         // #endregion
         
         if (presenceSocket?.connected && userIdRef.current) {

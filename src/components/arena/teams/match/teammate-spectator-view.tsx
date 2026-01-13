@@ -9,7 +9,6 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { LiveTypingIndicator } from './live-typing-indicator';
 import { AnswerResultToast } from './answer-result-toast';
 
 interface TeammateSpectatorViewProps {
@@ -74,52 +73,65 @@ export function TeammateSpectatorView({
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="relative bg-gradient-to-b from-slate-800/90 to-slate-900/90 
-                       rounded-xl border border-white/10 overflow-hidden"
+            className="relative bg-gradient-to-b from-violet-950/80 to-slate-900/90
+                       rounded-2xl border-2 border-violet-500/40 overflow-hidden"
         >
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 
-                            border-b border-white/10 bg-primary/10">
-                <div className="flex items-center gap-3">
-                    <div className={cn(
-                        "w-10 h-10 rounded-lg flex items-center justify-center text-xl font-bold",
-                        "bg-gradient-to-br from-primary/30 to-primary/10 border border-primary/30",
-                        operationColors[operation]
-                    )}>
+            <div className="flex items-center justify-between px-6 pt-4 pb-2 border-b border-white/10">
+                <div className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-full",
+                    "bg-black/30 backdrop-blur-sm"
+                )}>
+                    <span className={cn("text-lg font-bold", operationColors[operation])}>
                         {operationSymbols[operation]}
-                    </div>
-                    <div>
-                        <p className="text-sm text-white/50">Now Answering</p>
-                        <p className="font-semibold text-white">{activePlayer.odName}</p>
-                    </div>
+                    </span>
+                    <span className={cn("font-bold text-sm uppercase", operationColors[operation])}>
+                        {operation}
+                    </span>
                 </div>
-                
-                <div className="flex items-center gap-4">
+
+                <div className="flex items-center gap-2">
+                    <span className="text-sm text-white/70 font-medium">{activePlayer.odName}</span>
+                </div>
+
+                <div className="flex items-center gap-2">
                     {/* Streak indicator */}
                     {activePlayer.streak > 0 && (
                         <motion.div
                             initial={{ scale: 0 }}
                             animate={{ scale: 1 }}
-                            className="flex items-center gap-1 px-3 py-1 rounded-full 
-                                       bg-orange-500/20 border border-orange-500/30"
+                            className="flex items-center gap-1 px-3 py-1 rounded-full
+                                       bg-orange-500/80 text-white font-bold"
                         >
-                            <span className="text-orange-400">🔥</span>
-                            <span className="font-bold text-orange-400">{activePlayer.streak}</span>
+                            <span>🔥</span>
+                            <span className="text-sm">{activePlayer.streak}x</span>
                         </motion.div>
                     )}
-                    
+
                     {/* Score */}
-                    <div className="text-right">
-                        <p className="text-xs text-white/50">Score</p>
-                        <p className="font-mono font-bold text-lg text-primary">
-                            +{activePlayer.score}
-                        </p>
+                    <div className="text-sm text-white/50">
+                        +{activePlayer.score}
                     </div>
                 </div>
             </div>
             
             {/* Question Display */}
-            <div className="p-6">
+            <div className="p-8">
+                {/* Progress dots */}
+                <div className="flex justify-center gap-3 mb-6">
+                    {Array.from({ length: totalQuestionsPerSlot }).map((_, i) => (
+                        <div
+                            key={i}
+                            className={cn(
+                                "w-4 h-4 rounded-full transition-all",
+                                i < questionInSlot && "bg-emerald-500",
+                                i === questionInSlot && "bg-orange-500 scale-110",
+                                i > questionInSlot && "bg-white/20"
+                            )}
+                        />
+                    ))}
+                </div>
+
                 <AnimatePresence mode="wait">
                     {currentQuestion ? (
                         <motion.div
@@ -130,18 +142,27 @@ export function TeammateSpectatorView({
                             className="text-center"
                         >
                             {/* Question */}
-                            <div className={cn(
-                                "text-4xl md:text-5xl font-bold mb-6 tracking-wide",
-                                operationColors[operation]
-                            )}>
+                            <div className="text-6xl font-black text-white tracking-tight drop-shadow-lg mb-8">
                                 {currentQuestion.questionText}
                             </div>
-                            
-                            {/* Live typing indicator */}
-                            <LiveTypingIndicator
-                                playerName={activePlayer.odName}
-                                currentInput={currentInput}
-                            />
+
+                            {/* Live typing indicator styled like input box */}
+                            <div className="flex justify-center">
+                                <div className="w-80 h-16 flex items-center justify-center
+                                               bg-slate-900/60 backdrop-blur-sm
+                                               border-2 rounded-2xl border-orange-500/50">
+                                    <span className="text-3xl font-mono font-bold text-white/40">
+                                        {currentInput || '='}
+                                    </span>
+                                    {currentInput && (
+                                        <span className="inline-block w-0.5 h-8 bg-orange-500 animate-pulse ml-1" />
+                                    )}
+                                </div>
+                            </div>
+
+                            <p className="text-center text-white/30 text-xs mt-4">
+                                {activePlayer.odName} is typing...
+                            </p>
                         </motion.div>
                     ) : (
                         <motion.div
@@ -153,38 +174,6 @@ export function TeammateSpectatorView({
                         </motion.div>
                     )}
                 </AnimatePresence>
-            </div>
-            
-            {/* Progress bar */}
-            <div className="px-4 pb-4">
-                <div className="flex items-center gap-2">
-                    <span className="text-xs text-white/50">
-                        Q{questionInSlot}/{totalQuestionsPerSlot}
-                    </span>
-                    <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
-                        <motion.div
-                            className="h-full bg-gradient-to-r from-primary to-primary/60"
-                            initial={{ width: 0 }}
-                            animate={{ 
-                                width: `${(questionInSlot / totalQuestionsPerSlot) * 100}%` 
-                            }}
-                            transition={{ duration: 0.3 }}
-                        />
-                    </div>
-                    <div className="flex gap-1">
-                        {Array.from({ length: totalQuestionsPerSlot }).map((_, i) => (
-                            <div
-                                key={i}
-                                className={cn(
-                                    "w-2 h-2 rounded-full transition-colors",
-                                    i < questionInSlot 
-                                        ? "bg-primary" 
-                                        : "bg-white/20"
-                                )}
-                            />
-                        ))}
-                    </div>
-                </div>
             </div>
             
             {/* Answer result toast */}

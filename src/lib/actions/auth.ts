@@ -139,7 +139,7 @@ export async function loginUser(formData: FormData) {
             switch (error.type) {
                 case "CredentialsSignin":
                     if (lockResult.locked) {
-                        return { error: "Too many failed attempts. Account locked for 15 minutes." };
+                        return { error: "Too many failed attempts. Account locked for 1 minute." };
                     }
                     return { error: "Invalid email or password." };
                 case "CallbackRouteError":
@@ -398,7 +398,7 @@ export async function incrementFailedAttempts(email: string): Promise<{ locked: 
     const maxAttempts = 5;
 
     if (newAttempts >= maxAttempts) {
-        const lockedUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        const lockedUntil = new Date(Date.now() + 1 * 60 * 1000).toISOString();
         db.prepare(`
             UPDATE users 
             SET failed_login_attempts = ?, locked_until = ?

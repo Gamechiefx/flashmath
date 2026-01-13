@@ -244,11 +244,23 @@ export function ArenaEligibility({
                 transition={{ delay: 0.4 }}
             >
                 {isEligible ? (
-                    <Link href="/arena/modes">
+                    <Link href="/arena/modes" onClick={() => {
+                        // Request fullscreen for immersive arena experience
+                        try {
+                            const elem = document.documentElement;
+                            if (elem.requestFullscreen && !document.fullscreenElement) {
+                                elem.requestFullscreen();
+                            } else if ((elem as any).webkitRequestFullscreen) {
+                                (elem as any).webkitRequestFullscreen();
+                            }
+                        } catch (err) {
+                            console.log('[Arena] Fullscreen request failed:', err);
+                        }
+                    }}>
                         <motion.button
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
-                            className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-primary to-accent 
+                            className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-primary to-accent
                          text-primary-foreground font-bold text-lg shadow-lg neon-glow
                          transition-all hover:shadow-xl"
                         >
@@ -281,17 +293,17 @@ export function ArenaEligibility({
 // FlashAuditor Card - Compact version that opens the slide-out panel
 // =============================================================================
 
-function FlashAuditorCard({ 
-    confidence, 
-    decayInfo 
-}: { 
-    confidence: ConfidenceBreakdown; 
+function FlashAuditorCard({
+    confidence,
+    decayInfo
+}: {
+    confidence: ConfidenceBreakdown;
     decayInfo?: DecayInfo;
 }) {
     const { openPanel } = useAuditor();
-    
+
     const overallPercent = Math.round(confidence.overall * 100);
-    
+
     // Get bracket styling
     const getBracketStyle = () => {
         if (confidence.overall >= 0.7) {
@@ -302,11 +314,11 @@ function FlashAuditorCard({
         }
         return { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30', label: 'NEWCOMER' };
     };
-    
+
     const bracketStyle = getBracketStyle();
     const hasWarning = decayInfo && decayInfo.phase !== 'active';
     const isReturning = decayInfo?.isReturningPlayer && decayInfo.placementMatchesCompleted < decayInfo.placementMatchesRequired;
-    
+
     // Get confidence color
     const getConfidenceColor = () => {
         if (confidence.overall >= 0.8) return 'text-emerald-400';
@@ -315,7 +327,7 @@ function FlashAuditorCard({
         if (confidence.overall >= 0.2) return 'text-orange-400';
         return 'text-red-400';
     };
-    
+
     return (
         <motion.button
             initial={{ opacity: 0, scale: 0.95 }}
@@ -324,19 +336,19 @@ function FlashAuditorCard({
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={openPanel}
-            className="w-full p-4 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90 
+            className="w-full p-4 rounded-2xl bg-gradient-to-br from-slate-900/90 to-slate-800/90
                 border border-white/10 backdrop-blur-xl hover:border-cyan-500/30 transition-all
                 text-left relative overflow-hidden group"
         >
             {/* Background glow on hover */}
-            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 to-blue-500/0 
+            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 to-blue-500/0
                 group-hover:from-cyan-500/5 group-hover:to-blue-500/5 transition-all duration-300" />
-            
+
             <div className="relative flex items-center justify-between">
                 {/* Left side - Icon and title */}
                 <div className="flex items-center gap-3">
                     <div className="relative">
-                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 
+                        <div className="p-2.5 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20
                             border border-cyan-500/30">
                             <Zap className="w-5 h-5 text-cyan-400" />
                         </div>
@@ -345,12 +357,12 @@ function FlashAuditorCard({
                             <motion.div
                                 animate={{ scale: [1, 1.2, 1] }}
                                 transition={{ duration: 1.5, repeat: Infinity }}
-                                className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-yellow-500 
+                                className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-yellow-500
                                     border-2 border-slate-900"
                             />
                         )}
                     </div>
-                    
+
                     <div>
                         <h3 className="font-bold text-white text-sm">FlashAuditor</h3>
                         <div className="flex items-center gap-2 mt-0.5">
@@ -365,7 +377,7 @@ function FlashAuditorCard({
                         </div>
                     </div>
                 </div>
-                
+
                 {/* Right side - Confidence score */}
                 <div className="text-right">
                     <div className={`text-3xl font-black ${getConfidenceColor()}`}>
@@ -376,14 +388,14 @@ function FlashAuditorCard({
                     </div>
                 </div>
             </div>
-            
+
             {/* Mini progress bars */}
             <div className="flex gap-2 mt-3">
                 <MiniProgressBar value={confidence.volume} label="Vol" />
                 <MiniProgressBar value={confidence.consistency} label="Con" />
                 <MiniProgressBar value={confidence.recency} label="Rec" />
             </div>
-            
+
             {/* Decay warning */}
             {hasWarning && decayInfo && (
                 <div className="mt-3 flex items-center gap-2 text-xs">

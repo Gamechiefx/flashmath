@@ -65,6 +65,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [streak, setStreak] = useState(0);
     const [maxStreak, setMaxStreak] = useState(0);
     const [isError, setIsError] = useState(false);
+    const [isCorrect, setIsCorrect] = useState(false);
     const [selectedOp, setSelectedOp] = useState<Operation>(operation);
     const [isSaving, setIsSaving] = useState(false);
     const [continueKey, setContinueKey] = useState('Space');
@@ -356,6 +357,10 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                 return newStreak;
             });
             soundEngine.playCorrect(streak + 1);
+
+            // Flash green briefly
+            setIsCorrect(true);
+            setTimeout(() => setIsCorrect(false), 200);
 
             // AI Mode: With timeout fallback for smooth gameplay
             if (aiSessionId && currentAIItem) {
@@ -847,6 +852,8 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                             "w-full border-2 rounded-3xl py-8 text-center text-6xl font-black outline-none transition-all shadow-lg",
                                             isError
                                                 ? "bg-red-500/10 border-red-500 text-red-500 shadow-[0_0_30px_rgba(239,68,68,0.2)] animate-shake"
+                                                : isCorrect
+                                                ? "bg-green-500/20 border-green-500 text-green-400 shadow-[0_0_30px_rgba(34,197,94,0.3)]"
                                                 : "bg-white/5 border-primary/30 text-foreground focus:border-primary shadow-[0_0_30px_rgba(34,211,238,0.1)]"
                                         )}
                                         placeholder="?"

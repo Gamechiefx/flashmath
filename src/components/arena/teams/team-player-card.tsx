@@ -131,6 +131,7 @@ export interface TeamPlayerCardProps {
     isReady?: boolean;
     isActive?: boolean;
     isComplete?: boolean;
+    isCurrentUser?: boolean;
     slot?: string;
     score?: number;
     streak?: number;
@@ -189,6 +190,7 @@ export function TeamPlayerCard({
     isReady = false,
     isActive = false,
     isComplete = false,
+    isCurrentUser = false,
     slot,
     score,
     streak,
@@ -395,12 +397,14 @@ export function TeamPlayerCard({
                 />
             )}
 
-            {/* Shine sweep */}
-            <motion.div
-                animate={{ x: ['100%', '-100%'] }}
-                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
-            />
+            {/* Shine sweep - hidden for current user */}
+            {!isCurrentUser && (
+                <motion.div
+                    animate={{ x: ['100%', '-100%'] }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                    className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
+                />
+            )}
 
             {/* Role Badges - Top Right Corner - Large and visible */}
             <div className="absolute top-3 right-3 flex flex-col gap-2 z-20">

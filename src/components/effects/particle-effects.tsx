@@ -83,8 +83,8 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
                 x: cx + (Math.random() - 0.5) * (width || 200),
                 y: cy + (Math.random() - 0.5) * (height || 100),
                 w, h,
-                life: 0.2,
-                color: `rgba(${Math.random() > 0.5 ? 255 : 0}, ${Math.random() * 255}, ${Math.random() > 0.5 ? 255 : 0}, 0.8)`
+                life: 0.4,
+                color: `rgba(${Math.random() > 0.5 ? 255 : 0}, ${Math.random() * 255}, ${Math.random() > 0.5 ? 255 : 0}, 0.6)`
             });
         }
     };
@@ -158,8 +158,8 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
 
     // 1. INPUT LISTENER EFFECT
     useEffect(() => {
-        // Only show particles in practice and arena matches
-        const allowedPaths = ['/practice', '/arena/match'];
+        // Only show particles in practice and arena matches (including 5v5 team matches)
+        const allowedPaths = ['/practice', '/arena/match', '/arena/teams/match'];
         if (effectType === 'default' || !allowedPaths.some(p => pathname.includes(p))) return;
 
         const handleInput = (e: KeyboardEvent) => {

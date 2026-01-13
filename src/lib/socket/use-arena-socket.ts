@@ -116,152 +116,217 @@ export function useArenaSocket({
     const [matchIntegrity, setMatchIntegrity] = useState<ConnectionState>('GREEN');
 
     useEffect(() => {
-        // Connect to WebSocket server
-        const socket = io({
-            path: '/api/socket/arena',
-            transports: ['websocket', 'polling'],
-        });
-
-        socketRef.current = socket;
-
-        socket.on('connect', () => {
-            console.log('[Arena Socket] Connected');
-            setConnected(true);
-
-            // Join the match
-            socket.emit('join_match', {
-                matchId,
-                userId,
-                userName,
-                operation,
-                isAiMatch,
-                userRank: userRank || 'Bronze',
-                userDivision: userDivision || 'I',
-                userLevel: userLevel || 1,
-                userBanner: userBanner || 'default',
-                userTitle: userTitle || 'Challenger',
+        // Enhanced connection with retry logic and better error handling
+        const connectWithRetry = (attempt = 1) => {
+            console.log(`[Arena Socket] Connection attempt ${attempt}`);
+            
+            const socket = io({
+                path: '/api/socket/arena',
+                transports: ['websocket', 'polling'],
+                timeout: 20000,
+                reconnection: true,
+                reconnectionAttempts: 5,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                maxReconnectionAttempts: 5,
+                forceNew: attempt > 1, // Force new connection on retry
             });
-        });
 
-        socket.on('disconnect', () => {
-            console.log('[Arena Socket] Disconnected');
-            setConnected(false);
-        });
+            socketRef.current = socket;
 
-        socket.on('match_state', (data) => {
-            console.log('[Arena Socket] Received match state:', data);
-            setPlayers(data.players);
-            if (data.question) setCurrentQuestion(data.question);
-            setTimeLeft(data.timeLeft);
-            setMatchStarted(data.started);
-            setMatchEnded(data.ended);
-            setWaitingForOpponent(Object.keys(data.players).length < 2);
-        });
-
-        socket.on('player_joined', (data) => {
-            console.log('[Arena Socket] Player joined:', data);
-            setPlayers(data.players);
-            setWaitingForOpponent(Object.keys(data.players).length < 2);
-            onPlayerJoined?.(data);
-        });
-
-        socket.on('match_start', (data) => {
-            console.log('[Arena Socket] Match started:', data);
-            setMatchStarted(true);
-            setWaitingForOpponent(false);
-            setPlayers(data.players);
-            setCurrentQuestion(data.question);
-            setTimeLeft(data.timeLeft);
-            onMatchStart?.(data);
-        });
-
-        socket.on('answer_result', (data) => {
-            console.log('[Arena Socket] Answer result:', data);
-            // Preserve odCurrentQuestion when updating players from answer_result
-            // as answer_result might not contain the latest question for everyone
-            setPlayers(prev => {
-                const newPlayers = { ...data.odPlayers };
-                // Restore local knowledge of opponent questions if missing in update
-                Object.keys(prev).forEach(pid => {
-                    if (newPlayers[pid] && !newPlayers[pid].odCurrentQuestion && prev[pid].odCurrentQuestion) {
-                        newPlayers[pid].odCurrentQuestion = prev[pid].odCurrentQuestion;
+            // Connection timeout handler
+            const connectionTimeout = setTimeout(() => {
+                if (!connected) {
+                    console.log('[Arena Socket] Connection timeout, retrying...');
+                    socket.disconnect();
+                    
+                    if (attempt < 3) {
+                        setTimeout(() => connectWithRetry(attempt + 1), 2000);
+                    } else {
+                        console.error('[Arena Socket] Failed to connect after 3 attempts');
+                        // Could emit an error event here for UI handling
                     }
+                }
+            }, 15000);
+
+            socket.on('connect', () => {
+                console.log('[Arena Socket] Connected successfully');
+                clearTimeout(connectionTimeout);
+                setConnected(true);
+
+                // Join the match with enhanced data
+                socket.emit('join_match', {
+                    matchId,
+                    userId,
+                    userName,
+                    operation,
+                    isAiMatch,
+                    userRank: userRank || 'Bronze',
+                    userDivision: userDivision || 'I',
+                    userLevel: userLevel || 1,
+                    userBanner: userBanner || 'default',
+                    userTitle: userTitle || 'Challenger',
+                    timestamp: Date.now()
                 });
-                return newPlayers;
             });
-            onAnswerResult?.(data);
-        });
 
-        socket.on('new_question', (data) => {
-            console.log('[Arena Socket] New question:', data);
-            setCurrentQuestion(data.question);
-            onNewQuestion?.(data);
-        });
-
-        socket.on('opponent_question_update', (data) => {
-            console.log('[Arena Socket] Opponent question update:', data);
-            setPlayers(prev => {
-                if (!prev[data.odUserId]) return prev;
-                return {
-                    ...prev,
-                    [data.odUserId]: {
-                        ...prev[data.odUserId],
-                        odCurrentQuestion: data.question
-                    }
-                };
+            socket.on('connect_error', (error) => {
+                console.error('[Arena Socket] Connection error:', error.message);
+                clearTimeout(connectionTimeout);
+                setConnected(false);
+                
+                // Retry logic for connection errors
+                if (attempt < 3) {
+                    setTimeout(() => connectWithRetry(attempt + 1), 2000 * attempt);
+                }
             });
-        });
 
-        socket.on('time_update', (data) => {
-            setTimeLeft(data.timeLeft);
-            onTimeUpdate?.(data);
-        });
-
-        // Connection quality ping/pong
-        socket.on('connection_ping', (data: { t: number }) => {
-            // Respond immediately with pong
-            socket.emit('connection_pong', { t: data.t, matchId, userId });
-        });
-
-        // Connection states update from server
-        socket.on('connection_states', (data: { states: ConnectionStates }) => {
-            setConnectionStates(data.states);
-            onConnectionStatesUpdate?.(data.states);
-        });
-
-        socket.on('match_end', (data) => {
-            console.log('[Arena Socket] Match ended:', data);
-            setMatchEnded(true);
-            setPlayers(data.players);
-            if (data.performanceStats) {
-                setPerformanceStats(data.performanceStats);
-            }
-            if (data.matchIntegrity) {
-                setMatchIntegrity(data.matchIntegrity);
-            }
-            onMatchEnd?.(data);
-        });
-
-        socket.on('player_left', (data) => {
-            console.log('[Arena Socket] Player left:', data);
-            setPlayers(prev => {
-                const newPlayers = { ...prev };
-                delete newPlayers[data.odUserId];
-                return newPlayers;
+            socket.on('disconnect', (reason) => {
+                console.log('[Arena Socket] Disconnected:', reason);
+                clearTimeout(connectionTimeout);
+                setConnected(false);
+                
+                // Auto-reconnect for certain disconnect reasons
+                if (reason === 'io server disconnect' || reason === 'transport close') {
+                    setTimeout(() => connectWithRetry(1), 1000);
+                }
             });
-            onPlayerLeft?.(data);
-        });
 
-        socket.on('player_forfeit', (data) => {
-            console.log('[Arena Socket] Player forfeited:', data);
-            setMatchEnded(true);
-            setOpponentForfeited(data.odForfeitedUserName);
-            onPlayerForfeit?.(data);
-        });
+            // Enhanced error handling
+            socket.on('match_error', (error) => {
+                console.error('[Arena Socket] Match error:', error);
+                // Could set an error state here for UI display
+            });
+
+            socket.on('reconnect', (attemptNumber) => {
+                console.log(`[Arena Socket] Reconnected after ${attemptNumber} attempts`);
+                setConnected(true);
+            });
+
+            socket.on('reconnect_error', (error) => {
+                console.error('[Arena Socket] Reconnection error:', error);
+            });
+
+            socket.on('match_state', (data) => {
+                console.log('[Arena Socket] Received match state:', data);
+                setPlayers(data.players);
+                if (data.question) setCurrentQuestion(data.question);
+                setTimeLeft(data.timeLeft);
+                setMatchStarted(data.started);
+                setMatchEnded(data.ended);
+                setWaitingForOpponent(Object.keys(data.players).length < 2);
+            });
+
+            socket.on('player_joined', (data) => {
+                console.log('[Arena Socket] Player joined:', data);
+                setPlayers(data.players);
+                setWaitingForOpponent(Object.keys(data.players).length < 2);
+                onPlayerJoined?.(data);
+            });
+
+            socket.on('match_start', (data) => {
+                console.log('[Arena Socket] Match started:', data);
+                setMatchStarted(true);
+                setWaitingForOpponent(false);
+                setPlayers(data.players);
+                setCurrentQuestion(data.question);
+                setTimeLeft(data.timeLeft);
+                onMatchStart?.(data);
+            });
+
+            socket.on('answer_result', (data) => {
+                console.log('[Arena Socket] Answer result:', data);
+                // Preserve odCurrentQuestion when updating players from answer_result
+                // as answer_result might not contain the latest question for everyone
+                setPlayers(prev => {
+                    const newPlayers = { ...data.odPlayers };
+                    // Restore local knowledge of opponent questions if missing in update
+                    Object.keys(prev).forEach(pid => {
+                        if (newPlayers[pid] && !newPlayers[pid].odCurrentQuestion && prev[pid].odCurrentQuestion) {
+                            newPlayers[pid].odCurrentQuestion = prev[pid].odCurrentQuestion;
+                        }
+                    });
+                    return newPlayers;
+                });
+                onAnswerResult?.(data);
+            });
+
+            socket.on('new_question', (data) => {
+                console.log('[Arena Socket] New question:', data);
+                setCurrentQuestion(data.question);
+                onNewQuestion?.(data);
+            });
+
+            socket.on('opponent_question_update', (data) => {
+                console.log('[Arena Socket] Opponent question update:', data);
+                setPlayers(prev => {
+                    if (!prev[data.odUserId]) return prev;
+                    return {
+                        ...prev,
+                        [data.odUserId]: {
+                            ...prev[data.odUserId],
+                            odCurrentQuestion: data.question
+                        }
+                    };
+                });
+            });
+
+            socket.on('time_update', (data) => {
+                setTimeLeft(data.timeLeft);
+                onTimeUpdate?.(data);
+            });
+
+            // Connection quality ping/pong
+            socket.on('connection_ping', (data: { t: number }) => {
+                // Respond immediately with pong
+                socket.emit('connection_pong', { t: data.t, matchId, userId });
+            });
+
+            // Connection states update from server
+            socket.on('connection_states', (data: { states: ConnectionStates }) => {
+                setConnectionStates(data.states);
+                onConnectionStatesUpdate?.(data.states);
+            });
+
+            socket.on('match_end', (data) => {
+                console.log('[Arena Socket] Match ended:', data);
+                setMatchEnded(true);
+                setPlayers(data.players);
+                if (data.performanceStats) {
+                    setPerformanceStats(data.performanceStats);
+                }
+                if (data.matchIntegrity) {
+                    setMatchIntegrity(data.matchIntegrity);
+                }
+                onMatchEnd?.(data);
+            });
+
+            socket.on('player_left', (data) => {
+                console.log('[Arena Socket] Player left:', data);
+                setPlayers(prev => {
+                    const newPlayers = { ...prev };
+                    delete newPlayers[data.odUserId];
+                    return newPlayers;
+                });
+                onPlayerLeft?.(data);
+            });
+
+            socket.on('player_forfeit', (data) => {
+                console.log('[Arena Socket] Player forfeited:', data);
+                setMatchEnded(true);
+                setOpponentForfeited(data.odForfeitedUserName);
+                onPlayerForfeit?.(data);
+            });
+        };
+
+        // Start connection
+        connectWithRetry(1);
 
         return () => {
-            socket.emit('leave_match', { matchId, userId });
-            socket.disconnect();
+            if (socketRef.current) {
+                socketRef.current.emit('leave_match', { matchId, userId });
+                socketRef.current.disconnect();
+            }
         };
     }, [matchId, userId, userName, operation, isAiMatch]);
 

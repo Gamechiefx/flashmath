@@ -57,6 +57,7 @@ export function useLeaderboardSocket(options: UseLeaderboardSocketOptions): UseL
         if (!leaderboardSocket) {
             const socketUrl = typeof window !== 'undefined' ? window.location.origin : '';
             leaderboardSocket = io(`${socketUrl}/presence`, {
+                path: '/api/socket/arena',
                 transports: ['websocket', 'polling'],
                 reconnection: true,
                 reconnectionAttempts: 5,
