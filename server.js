@@ -1063,13 +1063,25 @@ app.prepare().then(async () => {
                             // 80% chance to be correct
                             const isCorrect = Math.random() > 0.2;
                             const answer = isCorrect ? botData.odCurrentQuestion.answer : botData.odCurrentQuestion.answer + 1;
+                            
+                            // Simulate bot answer time (1-4 seconds)
+                            const botAnswerTimeMs = 1000 + Math.random() * 3000;
 
                             if (isCorrect) {
-                                botData.odScore += 100;
+                                // Base points + speed bonus
+                                const basePoints = SCORING_CONFIG.POINTS_PER_CORRECT;
+                                const speedBonus = calculateSpeedBonus(botAnswerTimeMs);
+                                botData.odScore += basePoints + speedBonus;
                                 botData.odStreak++;
                             } else {
+                                // Penalty for wrong answer
+                                botData.odScore += SCORING_CONFIG.POINTS_PER_INCORRECT;
                                 botData.odStreak = 0;
                             }
+                            
+                            // Apply score floor
+                            botData.odScore = applyScoreFloor(botData.odScore);
+                            
                             botData.odCurrentQuestion = generateQuestion(match.odOperation);
 
                             io.to(matchId).emit('answer_result', {
@@ -1328,9 +1340,17 @@ app.prepare().then(async () => {
             // Calculate answer time for speed tracking
             const answerTime = Date.now() - (player.odLastQuestionTime || Date.now());
 
-            // Update player stats
+            // Update player stats with new scoring system
+            let pointsEarned = 0;
+            let speedBonus = 0;
+            
             if (isCorrect) {
-                player.odScore += 100;
+                // Base points + speed bonus
+                const basePoints = SCORING_CONFIG.POINTS_PER_CORRECT;
+                speedBonus = calculateSpeedBonus(answerTime);
+                pointsEarned = basePoints + speedBonus;
+                
+                player.odScore += pointsEarned;
                 player.odStreak++;
                 player.odCorrectAnswers = (player.odCorrectAnswers || 0) + 1;
                 player.odTotalAnswerTime = (player.odTotalAnswerTime || 0) + answerTime;
@@ -1339,8 +1359,15 @@ app.prepare().then(async () => {
                     player.odMaxStreak = player.odStreak;
                 }
             } else {
+                // Penalty for wrong answer
+                pointsEarned = SCORING_CONFIG.POINTS_PER_INCORRECT;
+                player.odScore += pointsEarned;
                 player.odStreak = 0;
             }
+            
+            // Apply score floor (no negative scores)
+            player.odScore = applyScoreFloor(player.odScore);
+            
             player.odQuestionsAnswered++;
             player.odLastAnswerCorrect = isCorrect;
 
@@ -2162,6 +2189,78 @@ app.prepare().then(async () => {
     // MODE-SPECIFIC TEAM MATCH CONFIGURATIONS
     // =============================================================================
     
+    // =============================================================================
+    // SCORING SYSTEM CONFIGURATION
+    // =============================================================================
+    const SCORING_CONFIG = {
+        // Base points
+        POINTS_PER_CORRECT: 5,           // Base points for correct answer
+        POINTS_PER_INCORRECT: -3,        // Penalty for wrong answer
+        POINTS_PER_TIMEOUT: -3,          // Penalty for unanswered question
+        
+        // Speed bonus (only if correct) - based on answer time in seconds
+        // 0-1s = +7, 1-2s = +6, 2-3s = +5, 3-4s = +4, 4-5s = +3
+        SPEED_BONUS_MAX: 7,              // Bonus for 0-1 second answer
+        SPEED_BONUS_MIN: 3,              // Bonus for 4-5 second answer
+        SPEED_BONUS_STEP: 1,             // Decrease per second
+        
+        // First to finish round bonus
+        FIRST_TO_FINISH_ROUND: 50,       // Bonus for first team to complete round
+        
+        // Team streak milestone bonuses (one-time when reached)
+        STREAK_MILESTONES: {
+            10: 10,   // +10 at 10 streak
+            25: 25,   // +25 at 25 streak
+            50: 50,   // +50 at 50 streak
+            75: 75,   // +75 at 75 streak
+        },
+        
+        // Score floor (minimum score)
+        SCORE_FLOOR: 0,                  // Scores cannot go below this
+    };
+    
+    /**
+     * Calculate speed bonus based on answer time
+     * @param {number} answerTimeMs - Time to answer in milliseconds
+     * @returns {number} Speed bonus points (0 if > 5 seconds)
+     */
+    function calculateSpeedBonus(answerTimeMs) {
+        const answerTimeSec = answerTimeMs / 1000;
+        if (answerTimeSec >= 5) return 0;
+        
+        // 0-1s = +7, 1-2s = +6, 2-3s = +5, 3-4s = +4, 4-5s = +3
+        const secondBucket = Math.floor(answerTimeSec);
+        return SCORING_CONFIG.SPEED_BONUS_MAX - (secondBucket * SCORING_CONFIG.SPEED_BONUS_STEP);
+    }
+    
+    /**
+     * Check if team streak has reached a milestone and return bonus
+     * @param {number} previousStreak - Streak before this answer
+     * @param {number} newStreak - Streak after this answer
+     * @returns {number} Milestone bonus points (0 if no milestone reached)
+     */
+    function checkStreakMilestone(previousStreak, newStreak) {
+        let bonus = 0;
+        for (const [milestone, points] of Object.entries(SCORING_CONFIG.STREAK_MILESTONES)) {
+            const milestoneNum = parseInt(milestone);
+            // Check if we just crossed this milestone
+            if (previousStreak < milestoneNum && newStreak >= milestoneNum) {
+                bonus += points;
+                console.log(`[Scoring] Team streak milestone reached: ${milestoneNum} (+${points} points)`);
+            }
+        }
+        return bonus;
+    }
+    
+    /**
+     * Apply score floor to ensure score doesn't go below minimum
+     * @param {number} score - Current score
+     * @returns {number} Score clamped to floor
+     */
+    function applyScoreFloor(score) {
+        return Math.max(SCORING_CONFIG.SCORE_FLOOR, score);
+    }
+    
     const TEAM_MATCH_CONFIGS = {
         '5v5': {
             TEAM_SIZE: 5,
@@ -2177,8 +2276,6 @@ app.prepare().then(async () => {
             STRATEGY_DURATION_MS: 60000,     // 60 seconds for IGL to assign slots before match
             TIMEOUT_DURATION_MS: 30000,      // 30 seconds per timeout
             TIMEOUTS_PER_TEAM: 2,
-            POINTS_PER_CORRECT: 100,
-            STREAK_BONUS: 5,                 // +5 per consecutive correct
             HANDOFF_COUNTDOWN_MS: 500,       // 0.5 second minimal delay before handoff
             ROUND_COUNTDOWN_MS: 6000,        // 5-4-3-2-1-GO countdown (6s total)
             TYPING_THROTTLE_MS: 50,          // Throttle typing updates
@@ -2201,8 +2298,6 @@ app.prepare().then(async () => {
             STRATEGY_DURATION_MS: 30000,     // 30 seconds for IGL to assign slots
             TIMEOUT_DURATION_MS: 30000,      // 30 seconds per timeout
             TIMEOUTS_PER_TEAM: 2,
-            POINTS_PER_CORRECT: 100,
-            STREAK_BONUS: 5,
             HANDOFF_COUNTDOWN_MS: 500,
             ROUND_COUNTDOWN_MS: 5000,        // 4-3-2-1-GO countdown (5s total, faster)
             TYPING_THROTTLE_MS: 50,
@@ -2690,14 +2785,24 @@ app.prepare().then(async () => {
         // Increment timeout counter for this slot
         player.timeoutsInSlot = (player.timeoutsInSlot || 0) + 1;
         
-        // Reset streak (timeout breaks streak)
+        // Reset streaks (timeout breaks both individual and team streak)
         player.streak = 0;
+        team.currentStreak = 0;
+        
+        // Apply timeout penalty
+        const timeoutPenalty = SCORING_CONFIG.POINTS_PER_TIMEOUT;
+        player.score += timeoutPenalty;
+        team.score += timeoutPenalty;
+        
+        // Apply score floor (no negative scores)
+        player.score = applyScoreFloor(player.score);
+        team.score = applyScoreFloor(team.score);
         
         // Increment total questions answered (counts as an attempt)
         player.total++;
         team.questionsInSlot++;
 
-        console.log(`[TeamMatch] Question timeout for ${player.odName}: ${player.timeoutsInSlot} timeouts in slot, ${team.questionsInSlot}/${matchConfig.QUESTIONS_PER_SLOT} questions in slot`);
+        console.log(`[TeamMatch] Question timeout for ${player.odName}: ${timeoutPenalty} pts, ${player.timeoutsInSlot} timeouts in slot, ${team.questionsInSlot}/${matchConfig.QUESTIONS_PER_SLOT} questions in slot`);
 
         // Emit timeout event to client
         if (player.odSocketId) {
@@ -2711,6 +2816,10 @@ app.prepare().then(async () => {
                 questionsInSlot: team.questionsInSlot,
                 questionsPerSlot: matchConfig.QUESTIONS_PER_SLOT,
                 streak: 0,
+                teamStreak: 0,
+                pointsLost: Math.abs(timeoutPenalty),
+                newPlayerScore: player.score,
+                newTeamScore: team.score,
             });
         }
 
@@ -2719,6 +2828,8 @@ app.prepare().then(async () => {
             playerId: player.odUserId,
             playerName: player.odName,
             timeoutsInSlot: player.timeoutsInSlot,
+            pointsLost: Math.abs(timeoutPenalty),
+            newTeamScore: team.score,
         });
 
         // Check if slot is complete
@@ -3543,23 +3654,45 @@ app.prepare().then(async () => {
             player.totalAnswerTimeMs += answerTimeMs;
             
             let pointsEarned = 0;
+            let speedBonus = 0;
+            let streakMilestoneBonus = 0;
             
             if (isCorrect) {
                 player.correct++;
                 player.streak++;
                 player.maxStreak = Math.max(player.maxStreak, player.streak);
-                team.currentStreak++;
                 
-                // Calculate points with streak bonus
-                pointsEarned = TEAM_MATCH_CONFIG.POINTS_PER_CORRECT + 
-                    (player.streak - 1) * TEAM_MATCH_CONFIG.STREAK_BONUS;
+                // Track team streak (cumulative across all players, resets on any wrong/timeout)
+                const previousTeamStreak = team.currentStreak || 0;
+                team.currentStreak = (team.currentStreak || 0) + 1;
+                
+                // Calculate points: base + speed bonus
+                const basePoints = SCORING_CONFIG.POINTS_PER_CORRECT;
+                speedBonus = calculateSpeedBonus(answerTimeMs);
+                pointsEarned = basePoints + speedBonus;
+                
+                // Check for team streak milestones (one-time bonuses)
+                streakMilestoneBonus = checkStreakMilestone(previousTeamStreak, team.currentStreak);
+                pointsEarned += streakMilestoneBonus;
                 
                 player.score += pointsEarned;
                 team.score += pointsEarned;
+                
+                // Apply score floor
+                player.score = applyScoreFloor(player.score);
+                team.score = applyScoreFloor(team.score);
             } else {
                 player.streak = 0;
-                team.currentStreak = 0;
-                // TODO: Add wrong answer delay penalty
+                team.currentStreak = 0; // Team streak resets on any wrong answer
+                
+                // Apply penalty for incorrect answer
+                pointsEarned = SCORING_CONFIG.POINTS_PER_INCORRECT;
+                player.score += pointsEarned;
+                team.score += pointsEarned;
+                
+                // Apply score floor (no negative scores)
+                player.score = applyScoreFloor(player.score);
+                team.score = applyScoreFloor(team.score);
             }
             
             // Emit result to both teams (no question details for opponent)
@@ -3568,6 +3701,9 @@ app.prepare().then(async () => {
                 userId,
                 isCorrect,
                 pointsEarned,
+                speedBonus,
+                streakMilestoneBonus,
+                teamStreak: team.currentStreak,
                 newStreak: player.streak,
                 newTeamScore: team.score,
                 newPlayerScore: player.score,
@@ -4666,39 +4802,66 @@ app.prepare().then(async () => {
     }
     
     /**
-     * Process a bot's answer
+     * Process a bot's answer (uses same scoring system as humans)
      */
     function processBotAnswer(match, team, player, answer, isCorrect, ns) {
-        
+
         const answerTimeMs = Date.now() - player.questionStartTime;
-        
+
         player.total++;
         player.totalAnswerTimeMs += answerTimeMs;
-        
+
         let pointsEarned = 0;
-        
+        let speedBonus = 0;
+        let streakMilestoneBonus = 0;
+
         if (isCorrect) {
             player.correct++;
             player.streak++;
             player.maxStreak = Math.max(player.maxStreak, player.streak);
-            team.currentStreak++;
             
-            pointsEarned = TEAM_MATCH_CONFIG.POINTS_PER_CORRECT + 
-                (player.streak - 1) * TEAM_MATCH_CONFIG.STREAK_BONUS;
+            // Track team streak
+            const previousTeamStreak = team.currentStreak || 0;
+            team.currentStreak = (team.currentStreak || 0) + 1;
+
+            // Calculate points: base + speed bonus
+            const basePoints = SCORING_CONFIG.POINTS_PER_CORRECT;
+            speedBonus = calculateSpeedBonus(answerTimeMs);
+            pointsEarned = basePoints + speedBonus;
             
+            // Check for team streak milestones
+            streakMilestoneBonus = checkStreakMilestone(previousTeamStreak, team.currentStreak);
+            pointsEarned += streakMilestoneBonus;
+
             player.score += pointsEarned;
             team.score += pointsEarned;
+            
+            // Apply score floor
+            player.score = applyScoreFloor(player.score);
+            team.score = applyScoreFloor(team.score);
         } else {
             player.streak = 0;
             team.currentStreak = 0;
+            
+            // Apply penalty for incorrect answer
+            pointsEarned = SCORING_CONFIG.POINTS_PER_INCORRECT;
+            player.score += pointsEarned;
+            team.score += pointsEarned;
+            
+            // Apply score floor
+            player.score = applyScoreFloor(player.score);
+            team.score = applyScoreFloor(team.score);
         }
-        
+
         // Emit result to all (humans see bot team progress)
         ns.to(match.matchId).emit('answer_result', {
             teamId: team.teamId,
             userId: player.odUserId,
             isCorrect,
             pointsEarned,
+            speedBonus,
+            streakMilestoneBonus,
+            teamStreak: team.currentStreak,
             newStreak: player.streak,
             newTeamScore: team.score,
             newPlayerScore: player.score,
@@ -4899,6 +5062,30 @@ app.prepare().then(async () => {
                 console.log(`[TeamMatch] Both teams finished! Calling endRound for round ${match.round}`);
                 endRound(match, ns);
             } else {
+                // This team finished first! Award the first-to-finish bonus
+                const firstFinishBonus = SCORING_CONFIG.FIRST_TO_FINISH_ROUND;
+                team.score += firstFinishBonus;
+                
+                console.log(`[TeamMatch] Team ${team.teamName} finished round ${match.round} first! +${firstFinishBonus} bonus`);
+                
+                // Notify the team about the bonus
+                ns.to(`team:${match.matchId}:${team.teamId}`).emit('first_to_finish_bonus', {
+                    teamId: team.teamId,
+                    teamName: team.teamName,
+                    bonus: firstFinishBonus,
+                    newTeamScore: team.score,
+                    round: match.round,
+                });
+                
+                // Notify all players in match about who finished first
+                ns.to(match.matchId).emit('team_finished_round', {
+                    teamId: team.teamId,
+                    teamName: team.teamName,
+                    isFirst: true,
+                    bonus: firstFinishBonus,
+                    round: match.round,
+                });
+                
                 // Waiting for other team to finish their slots
                 console.log(`[TeamMatch] Waiting for other team to finish (they're on slot ${otherTeam.currentSlot})`);
                 ns.to(`team:${match.matchId}:${team.teamId}`).emit('waiting_for_opponents', {
