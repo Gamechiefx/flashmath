@@ -223,7 +223,7 @@ function HalftimeCountdown({ durationMs, onComplete }: { durationMs: number; onC
     );
 }
 
-// Post-match result player card - extracted to prevent recreation on re-render
+// Post-match result player card - matching TeamPlayerCard "Match Starts In" style
 interface ResultPlayerCardProps {
     player: PlayerState;
     isWinner: boolean;
@@ -236,8 +236,14 @@ function ResultPlayerCard({ player, isWinner, index, currentUserId, onViewStats 
     const resolvedBanner = resolveBannerStyle(player.odEquippedBanner || 'default');
     const bannerStyle = BANNER_STYLES[resolvedBanner] || BANNER_STYLES.default;
     const isCurrentUser = player.odUserId === currentUserId;
-    const avgTime = player.total > 0 ? (player.totalAnswerTimeMs / player.total / 1000).toFixed(1) : 'N/A';
-    const accuracy = player.total > 0 ? Math.round((player.correct || 0) / player.total * 100) : 0;
+
+    // Determine avatar ring color based on role/result
+    const getAvatarRingColor = () => {
+        if (player.isIgl) return 'ring-amber-500 ring-offset-amber-500/20';
+        if (player.isAnchor) return 'ring-purple-500 ring-offset-purple-500/20';
+        if (isWinner) return 'ring-emerald-500 ring-offset-emerald-500/20';
+        return 'ring-slate-600 ring-offset-slate-600/20';
+    };
 
     return (
         <motion.div
@@ -245,22 +251,19 @@ function ResultPlayerCard({ player, isWinner, index, currentUserId, onViewStats 
             animate={{ y: 0, opacity: 1, scale: 1 }}
             transition={{ delay: index * 0.08, type: 'spring', damping: 20 }}
             className={cn(
-                "relative flex flex-col rounded-2xl overflow-hidden min-h-[340px] min-w-[200px]",
-                "border-3 shadow-2xl",
-                isCurrentUser
-                    ? "border-primary ring-4 ring-primary/30 shadow-primary/20"
-                    : isWinner
-                        ? "border-emerald-500/60 shadow-emerald-500/10"
-                        : "border-rose-500/60 shadow-rose-500/10"
+                "relative flex flex-col rounded-xl overflow-hidden",
+                "w-full min-h-[280px]",
+                "border-2 shadow-2xl",
+                "border-cyan-500/60 shadow-cyan-500/20"
             )}
         >
-            {/* FULL BANNER BACKGROUND */}
+            {/* Background Gradient */}
             <div className={cn("absolute inset-0 bg-gradient-to-b", bannerStyle.background)} />
 
             {/* Banner pattern overlay */}
             {bannerStyle.pattern && (
                 <div
-                    className={cn("absolute inset-0 opacity-50", bannerStyle.animationClass)}
+                    className={cn("absolute inset-0 opacity-40", bannerStyle.animationClass)}
                     style={{
                         backgroundImage: bannerStyle.pattern,
                         backgroundSize: bannerStyle.patternSize || 'auto'
@@ -268,124 +271,95 @@ function ResultPlayerCard({ player, isWinner, index, currentUserId, onViewStats 
                 />
             )}
 
-            {/* Darkening gradient for readability */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-
-            {/* Win/Loss border glow */}
-            <div className={cn(
-                "absolute inset-0 opacity-30",
-                isWinner
-                    ? "bg-gradient-to-t from-emerald-500/40 to-transparent"
-                    : "bg-gradient-to-t from-rose-500/40 to-transparent"
-            )} />
-
-            {/* Content */}
-            <div className="relative flex flex-col h-full p-4">
-                {/* Top row: Score + Roles */}
-                <div className="flex items-start justify-between mb-auto">
-                    {/* Score badge */}
-                    <div className={cn(
-                        "px-4 py-2 rounded-xl text-2xl font-black",
-                        "bg-black/50 backdrop-blur-md border-2",
-                        isWinner
-                            ? "border-emerald-400/60 text-emerald-400"
-                            : "border-rose-400/60 text-rose-400"
-                    )}>
-                        +{player.score}
-                    </div>
-
-                    {/* Role badges */}
-                    <div className="flex gap-2">
-                        {player.isIgl && (
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600
-                                           flex items-center justify-center shadow-xl border-2 border-amber-300">
-                                <Crown className="w-5 h-5 text-white drop-shadow-lg" />
-                            </div>
-                        )}
-                        {player.isAnchor && (
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-400 to-purple-600
-                                           flex items-center justify-center shadow-xl border-2 border-purple-300">
-                                <Anchor className="w-5 h-5 text-white drop-shadow-lg" />
-                            </div>
-                        )}
-                    </div>
+            {/* Level Badge - Top Left */}
+            <div className="absolute top-3 left-3 z-20">
+                <div className="w-12 h-14 rounded-lg bg-slate-900/90 border border-white/20 flex flex-col items-center justify-center shadow-lg">
+                    <span className="text-[9px] font-black text-white/50 uppercase tracking-tight">LVL</span>
+                    <span className="text-xl font-black text-white leading-none">{player.odLevel || 1}</span>
                 </div>
+            </div>
 
-                {/* Center: Avatar */}
-                <div className="flex justify-center my-4">
+            {/* Role Badge - Top Right */}
+            {(player.isIgl || player.isAnchor) && (
+                <div className="absolute top-3 right-3 z-20">
+                    {player.isIgl && (
+                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 border-2 border-amber-300 flex items-center justify-center shadow-lg shadow-amber-500/50">
+                            <Crown className="w-5 h-5 text-white drop-shadow" />
+                        </div>
+                    )}
+                    {player.isAnchor && !player.isIgl && (
+                        <div className="w-10 h-10 rounded-lg bg-slate-800/90 border border-white/20 flex items-center justify-center shadow-lg">
+                            <Anchor className="w-5 h-5 text-white/70" />
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Score Badge - Top Center */}
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
+                <div className={cn(
+                    "px-3 py-1 rounded-full text-sm font-black",
+                    "bg-black/70 backdrop-blur-sm border",
+                    isWinner
+                        ? "border-emerald-400/60 text-emerald-400"
+                        : "border-rose-400/60 text-rose-400"
+                )}>
+                    +{player.score}
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="relative flex flex-col h-full pt-20 pb-0">
+                {/* Avatar with colored ring */}
+                <div className="flex-1 flex items-center justify-center">
                     <div className={cn(
-                        "w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black",
-                        "bg-gradient-to-br from-slate-700 to-slate-900 shadow-2xl",
-                        "border-4",
-                        isWinner ? "border-emerald-400" : "border-rose-400"
+                        "w-24 h-24 rounded-full flex items-center justify-center",
+                        "bg-slate-900 shadow-2xl",
+                        "ring-4 ring-offset-4 ring-offset-transparent",
+                        getAvatarRingColor()
                     )}>
-                        <span className="text-white drop-shadow-lg">
+                        <span className="text-4xl font-black text-white">
                             {player.odName?.charAt(0)?.toUpperCase() || '?'}
                         </span>
                     </div>
                 </div>
 
-                {/* Bottom section */}
-                <div className="mt-auto space-y-3">
-                    {/* Player name */}
-                    <div className="text-center">
-                        <h3 className={cn(
-                            "text-xl font-black truncate drop-shadow-lg",
-                            bannerStyle.textColor
-                        )}>
-                            {player.odName}
-                        </h3>
-                        {player.odEquippedTitle && (
-                            <p className="text-sm text-white/70 truncate">
-                                {player.odEquippedTitle.replace(/^title[_-]?/i, '').replace(/[_-]/g, ' ')}
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Operation badge */}
-                    {player.slot && (
-                        <div className="flex justify-center">
-                            <div className={cn(
-                                "px-4 py-1.5 rounded-full text-lg font-black",
-                                "bg-black/40 backdrop-blur-sm border-2",
-                                isWinner
-                                    ? "border-emerald-400/50 text-emerald-400"
-                                    : "border-rose-400/50 text-rose-400"
-                            )}>
-                                {operationSymbols[player.slot] || player.slot}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Stats row */}
-                    <div className="flex items-center justify-center gap-4 text-sm">
-                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/30 backdrop-blur-sm">
-                            <span className="text-white/60">Acc:</span>
-                            <span className={cn(
-                                "font-bold",
-                                accuracy >= 80 ? "text-emerald-400" : accuracy >= 50 ? "text-amber-400" : "text-rose-400"
-                            )}>{accuracy}%</span>
-                        </div>
-                        <div className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-black/30 backdrop-blur-sm">
-                            <span className="text-white/60">Avg:</span>
-                            <span className="font-bold text-primary">{avgTime}s</span>
+                {/* Operation Badge - Below Avatar */}
+                {player.slot && (
+                    <div className="flex justify-center -mt-2 mb-3 relative z-10">
+                        <div className="w-10 h-10 rounded-lg bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-lg font-black text-cyan-400 shadow-lg shadow-cyan-500/30">
+                            {operationSymbols[player.slot] || '?'}
                         </div>
                     </div>
+                )}
 
-                    {/* View Stats button */}
-                    <button
-                        onClick={() => onViewStats(player)}
-                        className={cn(
-                            "w-full py-3 rounded-xl font-bold text-sm uppercase tracking-wider transition-all",
-                            "bg-black/40 backdrop-blur-sm border-2 hover:bg-black/60",
-                            isWinner
-                                ? "border-emerald-400/50 text-emerald-400 hover:border-emerald-400"
-                                : "border-rose-400/50 text-rose-400 hover:border-rose-400"
-                        )}
-                    >
-                        View Stats
-                    </button>
+                {/* Bottom Info Bar */}
+                <div className="bg-slate-900/90 backdrop-blur-sm p-4 border-t border-cyan-500/30">
+                    <h3 className="text-base font-black uppercase tracking-wide text-center truncate text-white">
+                        {player.odName}
+                    </h3>
+                    <p className="text-xs text-white/50 text-center truncate mt-0.5">
+                        {player.odEquippedTitle
+                            ? player.odEquippedTitle.replace(/^title[_-]?/i, '').replace(/[_-]/g, ' ')
+                            : 'FlashMath Player'}
+                    </p>
+                    <div className="flex items-center justify-center gap-1.5 mt-2">
+                        <div className="w-2 h-2 rounded-full bg-amber-500" />
+                        <span className="text-xs font-semibold text-white/60">
+                            Bronze I
+                        </span>
+                    </div>
                 </div>
+
+                {/* View Stats Button */}
+                <button
+                    onClick={() => onViewStats(player)}
+                    className="w-full py-3 font-bold text-sm uppercase tracking-wider transition-all
+                               bg-cyan-500/10 border-t border-cyan-500/30 text-cyan-400
+                               hover:bg-cyan-500/20 hover:text-cyan-300"
+                >
+                    View Stats
+                </button>
             </div>
         </motion.div>
     );

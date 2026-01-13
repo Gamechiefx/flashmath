@@ -320,7 +320,7 @@ export function PointsFeedFAB({
                 animate={{ scale: 1 }}
                 onClick={() => setIsMinimized(false)}
                 className={cn(
-                    "fixed bottom-24 left-4 z-40",
+                    "fixed bottom-24 right-4 z-40",
                     "w-12 h-12 rounded-full",
                     "bg-violet-600/90 backdrop-blur-sm",
                     "border border-violet-400/30",
@@ -341,10 +341,10 @@ export function PointsFeedFAB({
     
     return (
         <motion.div
-            initial={{ x: -100, opacity: 0 }}
+            initial={{ x: 100, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             className={cn(
-                "fixed bottom-24 left-4 z-40",
+                "fixed bottom-24 right-4 z-40",
                 "bg-black/95 backdrop-blur-xl",
                 "border border-white/10 rounded-2xl",
                 "shadow-2xl shadow-black/50",
