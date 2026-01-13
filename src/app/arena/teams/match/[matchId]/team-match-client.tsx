@@ -3276,21 +3276,9 @@ export function TeamMatchClient({
                                     isCurrentUser={false}
                                 />
                             ) : (
-                                /* Brief transition state - show loading instead of jarring "waiting" message */
-                                <motion.div 
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="bg-gradient-to-b from-slate-800/50 to-slate-900/90 
-                                               rounded-2xl border border-primary/20 p-8 flex flex-col items-center justify-center min-h-[200px]"
-                                >
-                                    <motion.div
-                                        animate={{ rotate: 360 }}
-                                        transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                                        className="w-12 h-12 border-3 border-primary/30 border-t-primary rounded-full mb-4"
-                                    />
-                                    <p className="text-white/70 font-medium">Relay in progress...</p>
-                                    <p className="text-white/40 text-sm mt-1">Next teammate starting soon</p>
-                                </motion.div>
+                                /* Brief transition state - minimal/invisible during instant transitions */
+                                /* This should rarely be visible with 0ms handoff delay */
+                                <div className="min-h-[200px]" />
                             )}
                         </div>
 

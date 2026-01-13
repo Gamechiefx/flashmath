@@ -126,7 +126,9 @@ export function TeamQueueClient({
 
     const isLeader = party.leaderId === currentUserId;
     const partySize = party.members.length;
-    const needsTeammates = partySize < 5;
+    // Get team size from mode (e.g., '2v2' -> 2, '5v5' -> 5)
+    const teamSize = parseInt(mode.charAt(0)) || 5;
+    const needsTeammates = partySize < teamSize;
     
     // Real-time presence for queue status updates
     // Pass userId/userName to avoid useSession dependency during navigation transitions
@@ -154,7 +156,7 @@ export function TeamQueueClient({
         if (redirectingParties.has(partyId)) {
             console.log('[TeamQueue] ⚠️ Module-level check: Already redirecting this party');
             // Force immediate redirect
-            router.push('/arena/teams/setup?mode=5v5&fromQueue=true');
+            router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
             return;
         }
         
@@ -179,7 +181,7 @@ export function TeamQueueClient({
                         partyId: partyId
                     }));
                 }
-                router.push('/arena/teams/setup?mode=5v5&fromQueue=true');
+                router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
                 
                 // Clear from set after a delay (navigation should complete)
                 setTimeout(() => {
@@ -231,7 +233,7 @@ export function TeamQueueClient({
             }
             
             clearQueueStatusUpdate();
-            router.push('/arena/teams/setup?mode=5v5&fromQueue=true');
+            router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
             
             // Clear from set after navigation completes
             setTimeout(() => redirectingParties.delete(partyId), 5000);
@@ -300,7 +302,7 @@ export function TeamQueueClient({
                                 partyId: partyId
                             }));
                         }
-                        router.push('/arena/teams/setup?mode=5v5&fromQueue=true');
+                        router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
                         setTimeout(() => redirectingParties.delete(partyId), 5000);
                     }
                 } else {
@@ -324,7 +326,7 @@ export function TeamQueueClient({
                         partyId: partyId
                     }));
                 }
-                router.push('/arena/teams/setup?mode=5v5&fromQueue=true');
+                router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
                 setTimeout(() => redirectingParties.delete(partyId), 5000);
             }
         };
@@ -403,7 +405,7 @@ export function TeamQueueClient({
                         partyId: partyId
                     }));
                 }
-                router.push('/arena/teams/setup?mode=5v5&fromQueue=true');
+                router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
                 return;
             }
             
@@ -637,7 +639,7 @@ export function TeamQueueClient({
                         partyId: activePartyId
                     }));
                 }
-                router.push('/arena/teams/setup?mode=5v5&fromQueue=true');
+                router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
                 return;
             }
             
@@ -774,7 +776,7 @@ export function TeamQueueClient({
         // Return to setup with original party
         // Add fromQueue=true to prevent setup page from immediately redirecting back
         console.log('[TeamQueue] Navigating to setup with fromQueue=true');
-        router.push('/arena/teams/setup?mode=5v5&fromQueue=true');
+        router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`);
     };
 
     // Convert assembled team members to IGLSelectionModal format
@@ -913,7 +915,7 @@ export function TeamQueueClient({
                                         {phase === 'teammates' ? 'Finding Teammates' : 'Team Queue'}
                                     </h2>
                                     <p className="text-xs text-muted-foreground">
-                                        5v5 Team Arena • {party.queueState?.matchType === 'casual' ? 'Casual Match' : 'Ranked Match'}
+                                        {mode} Team Arena • {party.queueState?.matchType === 'casual' ? 'Casual Match' : 'Ranked Match'}
                                     </p>
                                 </div>
                             </div>
@@ -925,7 +927,7 @@ export function TeamQueueClient({
                                     ? "bg-accent/20 border-accent/30 text-accent"
                                     : "bg-primary/20 border-primary/30 text-primary"
                             )}>
-                                {phase === 'teammates' && `Phase 1: ${partySize}/5 players`}
+                                {phase === 'teammates' && `Phase 1: ${partySize}/${teamSize} players`}
                                 {phase === 'igl_selection' && 'Phase 2: Select Roles'}
                                 {phase === 'opponent' && 'Phase 3: Finding Match'}
                             </div>
@@ -979,7 +981,7 @@ export function TeamQueueClient({
                                 <AlertCircle className="w-10 h-10" />
                                 <p>{error}</p>
                                 <button
-                                    onClick={() => router.push('/arena/teams/setup?mode=5v5')}
+                                    onClick={() => router.push(`/arena/teams/setup?mode=${mode}`)}
                                     className="px-6 py-2 rounded-lg bg-card hover:bg-card/80 
                                                text-card-foreground font-medium transition-colors"
                                 >
@@ -1021,7 +1023,7 @@ export function TeamQueueClient({
 
                                 <p className="text-sm text-muted-foreground mb-4">
                                     {phase === 'teammates'
-                                        ? `Looking for ${5 - partySize} more player${5 - partySize > 1 ? 's' : ''} to complete your team`
+                                        ? `Looking for ${teamSize - partySize} more player${teamSize - partySize > 1 ? 's' : ''} to complete your team`
                                         : 'Searching for teams with similar skill level'}
                                 </p>
 
@@ -1042,7 +1044,7 @@ export function TeamQueueClient({
                                         </p>
                                         <p className="text-xl font-mono font-bold text-primary">
                                             {phase === 'teammates'
-                                                ? `${queueStatus?.partySize || partySize}/5`
+                                                ? `${queueStatus?.partySize || partySize}/${teamSize}`
                                                 : `±${queueStatus?.currentEloRange || 0}`}
                                         </p>
                                     </div>
@@ -1129,7 +1131,7 @@ export function TeamQueueClient({
                         ) : (
                             /* Fallback when match is found but loading - give users a way out */
                             <button
-                                onClick={() => router.push('/arena/teams/setup?mode=5v5&fromQueue=true')}
+                                onClick={() => router.push(`/arena/teams/setup?mode=${mode}&fromQueue=true`)}
                                 className="w-full py-3 rounded-lg bg-white/5 hover:bg-white/10 
                                            border border-white/10 text-white/60 font-medium 
                                            transition-colors flex items-center justify-center gap-2"

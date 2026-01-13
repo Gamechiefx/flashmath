@@ -514,7 +514,7 @@ export function TeamSetupClient({
         // FIX: Clear the fromQueue URL parameter to reset navigation state
         // This prevents stale fromQueue=true from affecting future navigations
         if (typeof window !== 'undefined' && window.location.search.includes('fromQueue=true')) {
-            const newUrl = window.location.pathname + '?mode=5v5';
+            const newUrl = window.location.pathname + `?mode=${mode}`;
             window.history.replaceState({}, '', newUrl);
             console.log('[TeamSetup] Cleared fromQueue parameter for new queue');
         }
@@ -655,7 +655,7 @@ export function TeamSetupClient({
         // FIX: Clear the fromQueue URL parameter to reset navigation state
         // This prevents stale fromQueue=true from affecting future navigations
         if (typeof window !== 'undefined' && window.location.search.includes('fromQueue=true')) {
-            const newUrl = window.location.pathname + '?mode=5v5';
+            const newUrl = window.location.pathname + `?mode=${mode}`;
             window.history.replaceState({}, '', newUrl);
             console.log('[TeamSetup] Cleared fromQueue parameter for new queue');
         }
