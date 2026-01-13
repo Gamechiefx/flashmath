@@ -226,6 +226,28 @@ input[type="number"] {
   animation: float-particle linear infinite;
 }
 
+/* Smooth upward float for audio-reactive particles */
+@keyframes float-up {
+  0% {
+    top: 110%;
+    opacity: 0;
+  }
+  5% {
+    opacity: 0.3;
+  }
+  95% {
+    opacity: 0.3;
+  }
+  100% {
+    top: -10%;
+    opacity: 0;
+  }
+}
+
+.animate-float-up {
+  animation: float-up linear infinite;
+}
+
 .animate-stripe-flow {
   animation: stripe-flow 3s linear infinite;
 }

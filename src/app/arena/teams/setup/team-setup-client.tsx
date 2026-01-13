@@ -28,6 +28,7 @@ import { createAITeamMatch, BotDifficulty } from '@/lib/actions/team-matchmaking
 import { UserAvatar } from '@/components/user-avatar';
 import { usePresence } from '@/lib/socket/use-presence';
 import { TeamPlayerCard, VSScreenBackground } from '@/components/arena/teams';
+import { soundEngine } from '@/lib/sound-engine';
 
 interface TeamSetupClientProps {
     mode: string;
@@ -151,6 +152,49 @@ export function TeamSetupClient({
     // Track the initial queueStatus to detect NEW queue starts
     const initialQueueStatusWasNull = useRef(initialParty?.queueStatus === null || initialParty?.queueStatus === undefined);
     
+    // Continue playing arena entrance music (started on mode selection page)
+    // This ensures music continues if user navigates directly to this page
+    // The music stops when entering the actual match page
+    useEffect(() => {
+        let mounted = true;
+        let interactionListenerAdded = false;
+        
+        const startMusic = async () => {
+            await soundEngine.playArenaEntranceMusic();
+        };
+        
+        // Handler for first user interaction
+        const handleFirstInteraction = async () => {
+            if (!mounted) return;
+            document.removeEventListener('click', handleFirstInteraction);
+            document.removeEventListener('touchstart', handleFirstInteraction);
+            document.removeEventListener('keydown', handleFirstInteraction);
+            interactionListenerAdded = false;
+            await startMusic();
+        };
+        
+        // Try to start music immediately
+        startMusic().then(() => {
+            // If AudioContext is suspended, wait for user interaction
+            if (mounted && soundEngine.isEnabled() && !soundEngine.getArenaEntranceAnalyser()) {
+                document.addEventListener('click', handleFirstInteraction, { once: true });
+                document.addEventListener('touchstart', handleFirstInteraction, { once: true });
+                document.addEventListener('keydown', handleFirstInteraction, { once: true });
+                interactionListenerAdded = true;
+            }
+        });
+        
+        return () => {
+            mounted = false;
+            if (interactionListenerAdded) {
+                document.removeEventListener('click', handleFirstInteraction);
+                document.removeEventListener('touchstart', handleFirstInteraction);
+                document.removeEventListener('keydown', handleFirstInteraction);
+            }
+            // No music cleanup - music continues to match page
+        };
+    }, []);
+
     // Check sessionStorage on client mount (runs after hydration)
     // This is the most reliable way to detect if we just left the queue
     useEffect(() => {

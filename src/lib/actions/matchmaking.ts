@@ -767,9 +767,11 @@ async function createAiMatch(userId: string, userName: string, params: { mode: s
 
     if (userData?.equipped_items) {
         try {
+            const { getBannerAssetValue, getTitleDisplayName } = await import("@/lib/items");
             const equipped = JSON.parse(userData.equipped_items);
-            userBanner = equipped.banner || 'default';
-            userTitle = equipped.title || 'Challenger';
+            // Convert item IDs to asset values for display
+            userBanner = getBannerAssetValue(equipped.banner);
+            userTitle = getTitleDisplayName(equipped.title);
         } catch { /* ignore parse errors */ }
     }
 

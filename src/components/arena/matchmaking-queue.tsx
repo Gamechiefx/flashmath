@@ -245,6 +245,7 @@ export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, 
                 if (result.matched && result.matchId) {
                     console.log(`[Queue] Match found! matchId=${result.matchId}, opponent=${result.opponent?.name}`);
                     setMatchFound(true);
+                    soundEngine.stopQueueMusic(1000); // Fade out queue music
                     soundEngine.playMatchFound();
                     setIsSearching(false);
 

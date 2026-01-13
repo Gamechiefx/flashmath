@@ -163,6 +163,34 @@ export function RealTimeMatch({
         }
     }, [matchStarted, matchEnded, currentQuestion]);
 
+    // Music transitions for 1v1 matches
+    useEffect(() => {
+        if (matchStarted && !matchEnded) {
+            // Match started - fade out ALL previous phase music, then start match music
+            soundEngine.stopLobbyMusic(800);
+            soundEngine.stopQueueMusic(800);
+            soundEngine.stopArenaEntranceMusic(800);
+
+            setTimeout(() => {
+                soundEngine.playMatchMusic();
+            }, 500);
+        }
+    }, [matchStarted, matchEnded]);
+
+    // Stop music when match ends
+    useEffect(() => {
+        if (matchEnded) {
+            soundEngine.stopMatchMusic(1500);
+        }
+    }, [matchEnded]);
+
+    // Cleanup all music on unmount
+    useEffect(() => {
+        return () => {
+            soundEngine.stopAllPhaseMusic(0);
+        };
+    }, []);
+
     // Prevent accidental back navigation during match
     useEffect(() => {
         if (!matchStarted || matchEnded) return;
@@ -912,10 +940,10 @@ export function RealTimeMatch({
                 )}
             </AnimatePresence>
 
-            {/* Fullscreen Toggle Button - Top Left */}
+            {/* Fullscreen Toggle Button - Top Left, next to Leave Match */}
             <button
                 onClick={toggleFullscreen}
-                className="fixed top-4 left-4 z-50 p-2.5 rounded-xl bg-black/40 border border-white/10 hover:border-primary/50 text-white/60 hover:text-primary transition-all backdrop-blur-sm hover:bg-primary/10"
+                className="fixed top-4 left-16 z-50 p-2.5 rounded-xl bg-black/40 border border-white/10 hover:border-primary/50 text-white/60 hover:text-primary transition-all backdrop-blur-sm hover:bg-primary/10"
                 title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
             >
                 {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}

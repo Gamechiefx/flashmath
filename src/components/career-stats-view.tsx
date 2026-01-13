@@ -105,54 +105,6 @@ export function CareerStatsView({ stats }: CareerStatsViewProps) {
                 </div>
             </motion.header>
 
-            <motion.div
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
-                variants={containerVariants}
-                initial="hidden"
-                animate="visible"
-            >
-                <motion.div variants={itemVariants}>
-                    <GlassCard className="p-6 flex flex-col gap-2">
-                        <div className="flex items-center gap-2 text-primary">
-                            <Trophy size={18} />
-                            <span className="text-xs font-bold uppercase tracking-widest">Lifetime Accuracy</span>
-                        </div>
-                        <div className="text-4xl font-black">
-                            <AnimatedNumber value={overall.lifetimeAccuracy || 0} suffix="%" />
-                        </div>
-                    </GlassCard>
-                </motion.div>
-                <motion.div variants={itemVariants}>
-                    <GlassCard className="p-6 flex flex-col gap-2">
-                        <div className="flex items-center gap-2 text-accent">
-                            <Zap size={18} />
-                            <span className="text-xs font-bold uppercase tracking-widest">Avg Speed</span>
-                        </div>
-                        <div className="text-4xl font-black text-accent">{stats?.avgSpeed || "0.00s"}</div>
-                    </GlassCard>
-                </motion.div>
-                <motion.div variants={itemVariants}>
-                    <GlassCard className="p-6 flex flex-col gap-2">
-                        <div className="flex items-center gap-2 text-yellow-400">
-                            <Target size={18} />
-                            <span className="text-xs font-bold uppercase tracking-widest">Weakest Link</span>
-                        </div>
-                        <div className="text-4xl font-black text-white">{overall.weakestLink || "None"}</div>
-                    </GlassCard>
-                </motion.div>
-                <motion.div variants={itemVariants}>
-                    <GlassCard className="p-6 flex flex-col gap-2">
-                        <div className="flex items-center gap-2 text-purple-400">
-                            <Activity size={18} />
-                            <span className="text-xs font-bold uppercase tracking-widest">Total Sessions</span>
-                        </div>
-                        <div className="text-4xl font-black text-white">
-                            <AnimatedNumber value={stats.totalSessions || 0} decimals={0} />
-                        </div>
-                    </GlassCard>
-                </motion.div>
-            </motion.div>
-
             {/* Arena Career Stats - Duel League */}
             {stats.arenaStats && (
                 <>
@@ -412,6 +364,55 @@ export function CareerStatsView({ stats }: CareerStatsViewProps) {
                 <Target className="text-primary" />
                 Operation Breakdown
             </motion.h2>
+
+            {/* Overall Stats Summary */}
+            <motion.div
+                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+            >
+                <motion.div variants={itemVariants}>
+                    <GlassCard className="p-6 flex flex-col gap-2">
+                        <div className="flex items-center gap-2 text-primary">
+                            <Trophy size={18} />
+                            <span className="text-xs font-bold uppercase tracking-widest">Lifetime Accuracy</span>
+                        </div>
+                        <div className="text-4xl font-black">
+                            <AnimatedNumber value={overall.lifetimeAccuracy || 0} suffix="%" />
+                        </div>
+                    </GlassCard>
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                    <GlassCard className="p-6 flex flex-col gap-2">
+                        <div className="flex items-center gap-2 text-accent">
+                            <Zap size={18} />
+                            <span className="text-xs font-bold uppercase tracking-widest">Avg Speed</span>
+                        </div>
+                        <div className="text-4xl font-black text-accent">{stats?.avgSpeed || "0.00s"}</div>
+                    </GlassCard>
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                    <GlassCard className="p-6 flex flex-col gap-2">
+                        <div className="flex items-center gap-2 text-yellow-400">
+                            <Target size={18} />
+                            <span className="text-xs font-bold uppercase tracking-widest">Weakest Link</span>
+                        </div>
+                        <div className="text-4xl font-black text-white">{overall.weakestLink || "None"}</div>
+                    </GlassCard>
+                </motion.div>
+                <motion.div variants={itemVariants}>
+                    <GlassCard className="p-6 flex flex-col gap-2">
+                        <div className="flex items-center gap-2 text-purple-400">
+                            <Activity size={18} />
+                            <span className="text-xs font-bold uppercase tracking-widest">Total Sessions</span>
+                        </div>
+                        <div className="text-4xl font-black text-white">
+                            <AnimatedNumber value={stats.totalSessions || 0} decimals={0} />
+                        </div>
+                    </GlassCard>
+                </motion.div>
+            </motion.div>
 
             <motion.div
                 className="grid grid-cols-1 md:grid-cols-2 gap-6"

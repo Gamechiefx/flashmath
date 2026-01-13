@@ -17,32 +17,42 @@ async function requireAdmin() {
 }
 
 export async function updateItem(itemId: string, data: { name: string; rarity: string; price: number }) {
+    console.log(`[ADMIN] updateItem called for ${itemId}`, data);
+
     const { isAdmin, error } = await requireAdmin();
-    if (!isAdmin) return { error };
+    if (!isAdmin) {
+        console.log(`[ADMIN] Not admin, error:`, error);
+        return { error };
+    }
 
     try {
         console.log(`[ADMIN] Updating item ${itemId}:`, data);
         const db = getDatabase();
 
         // Check if item exists
-        const existingItem = db.prepare('SELECT id FROM shop_items WHERE id = ?').get(itemId);
+        const existingItem = db.prepare('SELECT * FROM shop_items WHERE id = ?').get(itemId);
+        console.log(`[ADMIN] Existing item:`, existingItem);
         if (!existingItem) return { error: "Item not found" };
 
         // Update using SQLite
-        db.prepare(`
-            UPDATE shop_items 
+        const result = db.prepare(`
+            UPDATE shop_items
             SET name = ?, rarity = ?, price = ?
             WHERE id = ?
         `).run(data.name, data.rarity, data.price, itemId);
 
-        console.log(`[ADMIN] Successfully updated item ${itemId}`);
+        console.log(`[ADMIN] Update result:`, result);
+
+        // Verify the update
+        const updatedItem = db.prepare('SELECT * FROM shop_items WHERE id = ?').get(itemId);
+        console.log(`[ADMIN] After update:`, updatedItem);
 
         revalidatePath("/shop");
         revalidatePath("/admin");
         revalidatePath("/locker");
         return { success: true };
     } catch (error) {
-        console.error("Failed to update item:", error);
+        console.error("[ADMIN] Failed to update item:", error);
         return { error: "Failed to update item" };
     }
 }

@@ -36,6 +36,23 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
     const [shouldNavigate, setShouldNavigate] = useState(false);
     const lastMsgTimeRef = useRef<number>(0);
 
+    // Play tense build-up music during lobby countdown
+    useEffect(() => {
+        // Stop any previous phase music first (queue music, arena entrance, etc.)
+        soundEngine.stopQueueMusic(800);
+        soundEngine.stopArenaEntranceMusic(800);
+
+        // Start lobby music after brief delay for smooth transition
+        const timeout = setTimeout(() => {
+            soundEngine.playLobbyMusic();
+        }, 500);
+
+        return () => {
+            clearTimeout(timeout);
+            // Don't stop here - let match component handle transition
+        };
+    }, []);
+
     // Navigate when countdown reaches 0
     useEffect(() => {
         if (shouldNavigate) {

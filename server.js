@@ -3108,6 +3108,188 @@ app.prepare().then(async () => {
                 });
             }
 
+            // If active phase (match in progress), send catchup data
+            if (match.phase === TEAM_MATCH_PHASES.ACTIVE) {
+                console.log(`[TeamMatch] Sending active phase catchup to ${player.odName}`);
+
+                // CRITICAL: If the game tick is not running (server restarted), restart it
+                if (!match.timer) {
+                    console.log(`[TeamMatch] RESTART: Game tick not running, restarting for match ${matchId}`);
+                    match.lastTickTime = Date.now();
+                    match.timer = setInterval(() => tickTeamMatch(match, teamMatchNs), 1000);
+
+                    // Also restart bot behavior if this is an AI match
+                    const hasTeam1AI = Object.keys(match.team1.players).some(id => isAITeammate(id) || isAIBot(id));
+                    const hasTeam2AI = Object.keys(match.team2.players).some(id => isAITeammate(id) || isAIBot(id)) || isAITeam(match.team2.teamId);
+
+                    if ((match.isAIMatch || hasTeam1AI || hasTeam2AI) && !botIntervals.has(matchId)) {
+                        console.log(`[TeamMatch] RESTART: Restarting bot behavior for match ${matchId}`);
+                        startBotBehavior(match, teamMatchNs);
+                    }
+                }
+
+                // Send match_start event so client knows we're in active phase
+                socket.emit('match_start', {
+                    round: match.round,
+                    half: match.half,
+                    currentSlot: team.currentSlot,
+                    slotOperation: getSlotOperation(team.currentSlot, match.operation, team),
+                    team1ActivePlayerId: getActivePlayer(match.team1, match.team1.currentSlot, match.round)?.odUserId || null,
+                    team2ActivePlayerId: getActivePlayer(match.team2, match.team2.currentSlot, match.round)?.odUserId || null,
+                    isCatchup: true, // Flag to indicate this is reconnection catchup
+                });
+
+                // If this player is currently active, send them their question
+                if (player.isActive && player.currentQuestion) {
+                    const slotOp = getSlotOperation(team.currentSlot, match.operation, team);
+                    console.log(`[TeamMatch] Sending question catchup to active player ${player.odName}`);
+                    socket.emit('new_question', {
+                        question: player.currentQuestion,
+                        questionNumber: team.questionsInSlot + 1,
+                        totalQuestions: getMatchConfig(match.mode || '5v5').QUESTIONS_PER_SLOT,
+                        slot: team.currentSlot,
+                        operation: slotOp,
+                        isCatchup: true, // Indicates this is reconnection, not a new question
+                    });
+                }
+
+                // Restart question timer for this player if they're active
+                if (player.isActive && player.currentQuestion && !isAIBot(player.odUserId) && !isAITeammate(player.odUserId)) {
+                    // Calculate remaining time based on when question was generated
+                    const elapsed = Date.now() - (player.questionStartTime || Date.now());
+                    const remainingMs = Math.max(1000, TEAM_MATCH_CONFIG.QUESTION_TIME_LIMIT_MS - elapsed);
+
+                    // Clear any existing timer and start new one with remaining time
+                    if (player.questionTimer) {
+                        clearTimeout(player.questionTimer);
+                    }
+                    player.questionTimer = setTimeout(() => {
+                        handleQuestionTimeout(match, team, player, teamMatchNs);
+                    }, remainingMs);
+
+                    console.log(`[TeamMatch] Restarted question timer for ${player.odName} with ${remainingMs}ms remaining`);
+                }
+            }
+
+            // If break phase, send break timer catchup
+            if (match.phase === TEAM_MATCH_PHASES.BREAK) {
+                const matchConfig = getMatchConfig(match.mode || '5v5');
+                const breakDuration = match.breakDuration || matchConfig.BREAK_DURATION_MS;
+                const elapsed = Date.now() - (match.breakStartTime || Date.now());
+                const remainingMs = Math.max(0, breakDuration - elapsed);
+
+                // Restart break timer if server restarted
+                if (!match.breakTimer && remainingMs > 0) {
+                    console.log(`[TeamMatch] RESTART: Break timer not running, restarting for match ${matchId}`);
+                    match.breakTimer = setInterval(() => {
+                        const elapsedNow = Date.now() - match.breakStartTime;
+                        match.breakRemainingMs = Math.max(0, breakDuration - elapsedNow);
+
+                        teamMatchNs.to(match.matchId).emit('break_time_update', {
+                            matchId: match.matchId,
+                            remainingMs: match.breakRemainingMs,
+                        });
+
+                        if (match.breakRemainingMs <= 0) {
+                            clearInterval(match.breakTimer);
+                            match.breakTimer = null;
+                            startNextRound(match, teamMatchNs);
+                        }
+                    }, 1000);
+                }
+
+                console.log(`[TeamMatch] Sending break phase catchup to ${player.odName}: ${remainingMs}ms remaining`);
+                socket.emit('break_start', {
+                    matchId: match.matchId,
+                    round: match.round,
+                    half: match.half,
+                    durationMs: remainingMs,
+                    endsAt: Date.now() + remainingMs,
+                    isCatchup: true,
+                });
+            }
+
+            // If halftime phase, send halftime timer catchup
+            if (match.phase === TEAM_MATCH_PHASES.HALFTIME) {
+                const matchConfig = getMatchConfig(match.mode || '5v5');
+                const halftimeDuration = matchConfig.HALFTIME_DURATION_MS;
+                const elapsed = Date.now() - (match.halftimeStartTime || Date.now());
+                const remainingMs = Math.max(0, halftimeDuration - elapsed);
+
+                // Restart halftime timer if server restarted
+                if (!match.halftimeTimer && remainingMs > 0) {
+                    console.log(`[TeamMatch] RESTART: Halftime timer not running, restarting for match ${matchId}`);
+                    match.halftimeTimer = setInterval(() => {
+                        const elapsedNow = Date.now() - match.halftimeStartTime;
+                        match.breakRemainingMs = Math.max(0, halftimeDuration - elapsedNow);
+
+                        teamMatchNs.to(match.matchId).emit('halftime_time_update', {
+                            matchId: match.matchId,
+                            remainingMs: match.breakRemainingMs,
+                        });
+
+                        if (match.breakRemainingMs <= 0) {
+                            clearInterval(match.halftimeTimer);
+                            match.halftimeTimer = null;
+                            startSecondHalf(match, teamMatchNs);
+                        }
+                    }, 1000);
+                }
+
+                console.log(`[TeamMatch] Sending halftime phase catchup to ${player.odName}: ${remainingMs}ms remaining`);
+                socket.emit('halftime', {
+                    matchId: match.matchId,
+                    durationMs: remainingMs,
+                    half: 1,
+                    team1Score: match.team1.score,
+                    team2Score: match.team2.score,
+                    isCatchup: true,
+                });
+            }
+
+            // If round countdown phase, send countdown catchup
+            if (match.phase === TEAM_MATCH_PHASES.ROUND_COUNTDOWN) {
+                const matchConfig = getMatchConfig(match.mode || '5v5');
+                const countdownDuration = matchConfig.ROUND_COUNTDOWN_MS || 5000;
+                const elapsed = Date.now() - (match.roundCountdownStartTime || Date.now());
+                const remainingMs = Math.max(0, countdownDuration - elapsed);
+
+                // Restart round countdown timer if server restarted
+                if (!match.roundCountdownTimer && remainingMs > 0) {
+                    console.log(`[TeamMatch] RESTART: Round countdown timer not running, restarting for match ${matchId}`);
+                    match.roundCountdownTimer = setInterval(() => {
+                        const elapsedNow = Date.now() - match.roundCountdownStartTime;
+                        const remainingNow = Math.max(0, countdownDuration - elapsedNow);
+                        const secondsRemaining = Math.ceil(remainingNow / 1000);
+
+                        teamMatchNs.to(match.matchId).emit('round_countdown_tick', {
+                            round: match.round,
+                            half: match.half,
+                            remainingMs: remainingNow,
+                            secondsRemaining: secondsRemaining,
+                        });
+
+                        if (remainingNow === 0) {
+                            clearInterval(match.roundCountdownTimer);
+                            match.roundCountdownTimer = null;
+
+                            if (match.phase === TEAM_MATCH_PHASES.ROUND_COUNTDOWN) {
+                                beginActivePhase(match, teamMatchNs);
+                            }
+                        }
+                    }, 1000);
+                }
+
+                console.log(`[TeamMatch] Sending round countdown catchup to ${player.odName}: ${remainingMs}ms remaining`);
+                socket.emit('round_countdown_start', {
+                    matchId: match.matchId,
+                    round: match.round,
+                    half: match.half,
+                    durationMs: remainingMs,
+                    isCatchup: true,
+                });
+            }
+
             // Notify team about player joining
             teamMatchNs.to(`team:${matchId}:${team.teamId}`).emit('player_connected', {
                 userId,

@@ -693,6 +693,11 @@ export function TeamMatchClient({
     const activeTeammateId = myTeam 
         ? Object.values(myTeam.players).find(p => p.isActive)?.odUserId 
         : null;
+    
+    // Detect if I'm about to be up: a teammate completed, no one is active, and I haven't completed
+    // This handles the gap between answer_result (clearing previous player) and handoff_countdown
+    const imAboutToBeUp = myTeam && myPlayer && !myPlayer.isComplete && !myPlayer.isActive && !activeTeammateId &&
+        Object.values(myTeam.players).some(p => p.isComplete && p.odUserId !== myPlayerId);
     const activeOpponent = opponentTeam
         ? Object.values(opponentTeam.players).find(p => p.isActive)
         : null;
@@ -742,6 +747,12 @@ export function TeamMatchClient({
         const secs = totalSeconds % 60;
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
+
+    // Stop arena entrance music when entering the match (just before versus screen)
+    // The music plays through mode-selection → team-setup and stops here
+    useEffect(() => {
+        soundEngine.stopArenaEntranceMusic(500); // Quick fade-out when match starts
+    }, []);
 
     // Force fullscreen when entering arena match
     useEffect(() => {
@@ -1674,6 +1685,11 @@ export function TeamMatchClient({
                                 question: data.questionText,
                                 operation: data.slotOperation,
                             };
+                            // Clear the yourTurnStarting state now that the question is ready
+                            // This ensures smooth transition from loading placeholder to actual question card
+                            if (playerId === currentUserId) {
+                                setYourTurnStarting(false);
+                            }
                         }
                     }
                 };
@@ -1733,15 +1749,20 @@ export function TeamMatchClient({
             previousPlayerStats?: { correct: number; total: number; score: number };
         }) => {
             console.log('[TeamMatch] Handoff countdown:', data);
-            
+
             // Show non-blocking "YOUR TURN" notification if this is for the current user
-            const isMyTurn = data.nextPlayerId === currentUserId;
-            
-            if (isMyTurn) {
-                // Play sound and show brief notification - doesn't block input
+            const isMyTurnNext = data.nextPlayerId === currentUserId;
+
+            if (isMyTurnNext) {
+                // Play sound and set yourTurnStarting flag
+                // This flag is used in the rendering condition to show "Your Turn! Loading..." 
+                // before the slot_change event sets isActive=true and currentQuestion
+                // This prevents the visual flash between AI completing and slot_change arriving
                 soundEngine.playYourTurn();
                 setYourTurnStarting(true);
-                setTimeout(() => setYourTurnStarting(false), 1500);
+                // Note: yourTurnStarting is cleared by slot_change handler when question is set
+                // Fallback: clear after 3s in case slot_change doesn't arrive
+                setTimeout(() => setYourTurnStarting(false), 3000);
             }
             // NOTE: Removed blocking RelayHandoff animation
         });
@@ -3127,8 +3148,17 @@ export function TeamMatchClient({
                     <div className="grid grid-cols-12 gap-6">
                         {/* Teammate/My Turn View */}
                         <div className="col-span-8">
-                            {/* Active Player Input - Show immediately when it's user's turn */}
-                            {isMyTurn && myPlayerQuestion ? (
+                            {/* Active Player Input - Show when it's user's turn */}
+                            {/* Priority 1: My turn with question ready - show input card */}
+                            {/* Priority 2: My turn OR about to be my turn - show loading placeholder */}
+                            {/* Priority 3: Slot complete - waiting for next teammate */}
+                            {/* Priority 4: Watching different teammate - spectator view */}
+                            {/* Priority 5: Fallback - minimal placeholder */}
+                            {/* Note: imAboutToBeUp detects gap between teammate completing and handoff_countdown */}
+                            {/* yourTurnStarting is set when handoff_countdown indicates it's our turn next */}
+                            {/* This prevents the visual flash between AI completing and slot_change arriving */}
+                            {(isMyTurn || yourTurnStarting || imAboutToBeUp) ? (
+                                myPlayerQuestion ? (
                                 <div className="relative">
                                     {/* Non-blocking "YOUR TURN" notification overlay */}
                                     <AnimatePresence>
@@ -3258,6 +3288,18 @@ export function TeamMatchClient({
                                         )}
                                     </AnimatePresence>
                                 </div>
+                                ) : (
+                                    /* My turn but question not loaded yet - show placeholder to prevent flash */
+                                    /* This case handles the brief moment between isActive=true and currentQuestion being set */
+                                    <div className="bg-gradient-to-b from-primary/20 to-slate-900/90 
+                                                   rounded-2xl border-2 border-primary/30 p-8 min-h-[200px]
+                                                   flex items-center justify-center">
+                                        <div className="text-center">
+                                            <div className="text-primary text-xl font-bold mb-2">🎯 Your Turn!</div>
+                                            <div className="text-white/60">Loading question...</div>
+                                        </div>
+                                    </div>
+                                )
                             ) : myPlayer?.isComplete ? (
                                 /* Player completed their slot - waiting for next teammate */
                                 <motion.div
@@ -3282,8 +3324,10 @@ export function TeamMatchClient({
                                         <span className="font-bold text-primary">+{myPlayer.score}</span>
                                     </div>
                                 </motion.div>
-                            ) : activeTeammateId && myTeam?.players[activeTeammateId] ? (
-                                /* Teammate Spectator View */
+                            ) : activeTeammateId && activeTeammateId !== myPlayerId && myTeam?.players[activeTeammateId] ? (
+                                /* Teammate Spectator View - only show when watching a DIFFERENT teammate */
+                                /* The activeTeammateId !== myPlayerId check prevents showing spectator view for ourselves */
+                                /* during the brief transition when isMyTurn is true but myPlayerQuestion is null */
                                 <TeammateSpectatorView
                                     activePlayer={myTeam.players[activeTeammateId]}
                                     currentQuestion={myTeam.players[activeTeammateId].currentQuestion || null}

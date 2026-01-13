@@ -27,10 +27,21 @@ interface ArenaQueueClientProps {
 }
 
 export function ArenaQueueClient({ data, operation, arenaStats, mode = '1v1' }: ArenaQueueClientProps) {
-    // Client-side effect for music
+    // Client-side effect for music - play relaxing guitar while in queue
     useEffect(() => {
-        // soundEngine.playBGM('bgm_synth_motivation');
-        return () => soundEngine.stopBGM();
+        // Stop any previous phase music first (arena entrance, etc.)
+        soundEngine.stopArenaEntranceMusic(800);
+        soundEngine.stopAllPhaseMusic(500);
+
+        // Start queue music after a brief delay for smooth transition
+        const timeout = setTimeout(() => {
+            soundEngine.playQueueMusic();
+        }, 300);
+
+        return () => {
+            clearTimeout(timeout);
+            soundEngine.stopQueueMusic(500);
+        };
     }, []);
 
     return (
