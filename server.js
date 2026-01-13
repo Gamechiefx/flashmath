@@ -3844,9 +3844,16 @@ app.prepare().then(async () => {
                 console.log(`[TeamMatch] Cleared existing break timeout`);
             }
             
-            // IMPORTANT: Also clear the halftime timer interval if calling timeout during halftime
-            // The halftimeTimer is an interval that runs every second - we need to stop it
+            // IMPORTANT: Clear the break timer interval if calling timeout during break
+            // The breakTimer is an interval that runs every second - we need to stop it
             // and manage the countdown manually with the new extended breakTimeout
+            if (match.phase === TEAM_MATCH_PHASES.BREAK && match.breakTimer) {
+                clearInterval(match.breakTimer);
+                match.breakTimer = null;
+                console.log(`[TeamMatch] Cleared existing break timer for timeout extension`);
+            }
+            
+            // Also clear the halftime timer interval if calling timeout during halftime
             if (match.phase === TEAM_MATCH_PHASES.HALFTIME && match.halftimeTimer) {
                 clearInterval(match.halftimeTimer);
                 match.halftimeTimer = null;
