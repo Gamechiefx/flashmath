@@ -2280,8 +2280,8 @@ app.prepare().then(async () => {
             ROUND_COUNTDOWN_MS: 6000,        // 5-4-3-2-1-GO countdown (6s total)
             TYPING_THROTTLE_MS: 50,          // Throttle typing updates
             DOUBLE_CALLIN_ENABLED: true,     // Double Call-In available in 5v5
-            QUESTION_TIMEOUT_MS: 5000,       // 5 seconds per question before auto-skip
-            TIMEOUT_WARNING_MS: 3000,        // Show warning at 3s remaining
+            QUESTION_TIMEOUT_MS: 15000,      // 15 seconds per question before auto-skip
+            TIMEOUT_WARNING_MS: 5000,        // Show warning at 5s remaining
             SOLO_DECISION_DURATION_MS: 10000, // 10 seconds for IGL to choose Normal vs Anchor Solo
         },
         '2v2': {
@@ -2302,8 +2302,8 @@ app.prepare().then(async () => {
             ROUND_COUNTDOWN_MS: 5000,        // 4-3-2-1-GO countdown (5s total, faster)
             TYPING_THROTTLE_MS: 50,
             DOUBLE_CALLIN_ENABLED: false,    // Double Call-In NOT available in 2v2 per spec
-            QUESTION_TIMEOUT_MS: 5000,       // 5 seconds per question before auto-skip
-            TIMEOUT_WARNING_MS: 3000,        // Show warning at 3s remaining
+            QUESTION_TIMEOUT_MS: 15000,      // 15 seconds per question before auto-skip
+            TIMEOUT_WARNING_MS: 5000,        // Show warning at 5s remaining
             SOLO_DECISION_DURATION_MS: 10000, // 10 seconds for IGL to choose Normal vs Anchor Solo
         },
     };

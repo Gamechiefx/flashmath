@@ -3,14 +3,18 @@
 /**
  * PointsFeedFAB
  * 
- * A Floating Action Button that displays a real-time points feed for both teams
- * during a match. Shows scoring events as they happen with animations.
+ * A Floating Action Button that displays itemized real-time points accumulation
+ * for each team during a match. Shows a breakdown of how points are being earned.
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { Activity, X, ChevronUp, ChevronDown, Zap, Target, Clock, Trophy, Flame } from 'lucide-react';
+import { 
+    Activity, X, ChevronDown, ChevronUp, 
+    Target, Clock, Trophy, Flame, Zap,
+    TrendingUp, TrendingDown, Minus
+} from 'lucide-react';
 
 export interface PointsEvent {
     id: string;
@@ -27,76 +31,286 @@ export interface PointsEvent {
     description: string;
 }
 
+// Aggregated stats for a team
+interface TeamPointsBreakdown {
+    totalScore: number;
+    correctAnswers: { count: number; points: number };
+    speedBonuses: { count: number; points: number };
+    incorrectAnswers: { count: number; points: number };
+    timeouts: { count: number; points: number };
+    streakMilestones: { count: number; points: number };
+    firstToFinish: { count: number; points: number };
+}
+
 interface PointsFeedFABProps {
     team1Name: string;
     team2Name: string;
+    team1Id: string;
+    team2Id: string;
     team1Score: number;
     team2Score: number;
     myTeamId: string;
     events: PointsEvent[];
-    maxEvents?: number;
+}
+
+// Progress bar component for point categories
+function PointsCategoryBar({ 
+    label, 
+    count, 
+    points, 
+    icon: Icon, 
+    color,
+    maxPoints = 100
+}: {
+    label: string;
+    count: number;
+    points: number;
+    icon: typeof Target;
+    color: string;
+    maxPoints?: number;
+}) {
+    const percentage = Math.min(100, Math.abs(points) / maxPoints * 100);
+    const isNegative = points < 0;
+    
+    return (
+        <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-1.5">
+                    <Icon className={cn("w-3 h-3", color)} />
+                    <span className="text-white/70">{label}</span>
+                    <span className="text-white/40">×{count}</span>
+                </div>
+                <span className={cn(
+                    "font-bold tabular-nums",
+                    isNegative ? "text-red-400" : "text-emerald-400"
+                )}>
+                    {points >= 0 ? '+' : ''}{points}
+                </span>
+            </div>
+            <div className="relative h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <motion.div
+                    className={cn(
+                        "absolute inset-y-0 left-0 rounded-full",
+                        isNegative ? "bg-red-500" : color.replace('text-', 'bg-')
+                    )}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${percentage}%` }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                />
+            </div>
+        </div>
+    );
+}
+
+// Team breakdown panel
+function TeamBreakdownPanel({ 
+    teamName, 
+    breakdown, 
+    isMyTeam,
+    totalScore
+}: { 
+    teamName: string; 
+    breakdown: TeamPointsBreakdown;
+    isMyTeam: boolean;
+    totalScore: number;
+}) {
+    const trend = totalScore > 0 ? 'up' : totalScore < 0 ? 'down' : 'neutral';
+    
+    return (
+        <div className={cn(
+            "p-3 rounded-xl border",
+            isMyTeam 
+                ? "bg-emerald-500/10 border-emerald-500/30" 
+                : "bg-rose-500/10 border-rose-500/30"
+        )}>
+            {/* Team Header */}
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                    {isMyTeam && (
+                        <span className="text-[10px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded font-bold">
+                            YOU
+                        </span>
+                    )}
+                    <span className={cn(
+                        "font-bold text-sm truncate max-w-[100px]",
+                        isMyTeam ? "text-emerald-300" : "text-rose-300"
+                    )}>
+                        {teamName}
+                    </span>
+                </div>
+                <div className="flex items-center gap-1">
+                    {trend === 'up' && <TrendingUp className="w-4 h-4 text-emerald-400" />}
+                    {trend === 'down' && <TrendingDown className="w-4 h-4 text-red-400" />}
+                    {trend === 'neutral' && <Minus className="w-4 h-4 text-white/40" />}
+                    <span className={cn(
+                        "text-lg font-black tabular-nums",
+                        isMyTeam ? "text-emerald-400" : "text-rose-400"
+                    )}>
+                        {totalScore}
+                    </span>
+                </div>
+            </div>
+            
+            {/* Point Categories */}
+            <div className="space-y-2.5">
+                {breakdown.correctAnswers.count > 0 && (
+                    <PointsCategoryBar
+                        label="Correct"
+                        count={breakdown.correctAnswers.count}
+                        points={breakdown.correctAnswers.points}
+                        icon={Target}
+                        color="text-emerald-400"
+                        maxPoints={50}
+                    />
+                )}
+                
+                {breakdown.speedBonuses.count > 0 && (
+                    <PointsCategoryBar
+                        label="Speed"
+                        count={breakdown.speedBonuses.count}
+                        points={breakdown.speedBonuses.points}
+                        icon={Zap}
+                        color="text-cyan-400"
+                        maxPoints={35}
+                    />
+                )}
+                
+                {breakdown.streakMilestones.count > 0 && (
+                    <PointsCategoryBar
+                        label="Streaks"
+                        count={breakdown.streakMilestones.count}
+                        points={breakdown.streakMilestones.points}
+                        icon={Flame}
+                        color="text-amber-400"
+                        maxPoints={100}
+                    />
+                )}
+                
+                {breakdown.firstToFinish.count > 0 && (
+                    <PointsCategoryBar
+                        label="1st Finish"
+                        count={breakdown.firstToFinish.count}
+                        points={breakdown.firstToFinish.points}
+                        icon={Trophy}
+                        color="text-yellow-400"
+                        maxPoints={50}
+                    />
+                )}
+                
+                {breakdown.incorrectAnswers.count > 0 && (
+                    <PointsCategoryBar
+                        label="Incorrect"
+                        count={breakdown.incorrectAnswers.count}
+                        points={breakdown.incorrectAnswers.points}
+                        icon={X}
+                        color="text-red-400"
+                        maxPoints={30}
+                    />
+                )}
+                
+                {breakdown.timeouts.count > 0 && (
+                    <PointsCategoryBar
+                        label="Timeouts"
+                        count={breakdown.timeouts.count}
+                        points={breakdown.timeouts.points}
+                        icon={Clock}
+                        color="text-orange-400"
+                        maxPoints={30}
+                    />
+                )}
+                
+                {/* No events yet */}
+                {breakdown.correctAnswers.count === 0 && 
+                 breakdown.incorrectAnswers.count === 0 && 
+                 breakdown.timeouts.count === 0 && (
+                    <div className="text-center text-white/30 text-xs py-2">
+                        No scoring events yet
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }
 
 export function PointsFeedFAB({
     team1Name,
     team2Name,
+    team1Id,
+    team2Id,
     team1Score,
     team2Score,
     myTeamId,
     events,
-    maxEvents = 50,
 }: PointsFeedFABProps) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isMinimized, setIsMinimized] = useState(false);
-    const feedRef = useRef<HTMLDivElement>(null);
     
-    // Auto-scroll to bottom when new events arrive
-    useEffect(() => {
-        if (feedRef.current && isExpanded) {
-            feedRef.current.scrollTop = feedRef.current.scrollHeight;
+    // Aggregate events into team breakdowns
+    const { team1Breakdown, team2Breakdown } = useMemo(() => {
+        const createEmptyBreakdown = (): TeamPointsBreakdown => ({
+            totalScore: 0,
+            correctAnswers: { count: 0, points: 0 },
+            speedBonuses: { count: 0, points: 0 },
+            incorrectAnswers: { count: 0, points: 0 },
+            timeouts: { count: 0, points: 0 },
+            streakMilestones: { count: 0, points: 0 },
+            firstToFinish: { count: 0, points: 0 },
+        });
+        
+        const t1 = createEmptyBreakdown();
+        const t2 = createEmptyBreakdown();
+        
+        for (const event of events) {
+            const breakdown = event.teamId === team1Id ? t1 : t2;
+            
+            switch (event.eventType) {
+                case 'correct':
+                    // Base points (5) go to correct, speed bonus tracked separately
+                    const basePoints = 5;
+                    const speedBonus = event.speedBonus || 0;
+                    breakdown.correctAnswers.count += 1;
+                    breakdown.correctAnswers.points += basePoints;
+                    if (speedBonus > 0) {
+                        breakdown.speedBonuses.count += 1;
+                        breakdown.speedBonuses.points += speedBonus;
+                    }
+                    breakdown.totalScore += basePoints + speedBonus;
+                    break;
+                    
+                case 'incorrect':
+                    breakdown.incorrectAnswers.count += 1;
+                    breakdown.incorrectAnswers.points += event.points; // Already negative
+                    breakdown.totalScore += event.points;
+                    break;
+                    
+                case 'timeout':
+                    breakdown.timeouts.count += 1;
+                    breakdown.timeouts.points += event.points; // Already negative
+                    breakdown.totalScore += event.points;
+                    break;
+                    
+                case 'streak_milestone':
+                    breakdown.streakMilestones.count += 1;
+                    breakdown.streakMilestones.points += event.points;
+                    breakdown.totalScore += event.points;
+                    break;
+                    
+                case 'first_to_finish':
+                    breakdown.firstToFinish.count += 1;
+                    breakdown.firstToFinish.points += event.points;
+                    breakdown.totalScore += event.points;
+                    break;
+            }
         }
-    }, [events, isExpanded]);
+        
+        return { team1Breakdown: t1, team2Breakdown: t2 };
+    }, [events, team1Id, team2Id]);
     
-    // Get icon for event type
-    const getEventIcon = (eventType: PointsEvent['eventType']) => {
-        switch (eventType) {
-            case 'correct':
-                return <Target className="w-3.5 h-3.5" />;
-            case 'incorrect':
-                return <X className="w-3.5 h-3.5" />;
-            case 'timeout':
-                return <Clock className="w-3.5 h-3.5" />;
-            case 'streak_milestone':
-                return <Flame className="w-3.5 h-3.5" />;
-            case 'first_to_finish':
-                return <Trophy className="w-3.5 h-3.5" />;
-            default:
-                return <Zap className="w-3.5 h-3.5" />;
-        }
-    };
+    // Determine which team is "my team"
+    const isTeam1Mine = team1Id === myTeamId;
     
-    // Get color classes for event
-    const getEventColors = (event: PointsEvent) => {
-        if (event.eventType === 'streak_milestone' || event.eventType === 'first_to_finish') {
-            return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-        }
-        if (event.points > 0) {
-            return event.isMyTeam 
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                : 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-        }
-        return event.isMyTeam
-            ? 'bg-red-500/20 text-red-400 border-red-500/30'
-            : 'bg-orange-500/20 text-orange-400 border-orange-500/30';
-    };
-    
-    // Format points with sign
-    const formatPoints = (points: number) => {
-        return points >= 0 ? `+${points}` : `${points}`;
-    };
-    
-    // Recent events (last 3) for collapsed view
-    const recentEvents = events.slice(-3);
+    // Total events count
+    const totalEvents = events.length;
     
     // If minimized, just show the FAB button
     if (isMinimized) {
@@ -116,9 +330,9 @@ export function PointsFeedFAB({
                 )}
             >
                 <Activity className="w-5 h-5 text-white" />
-                {events.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs font-bold flex items-center justify-center">
-                        {events.length > 99 ? '99+' : events.length}
+                {totalEvents > 0 && (
+                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs font-bold flex items-center justify-center text-white">
+                        {totalEvents > 99 ? '99+' : totalEvents}
                     </span>
                 )}
             </motion.button>
@@ -131,11 +345,11 @@ export function PointsFeedFAB({
             animate={{ x: 0, opacity: 1 }}
             className={cn(
                 "fixed bottom-24 left-4 z-40",
-                "bg-black/90 backdrop-blur-xl",
+                "bg-black/95 backdrop-blur-xl",
                 "border border-white/10 rounded-2xl",
                 "shadow-2xl shadow-black/50",
                 "overflow-hidden",
-                isExpanded ? "w-80" : "w-64"
+                isExpanded ? "w-[340px]" : "w-72"
             )}
         >
             {/* Header */}
@@ -145,7 +359,8 @@ export function PointsFeedFAB({
             >
                 <div className="flex items-center gap-2">
                     <Activity className="w-4 h-4 text-violet-400" />
-                    <span className="text-sm font-bold text-white">Live Points Feed</span>
+                    <span className="text-sm font-bold text-white">Points Breakdown</span>
+                    <span className="text-xs text-white/40">({totalEvents})</span>
                 </div>
                 <div className="flex items-center gap-1">
                     <button
@@ -154,6 +369,7 @@ export function PointsFeedFAB({
                             setIsMinimized(true);
                         }}
                         className="p-1 hover:bg-white/10 rounded transition-colors"
+                        aria-label="Minimize"
                     >
                         <X className="w-4 h-4 text-white/60" />
                     </button>
@@ -165,110 +381,94 @@ export function PointsFeedFAB({
                 </div>
             </div>
             
-            {/* Score Summary */}
-            <div className="flex items-center justify-between px-3 py-2 bg-black/50 border-b border-white/5">
-                <div className="text-center flex-1">
-                    <div className="text-xs text-emerald-400 font-medium truncate">{team1Name}</div>
-                    <div className="text-lg font-bold text-white">{team1Score}</div>
+            {/* Score Comparison Bar (always visible) */}
+            <div className="px-3 py-2 border-b border-white/5">
+                <div className="flex items-center justify-between text-xs text-white/50 mb-1">
+                    <span className={cn("font-medium", isTeam1Mine ? "text-emerald-400" : "text-white/70")}>
+                        {team1Name}
+                    </span>
+                    <span className={cn("font-medium", !isTeam1Mine ? "text-emerald-400" : "text-white/70")}>
+                        {team2Name}
+                    </span>
                 </div>
-                <div className="text-white/30 text-sm font-bold px-2">vs</div>
-                <div className="text-center flex-1">
-                    <div className="text-xs text-blue-400 font-medium truncate">{team2Name}</div>
-                    <div className="text-lg font-bold text-white">{team2Score}</div>
+                <div className="flex items-center gap-2">
+                    <span className={cn(
+                        "text-lg font-black tabular-nums w-12 text-left",
+                        isTeam1Mine ? "text-emerald-400" : "text-rose-400"
+                    )}>
+                        {team1Score}
+                    </span>
+                    <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden flex">
+                        <motion.div
+                            className={cn(
+                                "h-full",
+                                isTeam1Mine ? "bg-emerald-500" : "bg-rose-500"
+                            )}
+                            animate={{ 
+                                width: `${team1Score + team2Score > 0 
+                                    ? (team1Score / (team1Score + team2Score)) * 100 
+                                    : 50}%` 
+                            }}
+                            transition={{ duration: 0.3 }}
+                        />
+                        <motion.div
+                            className={cn(
+                                "h-full",
+                                !isTeam1Mine ? "bg-emerald-500" : "bg-rose-500"
+                            )}
+                            animate={{ 
+                                width: `${team1Score + team2Score > 0 
+                                    ? (team2Score / (team1Score + team2Score)) * 100 
+                                    : 50}%` 
+                            }}
+                            transition={{ duration: 0.3 }}
+                        />
+                    </div>
+                    <span className={cn(
+                        "text-lg font-black tabular-nums w-12 text-right",
+                        !isTeam1Mine ? "text-emerald-400" : "text-rose-400"
+                    )}>
+                        {team2Score}
+                    </span>
                 </div>
             </div>
             
-            {/* Events Feed */}
+            {/* Expanded Team Breakdowns */}
             <AnimatePresence mode="popLayout">
-                {isExpanded ? (
+                {isExpanded && (
                     <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         transition={{ duration: 0.2 }}
                     >
-                        <div 
-                            ref={feedRef}
-                            className="max-h-64 overflow-y-auto p-2 space-y-1.5"
-                        >
-                            {events.length === 0 ? (
-                                <div className="text-center text-white/40 text-sm py-4">
-                                    No scoring events yet...
-                                </div>
-                            ) : (
-                                events.slice(-maxEvents).map((event) => (
-                                    <motion.div
-                                        key={event.id}
-                                        initial={{ x: -20, opacity: 0 }}
-                                        animate={{ x: 0, opacity: 1 }}
-                                        className={cn(
-                                            "flex items-center gap-2 px-2 py-1.5 rounded-lg border",
-                                            getEventColors(event)
-                                        )}
-                                    >
-                                        <div className="flex-shrink-0">
-                                            {getEventIcon(event.eventType)}
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1">
-                                                <span className="text-xs font-medium truncate">
-                                                    {event.playerName}
-                                                </span>
-                                                {event.isMyTeam && (
-                                                    <span className="text-[10px] bg-white/10 px-1 rounded">YOU</span>
-                                                )}
-                                            </div>
-                                            <div className="text-[10px] opacity-70 truncate">
-                                                {event.description}
-                                            </div>
-                                        </div>
-                                        <div className={cn(
-                                            "flex-shrink-0 text-sm font-bold",
-                                            event.points >= 0 ? "text-emerald-400" : "text-red-400"
-                                        )}>
-                                            {formatPoints(event.points)}
-                                        </div>
-                                    </motion.div>
-                                ))
-                            )}
-                        </div>
-                    </motion.div>
-                ) : (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="p-2 space-y-1"
-                    >
-                        {recentEvents.length === 0 ? (
-                            <div className="text-center text-white/40 text-xs py-2">
-                                Waiting for action...
-                            </div>
-                        ) : (
-                            recentEvents.map((event) => (
-                                <div
-                                    key={event.id}
-                                    className={cn(
-                                        "flex items-center justify-between px-2 py-1 rounded text-xs",
-                                        getEventColors(event)
-                                    )}
-                                >
-                                    <span className="truncate flex-1">{event.playerName}</span>
-                                    <span className={cn(
-                                        "font-bold ml-2",
-                                        event.points >= 0 ? "text-emerald-400" : "text-red-400"
-                                    )}>
-                                        {formatPoints(event.points)}
-                                    </span>
-                                </div>
-                            ))
-                        )}
-                        <div className="text-center text-white/40 text-[10px] pt-1">
-                            Click to expand • {events.length} events
+                        <div className="p-3 space-y-3 max-h-80 overflow-y-auto">
+                            {/* My Team First */}
+                            <TeamBreakdownPanel
+                                teamName={isTeam1Mine ? team1Name : team2Name}
+                                breakdown={isTeam1Mine ? team1Breakdown : team2Breakdown}
+                                isMyTeam={true}
+                                totalScore={isTeam1Mine ? team1Score : team2Score}
+                            />
+                            
+                            {/* Opponent Team */}
+                            <TeamBreakdownPanel
+                                teamName={isTeam1Mine ? team2Name : team1Name}
+                                breakdown={isTeam1Mine ? team2Breakdown : team1Breakdown}
+                                isMyTeam={false}
+                                totalScore={isTeam1Mine ? team2Score : team1Score}
+                            />
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
+            
+            {/* Collapsed hint */}
+            {!isExpanded && (
+                <div className="px-3 py-2 text-center text-white/30 text-xs">
+                    Click to see breakdown
+                </div>
+            )}
         </motion.div>
     );
 }
@@ -300,7 +500,7 @@ export function createPointsEventFromResult(
         description += ` (+${data.speedBonus} speed)`;
     }
     
-    // Check for streak milestone
+    // Check for streak milestone - create separate event if present
     if (data.streakMilestoneBonus && data.streakMilestoneBonus > 0) {
         eventType = 'streak_milestone';
         description = `🔥 Streak ${data.teamStreak}! (+${data.streakMilestoneBonus} bonus)`;
@@ -340,7 +540,7 @@ export function createTimeoutEvent(
         isMyTeam: teamId === myTeamId,
         playerName,
         eventType: 'timeout',
-        points: -pointsLost,
+        points: -Math.abs(pointsLost),
         description: '⏱️ Question timed out',
     };
 }

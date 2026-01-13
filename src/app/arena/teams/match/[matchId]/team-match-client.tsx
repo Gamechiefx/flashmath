@@ -4539,6 +4539,8 @@ export function TeamMatchClient({
                 <PointsFeedFAB
                     team1Name={displayMatchState.team1.teamName || 'Team 1'}
                     team2Name={displayMatchState.team2.teamName || 'Team 2'}
+                    team1Id={displayMatchState.team1.teamId}
+                    team2Id={displayMatchState.team2.teamId}
                     team1Score={displayMatchState.team1.score}
                     team2Score={displayMatchState.team2.score}
                     myTeamId={myTeam?.teamId || ''}
