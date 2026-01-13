@@ -4,7 +4,8 @@
 #
 # IMPORTANT: Database Persistence
 # - SQLite database is stored in ./data/flashmath.db (bind mount)
-# - This ensures data persists even if containers/volumes are deleted
+# - PostgreSQL data is stored in a named volume (arena matches, can be recreated)
+# - Redis data is stored in a named volume (cache/queues, can be recreated)
 #
 # Before running:
 # 1. Copy .env.example to .env and fill in production values
@@ -14,11 +15,15 @@
 # Usage:
 #   docker-compose up -d
 #   docker-compose logs -f flashmath
-#   docker-compose down  # Safe - keeps data
+#   docker-compose down      # Safe - keeps all data
+#   docker-compose down -v   # WARNING: Deletes PostgreSQL/Redis volumes (SQLite safe)
 #
 # ==============================================================================
 
 services:
+  # ============================================
+  # NEXT.JS APPLICATION
+  # ============================================
   flashmath:
     build:
       context: .
@@ -27,7 +32,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # CRITICAL: Use bind mount for database persistence
+      # CRITICAL: Use bind mount for SQLite database persistence
       - ./data:/app/data
     environment:
       - NODE_ENV=production
@@ -36,11 +41,27 @@ services:
       # ============================================
       - NEXTAUTH_URL=https://flashmath.io
       - AUTH_SECRET=${AUTH_SECRET}
+      # Trust proxy headers from reverse proxy (nginx/traefik)
+      - TRUST_PROXY=1
       
       # ============================================
       # DATABASE CONFIGURATION
       # ============================================
+      # SQLite (main database - users, inventory, etc.)
       - DATABASE_PATH=/app/data/flashmath.db
+      # PostgreSQL (arena matches - can be recreated if needed)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=flashmath_arena
+      - POSTGRES_USER=flashmath
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-flashmath_prod_password}
+      
+      # ============================================
+      # REDIS CONFIGURATION
+      # ============================================
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       
       # ============================================
       # EMAIL CONFIGURATION (SMTP)
@@ -53,13 +74,13 @@ services:
       - EMAIL_FROM=${EMAIL_FROM:-Flash Math <noreply@flashmath.io>}
       - EMAIL_REPLY_TO=${EMAIL_REPLY_TO:-support@flashmath.io}
       
-      # ============================================
-      # REDIS (Optional - for Arena matchmaking)
-      # ============================================
-      # Uncomment if using Redis:
-      # - REDIS_URL=${REDIS_URL}
-      
       # Dev Tools - DISABLED in production
+      - ENABLE_DEV_TOOLS=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: always
     healthcheck:
       # Use node to check health - more reliable than wget
@@ -69,8 +90,56 @@ services:
       retries: 3
       start_period: 30s
 
+  # ============================================
+  # POSTGRESQL - Arena Match Data
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: flashmath-postgres
+    environment:
+      - POSTGRES_DB=flashmath_arena
+      - POSTGRES_USER=flashmath
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-flashmath_prod_password}
+    volumes:
+      - flashmath_postgres_data:/var/lib/postgresql/data
+    # Not exposed externally in production (only internal network)
+    # Uncomment if you need external access for debugging:
+    # ports:
+    #   - "5432:5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashmath -d flashmath_arena"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # REDIS - Matchmaking Queue & Presence
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: flashmath-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - flashmath_redis_data:/data
+    # Not exposed externally in production (only internal network)
+    # Uncomment if you need external access for debugging:
+    # ports:
+    #   - "6379:6379"
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 # ==============================================================================
-# NO NAMED VOLUMES FOR SQLITE
+# VOLUMES
 # ==============================================================================
-# SQLite uses a bind mount (./data) to prevent data loss
-# Only add volumes here if using PostgreSQL/Redis in production
+# NOTE: SQLite database uses a bind mount (./data) instead of a volume
+# This prevents accidental data loss from `docker-compose down -v`
+volumes:
+  flashmath_postgres_data:
+    name: flashmath_postgres_data
+  flashmath_redis_data:
+    name: flashmath_redis_data
