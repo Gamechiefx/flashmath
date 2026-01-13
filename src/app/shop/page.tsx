@@ -10,6 +10,7 @@ import Link from "next/link";
 import { ShopItemCard } from "@/components/shop/shop-item-card";
 import { ShopTimer } from "@/components/shop/shop-timer";
 import { AuthHeader } from "@/components/auth-header";
+import { unstable_noStore as noStore } from 'next/cache';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -27,6 +28,8 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: string }> = {
 };
 
 export default async function ShopPage() {
+    noStore(); // Prevent caching - always fetch fresh data
+
     const session = await auth();
     if (!session?.user) return <div>Please log in</div>;
     const userId = (session.user as any).id;

@@ -6,8 +6,11 @@ import { Archive } from "lucide-react";
 import Link from "next/link";
 import { AuthHeader } from "@/components/auth-header";
 import { CompactLockerView } from "@/components/locker/compact-locker-view";
+import { unstable_noStore as noStore } from 'next/cache';
 
 export default async function LockerPage() {
+    noStore(); // Prevent caching - always fetch fresh data
+
     const session = await auth();
     if (!session?.user) return <div>Please log in</div>;
     const userId = (session.user as any).id;

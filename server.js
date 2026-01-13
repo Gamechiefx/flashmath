@@ -5133,6 +5133,8 @@ app.prepare().then(async () => {
             
             // Notify about this team's slot change (to own team)
             // Include activePlayerId AND the question so client can update immediately
+            const questionText = activePlayer?.currentQuestion?.question;
+            console.log(`[TeamMatch] Emitting slot_change with questionText: ${questionText ? questionText : 'MISSING'}`);
             ns.to(`team:${match.matchId}:${team.teamId}`).emit('slot_change', {
                 teamId: team.teamId,
                 currentSlot: team.currentSlot,
@@ -5140,7 +5142,7 @@ app.prepare().then(async () => {
                 activePlayerId: activePlayer?.odUserId,
                 activePlayerName: activePlayer?.odName,
                 // Include question for immediate display (no waiting for question_update)
-                questionText: activePlayer?.currentQuestion?.question,
+                questionText: questionText,
                 questionId: Date.now().toString(),
             });
             

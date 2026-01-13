@@ -49,6 +49,8 @@ export function ItemEditorRow({ item }: { item: Item }) {
     const [isDirty, setIsDirty] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
 
+    const router = useRouter();
+
     const handleSave = async () => {
         setIsSaving(true);
         const price = parseInt(priceStr) || 0;
@@ -56,9 +58,10 @@ export function ItemEditorRow({ item }: { item: Item }) {
         setIsSaving(false);
         if (res.success) {
             setIsDirty(false);
-            // flash success?
+            toast.success(`Updated ${name}`);
+            router.refresh(); // Invalidate router cache so shop/locker see changes
         } else {
-            alert("Failed to save");
+            toast.error(res.error || "Failed to save");
         }
     };
 

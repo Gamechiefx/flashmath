@@ -1645,6 +1645,7 @@ export function TeamMatchClient({
             questionId?: string;
         }) => {
             console.log('[TeamMatch] Slot change:', data);
+            console.log('[TeamMatch] Slot change has question:', !!data.questionText, 'questionText:', data.questionText);
             setMatchState(prev => {
                 if (!prev) return prev;
                 const newState = JSON.parse(JSON.stringify(prev));
@@ -1663,6 +1664,7 @@ export function TeamMatchClient({
                         // If this is the active player AND we have a question, set it immediately
                         // This prevents the "Relay in progress..." flash when it's the human's turn
                         if (isActive && data.questionText) {
+                            console.log('[TeamMatch] Setting question from slot_change for player:', playerId, 'question:', data.questionText);
                             team.players[playerId].currentQuestion = {
                                 question: data.questionText,
                                 operation: data.slotOperation,
