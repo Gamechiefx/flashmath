@@ -554,6 +554,11 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                 }
             } catch (error) {
                 console.error('[ModeSelection] Error checking party:', error);
+                // On error, assume user is not in a party to prevent stale banner
+                setIsInParty(false);
+                setPartyId(null);
+                hasAutoSelectedRef.current = false;
+                previousPartyIdRef.current = null;
             }
         };
         
