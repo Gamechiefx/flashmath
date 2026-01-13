@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { MockMatchSimulator, type MatchPhase } from '@/lib/arena/mock-match-state';
 import {
-    Clock, Crown, Anchor, Zap, Check, X,
+    Clock, Crown, Anchor, Zap, Check, X, Hash,
     Pause, Play, AlertCircle, Trophy, LogOut, ArrowLeft, Target,
     Maximize, Minimize, ChevronLeft, ChevronRight, Star, Home
 } from 'lucide-react';
@@ -4585,100 +4585,186 @@ export function TeamMatchClient({
 
             {/* Player Stats Modal for Post-Match Results */}
             <AnimatePresence>
-                {selectedPlayerStats && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
-                        onClick={() => setSelectedPlayerStats(null)}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, y: 20 }}
-                            animate={{ scale: 1, y: 0 }}
-                            exit={{ scale: 0.9, y: 20 }}
-                            className="bg-slate-900 border border-white/20 rounded-2xl p-6 max-w-md w-full mx-4"
-                            onClick={e => e.stopPropagation()}
-                        >
-                            {/* Header */}
-                            <div className="flex items-center justify-between mb-6">
-                                <div className="flex items-center gap-3">
-                                    <div
-                                        className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-purple-600
-                                                   flex items-center justify-center text-xl font-black text-white"
-                                        style={selectedPlayerStats.odEquippedBanner && BANNER_STYLES[selectedPlayerStats.odEquippedBanner] ? {
-                                            background: BANNER_STYLES[selectedPlayerStats.odEquippedBanner].gradient
-                                        } : {}}
-                                    >
-                                        {selectedPlayerStats.odName?.charAt(0) || '?'}
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-lg">{selectedPlayerStats.odName}</h3>
-                                        <p className="text-sm text-white/50">
-                                            {selectedPlayerStats.slot || (selectedPlayerStats.isAnchor ? 'Anchor' : selectedPlayerStats.isIgl ? 'IGL' : 'Player')}
-                                        </p>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setSelectedPlayerStats(null)}
-                                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
-                            </div>
+                {selectedPlayerStats && (() => {
+                    const resolvedBanner = resolveBannerStyle(selectedPlayerStats.odEquippedBanner || 'default');
+                    const bannerStyle = BANNER_STYLES[resolvedBanner] || BANNER_STYLES.default;
+                    const accuracy = selectedPlayerStats.total > 0
+                        ? Math.round((selectedPlayerStats.correct / selectedPlayerStats.total) * 100)
+                        : 0;
+                    const avgTime = selectedPlayerStats.total > 0
+                        ? (selectedPlayerStats.totalAnswerTimeMs / selectedPlayerStats.total / 1000).toFixed(2)
+                        : 'N/A';
 
-                            {/* Stats grid */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
-                                    <p className="text-3xl font-black text-primary">
-                                        {selectedPlayerStats.score}
-                                    </p>
-                                    <p className="text-xs text-white/50">Points Scored</p>
+                    return (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md"
+                            onClick={() => setSelectedPlayerStats(null)}
+                        >
+                            <motion.div
+                                initial={{ scale: 0.9, y: 20 }}
+                                animate={{ scale: 1, y: 0 }}
+                                exit={{ scale: 0.9, y: 20 }}
+                                className="bg-slate-950 border-2 border-cyan-500/50 rounded-2xl overflow-hidden max-w-lg w-full mx-4 shadow-2xl shadow-cyan-500/20"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                {/* Banner Header */}
+                                <div className={cn("relative h-32 bg-gradient-to-b", bannerStyle.background)}>
+                                    {/* Pattern overlay */}
+                                    {bannerStyle.pattern && (
+                                        <div
+                                            className={cn("absolute inset-0 opacity-30", bannerStyle.animationClass)}
+                                            style={{
+                                                backgroundImage: bannerStyle.pattern,
+                                                backgroundSize: bannerStyle.patternSize || 'auto'
+                                            }}
+                                        />
+                                    )}
+
+                                    {/* Close button */}
+                                    <button
+                                        onClick={() => setSelectedPlayerStats(null)}
+                                        className="absolute top-3 right-3 p-2 rounded-lg bg-black/50 hover:bg-black/70 transition-colors z-10"
+                                    >
+                                        <X className="w-5 h-5 text-white" />
+                                    </button>
+
+                                    {/* Level Badge */}
+                                    <div className="absolute top-3 left-3 z-10">
+                                        <div className="w-12 h-14 rounded-lg bg-slate-900/90 border border-white/20 flex flex-col items-center justify-center">
+                                            <span className="text-[9px] font-black text-white/50 uppercase">LVL</span>
+                                            <span className="text-xl font-black text-white">{selectedPlayerStats.odLevel || 1}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Role Badge */}
+                                    {(selectedPlayerStats.isIgl || selectedPlayerStats.isAnchor) && (
+                                        <div className="absolute top-3 right-14 z-10">
+                                            {selectedPlayerStats.isIgl && (
+                                                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 border-2 border-amber-300 flex items-center justify-center shadow-lg">
+                                                    <Crown className="w-5 h-5 text-white" />
+                                                </div>
+                                            )}
+                                            {selectedPlayerStats.isAnchor && !selectedPlayerStats.isIgl && (
+                                                <div className="w-10 h-10 rounded-lg bg-purple-500/30 border border-purple-400 flex items-center justify-center">
+                                                    <Anchor className="w-5 h-5 text-purple-400" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Avatar - overlapping */}
+                                    <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
+                                        <div className={cn(
+                                            "w-20 h-20 rounded-full flex items-center justify-center",
+                                            "bg-slate-900 border-4 shadow-2xl",
+                                            selectedPlayerStats.isIgl ? "border-amber-500" :
+                                            selectedPlayerStats.isAnchor ? "border-purple-500" :
+                                            "border-cyan-500"
+                                        )}>
+                                            <span className="text-3xl font-black text-white">
+                                                {selectedPlayerStats.odName?.charAt(0) || '?'}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
-                                    <p className="text-3xl font-black text-emerald-400">
-                                        {selectedPlayerStats.total > 0
-                                            ? Math.round((selectedPlayerStats.correct / selectedPlayerStats.total) * 100)
-                                            : 0}%
+
+                                {/* Player Info */}
+                                <div className="pt-14 pb-4 px-6 text-center border-b border-white/10">
+                                    <h3 className="text-xl font-black text-white uppercase tracking-wide">
+                                        {selectedPlayerStats.odName}
+                                    </h3>
+                                    <p className="text-sm text-white/50 mt-1">
+                                        {selectedPlayerStats.odEquippedTitle
+                                            ? selectedPlayerStats.odEquippedTitle.replace(/^title[_-]?/i, '').replace(/[_-]/g, ' ')
+                                            : 'FlashMath Player'}
                                     </p>
-                                    <p className="text-xs text-white/50">Accuracy</p>
-                                </div>
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
-                                    <p className="text-3xl font-black text-cyan-400">
-                                        {selectedPlayerStats.total > 0
-                                            ? (selectedPlayerStats.totalAnswerTimeMs / selectedPlayerStats.total / 1000).toFixed(2)
-                                            : 'N/A'}s
-                                    </p>
-                                    <p className="text-xs text-white/50">Avg Answer Time</p>
-                                </div>
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
-                                    <p className="text-3xl font-black text-orange-400">
-                                        {selectedPlayerStats.maxStreak}
-                                    </p>
-                                    <p className="text-xs text-white/50">Best Streak</p>
-                                </div>
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
-                                    <p className="text-3xl font-black text-white">
-                                        {selectedPlayerStats.correct}/{selectedPlayerStats.total}
-                                    </p>
-                                    <p className="text-xs text-white/50">Questions</p>
-                                </div>
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
-                                    <div className="flex items-center justify-center gap-1">
-                                        {selectedPlayerStats.isIgl && <Crown className="w-5 h-5 text-amber-400" />}
-                                        {selectedPlayerStats.isAnchor && <Anchor className="w-5 h-5 text-purple-400" />}
-                                        {!selectedPlayerStats.isIgl && !selectedPlayerStats.isAnchor && (
-                                            <Target className="w-5 h-5 text-white/50" />
+                                    <div className="flex items-center justify-center gap-2 mt-2">
+                                        <div className="w-2 h-2 rounded-full bg-amber-500" />
+                                        <span className="text-xs font-semibold text-white/60">Bronze I</span>
+                                        {selectedPlayerStats.slot && (
+                                            <>
+                                                <span className="text-white/30">•</span>
+                                                <span className="text-xs font-semibold text-cyan-400 capitalize">{selectedPlayerStats.slot}</span>
+                                            </>
                                         )}
                                     </div>
-                                    <p className="text-xs text-white/50 mt-1">
-                                        {selectedPlayerStats.isIgl ? 'IGL' : selectedPlayerStats.isAnchor ? 'Anchor' : 'Player'}
-                                    </p>
                                 </div>
-                            </div>
+
+                                {/* Stats Grid */}
+                                <div className="p-6">
+                                    {/* Main Score */}
+                                    <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-cyan-500/20 to-primary/20 border border-cyan-500/30 text-center">
+                                        <p className="text-5xl font-black text-cyan-400">
+                                            +{selectedPlayerStats.score}
+                                        </p>
+                                        <p className="text-sm text-white/50 mt-1">Points Scored</p>
+                                    </div>
+
+                                    {/* Stats Row */}
+                                    <div className="grid grid-cols-4 gap-3">
+                                        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
+                                            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center mx-auto mb-2">
+                                                <Target className="w-4 h-4 text-emerald-400" />
+                                            </div>
+                                            <p className="text-xl font-black text-emerald-400">{accuracy}%</p>
+                                            <p className="text-[10px] text-white/50 uppercase">Accuracy</p>
+                                        </div>
+                                        <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-center">
+                                            <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center mx-auto mb-2">
+                                                <Clock className="w-4 h-4 text-cyan-400" />
+                                            </div>
+                                            <p className="text-xl font-black text-cyan-400">{avgTime}s</p>
+                                            <p className="text-[10px] text-white/50 uppercase">Avg Time</p>
+                                        </div>
+                                        <div className="p-3 rounded-xl bg-orange-500/10 border border-orange-500/30 text-center">
+                                            <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center mx-auto mb-2">
+                                                <Zap className="w-4 h-4 text-orange-400" />
+                                            </div>
+                                            <p className="text-xl font-black text-orange-400">{selectedPlayerStats.maxStreak}</p>
+                                            <p className="text-[10px] text-white/50 uppercase">Best Streak</p>
+                                        </div>
+                                        <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-center">
+                                            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center mx-auto mb-2">
+                                                <Hash className="w-4 h-4 text-white/70" />
+                                            </div>
+                                            <p className="text-xl font-black text-white">{selectedPlayerStats.correct}/{selectedPlayerStats.total}</p>
+                                            <p className="text-[10px] text-white/50 uppercase">Questions</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Role Badge */}
+                                    <div className="mt-4 flex items-center justify-center gap-2">
+                                        {selectedPlayerStats.isIgl && (
+                                            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/30">
+                                                <Crown className="w-4 h-4 text-amber-400" />
+                                                <span className="text-sm font-bold text-amber-400">In-Game Leader</span>
+                                            </div>
+                                        )}
+                                        {selectedPlayerStats.isAnchor && (
+                                            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 border border-purple-500/30">
+                                                <Anchor className="w-4 h-4 text-purple-400" />
+                                                <span className="text-sm font-bold text-purple-400">Anchor</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Close Button */}
+                                <button
+                                    onClick={() => setSelectedPlayerStats(null)}
+                                    className="w-full py-4 font-bold text-sm uppercase tracking-wider transition-all
+                                               bg-cyan-500/10 border-t border-cyan-500/30 text-cyan-400
+                                               hover:bg-cyan-500/20 hover:text-cyan-300"
+                                >
+                                    Close
+                                </button>
+                            </motion.div>
                         </motion.div>
-                    </motion.div>
-                )}
+                    );
+                })()}
             </AnimatePresence>
 
             {/* Demo Mode Control Panel */}

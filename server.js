@@ -2276,7 +2276,7 @@ app.prepare().then(async () => {
             STRATEGY_DURATION_MS: 60000,     // 60 seconds for IGL to assign slots before match
             TIMEOUT_DURATION_MS: 30000,      // 30 seconds per timeout
             TIMEOUTS_PER_TEAM: 2,
-            HANDOFF_COUNTDOWN_MS: 500,       // 0.5 second minimal delay before handoff
+            HANDOFF_COUNTDOWN_MS: 100,       // 0.1 second minimal delay before handoff (near instant)
             ROUND_COUNTDOWN_MS: 6000,        // 5-4-3-2-1-GO countdown (6s total)
             TYPING_THROTTLE_MS: 50,          // Throttle typing updates
             DOUBLE_CALLIN_ENABLED: true,     // Double Call-In available in 5v5
@@ -2299,7 +2299,7 @@ app.prepare().then(async () => {
             STRATEGY_DURATION_MS: 30000,     // 30 seconds for IGL to assign slots
             TIMEOUT_DURATION_MS: 30000,      // 30 seconds per timeout
             TIMEOUTS_PER_TEAM: 2,
-            HANDOFF_COUNTDOWN_MS: 500,
+            HANDOFF_COUNTDOWN_MS: 100,       // 0.1 second minimal delay before handoff (near instant)
             ROUND_COUNTDOWN_MS: 5000,        // 4-3-2-1-GO countdown (5s total, faster)
             TYPING_THROTTLE_MS: 50,
             DOUBLE_CALLIN_ENABLED: false,    // Double Call-In NOT available in 2v2 per spec

@@ -394,24 +394,17 @@ export async function incrementFailedAttempts(email: string): Promise<{ locked: 
         return { locked: false };
     }
 
+    // Track failed attempts for analytics but never lock the account
     const newAttempts = (user.failed_login_attempts || 0) + 1;
-    const maxAttempts = 5;
-
-    if (newAttempts >= maxAttempts) {
-        const lockedUntil = new Date(Date.now() + 1 * 60 * 1000).toISOString();
-        db.prepare(`
-            UPDATE users 
-            SET failed_login_attempts = ?, locked_until = ?
-            WHERE id = ?
-        `).run(newAttempts, lockedUntil, user.id);
-
-        console.log(`[Auth] Account locked for ${email} until ${lockedUntil}`);
-        return { locked: true };
-    }
-
     db.prepare('UPDATE users SET failed_login_attempts = ? WHERE id = ?').run(newAttempts, user.id);
 
-    return { locked: false, attemptsRemaining: maxAttempts - newAttempts };
+    // Log for monitoring purposes
+    if (newAttempts >= 10) {
+        console.log(`[Auth] High failed login attempts (${newAttempts}) for ${email}`);
+    }
+
+    // Never lock - allow unlimited attempts
+    return { locked: false };
 }
 
 export async function resetFailedAttempts(email: string): Promise<void> {
