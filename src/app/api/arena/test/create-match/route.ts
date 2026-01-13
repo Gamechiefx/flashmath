@@ -10,6 +10,13 @@ import { createAITeamMatch } from '@/lib/actions/team-matchmaking';
 import { generateAITeam } from '@/lib/arena/ai-team';
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Creates a synthetic AI-vs-human match for development and testing environments.
+ *
+ * This endpoint is blocked in production unless the ALLOW_TEST_API environment variable is set.
+ *
+ * @returns A JSON HTTP response containing the created match details: `matchId`, `partyId`, `humanTeam`, `aiTeam` (with `teamId`, `teamName`, and `playerCount`), and `testMode`. If the test API is disabled in production the response has status `403` and an error message; on unexpected errors the response has status `500` and an error message.
+ */
 export async function POST(request: NextRequest) {
     // Only allow in development/test
     if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_TEST_API) {
@@ -70,11 +77,14 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// Health check
+/**
+ * Health-check endpoint for the test match API.
+ *
+ * @returns JSON object with `status` set to `'ok'` and `testMode` set to `true` when `NODE_ENV` is not `'production'`, `false` otherwise.
+ */
 export async function GET() {
     return NextResponse.json({
         status: 'ok',
         testMode: process.env.NODE_ENV !== 'production',
     });
 }
-

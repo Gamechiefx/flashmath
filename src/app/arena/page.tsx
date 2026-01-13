@@ -7,6 +7,13 @@ import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Render the Arena page and enforce access control, providing eligibility data to the UI.
+ *
+ * Redirects to "/auth/login" when there is no authenticated user and to "/arena/verify-email" when the user's email is not verified. When access is allowed, fetches arena eligibility data and renders the page layout containing the AuthHeader and ArenaEligibility components populated with that data.
+ *
+ * @returns A React element representing the Arena page layout populated with the user's eligibility data.
+ */
 export default async function ArenaPage() {
     const session = await auth();
 

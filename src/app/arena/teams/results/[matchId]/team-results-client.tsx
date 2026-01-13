@@ -16,7 +16,16 @@ interface TeamResultsClientProps {
     currentUserId: string;
 }
 
-// Banner-style player card matching the mockup
+/**
+ * Renders a banner-style player card that displays avatar initial, score badge, role badges, name, rank, and a Stats button.
+ *
+ * @param player - Player object; expected fields used: `player_name`, `questions_correct`, `was_igl`, `was_anchor`, and `operation_slot`.
+ * @param isCurrentUser - Whether this player is the current user (applies highlighted border styling).
+ * @param isWinner - Whether this player is on the winning team (affects colors and accents).
+ * @param onShowStats - Callback invoked when the Stats button is clicked.
+ * @param index - Zero-based index of the card used to stagger the entrance animation delay.
+ * @returns A React element rendering the styled banner player card.
+ */
 function BannerPlayerCard({
     player,
     isCurrentUser,
@@ -119,7 +128,16 @@ function BannerPlayerCard({
     );
 }
 
-// Award card component
+/**
+ * Renders a compact award card with an icon, title, player name, and value, styled according to the specified color theme.
+ *
+ * @param icon - Icon component to render inside the colored square
+ * @param title - Short label for the award (e.g., "MVP", "Fastest")
+ * @param playerName - Name of the player associated with the award
+ * @param value - Display value for the award (e.g., score, time)
+ * @param color - Visual theme for the card; selects the accent and border colors (`'amber' | 'cyan' | 'orange'`)
+ * @returns A motion-enabled JSX element representing the award card
+ */
 function AwardCard({
     icon: Icon,
     title,
@@ -165,7 +183,22 @@ function AwardCard({
     );
 }
 
-// Player stats modal
+/**
+ * Displays a fullscreen modal with detailed statistics for a single player.
+ *
+ * @param player - Player data used to populate the modal. Expected fields include:
+ *   - `player_name`
+ *   - `operation_slot`
+ *   - `accuracy`
+ *   - `avg_answer_time_ms`
+ *   - `questions_correct`
+ *   - `questions_attempted`
+ *   - `best_streak`
+ *   - `was_igl`
+ *   - `was_anchor`
+ * @param onClose - Callback invoked when the modal should be closed (e.g., backdrop or close button).
+ * @returns A modal element showing the player's stats, or `null` when `player` is falsy.
+ */
 function PlayerStatsModal({
     player,
     onClose
@@ -259,7 +292,16 @@ function PlayerStatsModal({
     );
 }
 
-// Page indicator dots
+/**
+ * Render a row of page indicator dots for pagination.
+ *
+ * The component displays `totalPages` dots, highlights the dot for `currentPage`, and calls `onPageChange` with the selected page index when a dot is clicked.
+ *
+ * @param currentPage - Zero-based index of the currently active page
+ * @param totalPages - Total number of pages to render as dots
+ * @param onPageChange - Callback invoked with the page index when a dot is clicked
+ * @returns A horizontal group of interactive dots representing pages
+ */
 function PageIndicator({
     currentPage,
     totalPages,
@@ -287,6 +329,15 @@ function PageIndicator({
     );
 }
 
+/**
+ * Render an interactive match results UI with winner and loser pages, per-player banner cards, team awards, paging controls, fullscreen toggle, and a player stats modal.
+ *
+ * @param matchId - Unique identifier for the match.
+ * @param match - Match data containing team ids, names, tags, scores, and `winner_team_id`.
+ * @param players - Array of player objects used to populate banner cards, compute awards, and show detailed stats.
+ * @param currentUserId - Current user's id used to highlight their card and determine victory/defeat state.
+ * @returns The rendered React element displaying the match results interface.
+ */
 export function TeamResultsClient({
     matchId,
     match,

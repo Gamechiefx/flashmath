@@ -57,19 +57,37 @@ const TREND_CONFIG: Record<TrendDirection, { label: string; icon: typeof Trendin
     falling: { label: 'Falling', icon: TrendingDown, color: 'text-red-400' },
 };
 
-// Get operation display info
+/**
+ * Provides display metadata (icon, label, and gradient color) for a given operation id.
+ *
+ * @param operation - The operation identifier to look up (e.g., "addition", "division")
+ * @returns An object with `icon`, `label`, and `color` for rendering the operation; if the operation id is not found, returns a placeholder object with a question-mark icon, the provided `operation` as the `label`, and a neutral gray gradient `color`.
+ */
 function getOperationInfo(operation: string): { icon: string; label: string; color: string } {
     const op = OPERATIONS.find(o => o.id === operation);
     return op || { icon: '❓', label: operation, color: 'from-gray-500 to-gray-600' };
 }
 
-// Format speed in human-readable format
+/**
+ * Format a duration in milliseconds into a compact human-readable string.
+ *
+ * @param ms - Duration in milliseconds
+ * @returns `'-'` if `ms` is less than or equal to 0; `"<n>ms"` if `ms` is less than 1000; otherwise seconds with one decimal (e.g. `"1.2s"`).
+ */
 function formatSpeed(ms: number): string {
     if (ms <= 0) return '-';
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/**
+ * Renders the Arena Leaderboards UI and manages its interactive state and live updates.
+ *
+ * Renders a leaderboard view (podium, table, filters, and per-player expandable panels) initialized from the provided data and kept in sync with live updates and user-controlled filters.
+ *
+ * @param initialData - Initial leaderboard data used to populate the UI and seed internal state (type, operation, time filter, and entries).
+ * @returns The Arena Leaderboard React element.
+ */
 export function ArenaLeaderboard({ initialData }: ArenaLeaderboardProps) {
     const [type, setType] = useState<LeaderboardType>(initialData.type);
     const [operation, setOperation] = useState<Operation>(initialData.operation);
@@ -362,6 +380,18 @@ interface PodiumCardProps {
     onToggleExpand: () => void;
 }
 
+/**
+ * Renders a podium card for a leaderboard slot (top 3) that can show a player or an empty placeholder and toggle an expanded stats panel.
+ *
+ * Displays medal, avatar, name, league/division badge, ELO (with weekly change), basic W/L/streak stats, and an expandable performance panel with accuracy, speed, streak, APS and strongest operation; highlights the current user when applicable.
+ *
+ * @param entry - Leaderboard entry data for this podium slot; if undefined renders an empty placeholder.
+ * @param rank - The podium rank (1, 2, or 3) used for styling and medal selection.
+ * @param timeFilter - Active time filter ('weekly' or 'alltime') that controls display of ELO change.
+ * @param isExpanded - Whether the card's performance panel is currently expanded.
+ * @param onToggleExpand - Callback invoked when the card is clicked to toggle the expanded state.
+ * @returns A JSX element representing the podium card for the given rank and entry.
+ */
 function PodiumCard({ entry, rank, timeFilter, isExpanded, onToggleExpand }: PodiumCardProps) {
     if (!entry) {
         return (
@@ -554,6 +584,15 @@ interface PerformancePanelProps {
     isCurrentUser: boolean;
 }
 
+/**
+ * Render a collapsible performance panel showing condensed player statistics and, when applicable, additional details for the current user.
+ *
+ * Displays average accuracy, average speed, best streak, APS, and the player's strongest operation (if available). When `isCurrentUser` is true, also shows recent trend, strengths, and weaknesses.
+ *
+ * @param entry - The leaderboard entry whose performance data will be displayed.
+ * @param isCurrentUser - Whether the panel is for the currently signed-in user; enables extra personal details.
+ * @returns The panel element containing condensed stats and optional extended information for the current user.
+ */
 function PerformancePanel({ entry, isCurrentUser }: PerformancePanelProps) {
     return (
         <motion.div
@@ -671,6 +710,17 @@ interface LeaderboardRowProps {
     onToggleExpand: () => void;
 }
 
+/**
+ * Renders a single leaderboard row showing player identity, league, ELO, W/L, streak and an expandable performance panel.
+ *
+ * @param entry - Leaderboard entry data to display (player metadata, stats, and flags such as current-user).
+ * @param index - Zero-based row index used to stagger the entrance animation.
+ * @param timeFilter - Current time filter (`weekly` or `alltime`) which controls whether weekly ELO change is shown.
+ * @param isHighlighted - If true, render the row with highlighted styling (e.g., for the current user or selection).
+ * @param isExpanded - Whether the row's performance panel is currently expanded.
+ * @param onToggleExpand - Callback invoked when the row is clicked to toggle the expanded panel.
+ * @returns The rendered leaderboard row element.
+ */
 function LeaderboardRow({ entry, index, timeFilter, isHighlighted, isExpanded, onToggleExpand }: LeaderboardRowProps) {
     const leagueStyle = LEAGUE_COLORS[entry.odLeague] || LEAGUE_COLORS['Bronze'];
 
@@ -769,4 +819,3 @@ function LeaderboardRow({ entry, index, timeFilter, isHighlighted, isExpanded, o
         </div>
     );
 }
-

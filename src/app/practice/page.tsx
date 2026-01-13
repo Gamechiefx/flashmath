@@ -6,6 +6,13 @@ import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Ensures the user is authenticated and email-verified, then renders the practice UI.
+ *
+ * If there is no authenticated user, redirects to "/auth/login". If the user's email is not verified, redirects to "/arena/verify-email".
+ *
+ * @returns The React element that renders PracticeView wrapped in a Suspense fallback.
+ */
 export default async function PracticePage() {
     const session = await auth();
 

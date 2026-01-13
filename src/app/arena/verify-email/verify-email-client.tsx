@@ -11,6 +11,17 @@ interface VerifyEmailClientProps {
     userName: string;
 }
 
+/**
+ * Renders an email verification UI that prompts the user to verify their email, shows the target email address,
+ * and provides actions to resend the verification email or refresh the page after verification.
+ *
+ * The component manages resend state, displays success/error toasts, and shows a confirmation banner when an email
+ * has been successfully resent.
+ *
+ * @param email - The email address to display and to which the verification email is targeted
+ * @param userName - The display name used in the greeting
+ * @returns The VerifyEmailClient React element
+ */
 export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
     const [isResending, setIsResending] = useState(false);
     const [resent, setResent] = useState(false);
@@ -213,4 +224,3 @@ export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
         </main>
     );
 }
-

@@ -26,6 +26,18 @@ interface ArenaQueueClientProps {
     mode?: string;
 }
 
+/**
+ * Render the arena matchmaking queue UI and manage the queue audio lifecycle.
+ *
+ * Plays queue music on mount (after a short transition) and stops it on unmount, and renders the full-screen
+ * matchmaking interface with a sound toggle and decorative background elements.
+ *
+ * @param props.data - User data including userId, name, level, mathTiers, optional equippedBanner, equippedTitle, and optional confidence score (0–1)
+ * @param props.operation - The math operation used to select the user's practice tier
+ * @param props.arenaStats - Arena-related stats (elo, rank, rankDivision, optional isRanked)
+ * @param props.mode - Match mode string (e.g., '1v1'); defaults to `'1v1'`
+ * @returns The ArenaQueueClient React element
+ */
 export function ArenaQueueClient({ data, operation, arenaStats, mode = '1v1' }: ArenaQueueClientProps) {
     // Client-side effect for music - play relaxing guitar while in queue
     useEffect(() => {

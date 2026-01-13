@@ -11,6 +11,13 @@ interface PageProps {
     searchParams: Promise<{ operation?: string }>;
 }
 
+/**
+ * Render the arena match lobby page, performing authentication and eligibility checks, loading arena and match data, and constructing the player list for the MatchLobby UI.
+ *
+ * This server component redirects unauthenticated users to the login page and users who are not eligible for arena to /arena, then fetches the current user's arena stats and the match details (if any) to compute per-operation ELO and player metadata before rendering the MatchLobby component.
+ *
+ * @returns The JSX markup for the arena lobby page containing a configured MatchLobby component with computed players, currentUserId, and operation.
+ */
 export default async function ArenaLobbyPage({ params, searchParams }: PageProps) {
     const { matchId } = await params;
     const { operation = 'mixed' } = await searchParams;

@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 
+/**
+ * Renders a full-screen maintenance page with an alert icon, explanatory text, an informational note, and a link back to the home page.
+ *
+ * @returns The JSX element for the maintenance notice page.
+ */
 export default function MaintenancePage() {
     return (
         <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-8">

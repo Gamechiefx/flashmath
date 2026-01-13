@@ -10,6 +10,16 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
+/**
+ * Render the client-side login page offering email/password, Google OAuth, and magic-link sign-in, and redirect authenticated users to /dashboard.
+ *
+ * This component checks session status and:
+ * - shows a themed "Checking authentication..." screen while the session is loading,
+ * - shows a themed "Redirecting to dashboard..." screen when authenticated and triggers a client-side redirect to /dashboard,
+ * - otherwise renders the full login UI with form submission handlers and OAuth alternatives.
+ *
+ * @returns The React element for the login page.
+ */
 export default function LoginPage() {
     const { data: session, status } = useSession();
     const router = useRouter();

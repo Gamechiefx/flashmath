@@ -19,7 +19,14 @@ interface MatchInterfaceProps {
     isAiMatch?: boolean;
 }
 
-// Question generator inside client component
+/**
+ * Generates a simple arithmetic question (addition, subtraction, or multiplication).
+ *
+ * @returns An object containing:
+ *  - `question` — the formatted problem string (e.g., "7 + 5"),
+ *  - `answer` — the numeric result of the problem,
+ *  - `operation` — the operation type: `"addition"`, `"subtraction"`, or `"multiplication"`.
+ */
 function generateQuestion() {
     const operations = ['+', '-', '×'];
     const op = operations[Math.floor(Math.random() * operations.length)];
@@ -53,6 +60,15 @@ function generateQuestion() {
     return { question, answer, operation };
 }
 
+/**
+ * Renders the 1v1 match UI: timer, live scoreboard, question input, simulated opponent, and post-match results.
+ *
+ * @param matchId - Unique identifier for the match
+ * @param currentUserId - ID of the current user (used to identify "you" in the scoreboard)
+ * @param players - Initial players array containing each player's id, name, score, streak, and lastAnswerCorrect
+ * @param isAiMatch - When true, indicates the match is against an AI (affects mode-specific behavior)
+ * @returns The React element for the match interface
+ */
 export function MatchInterface({ matchId, currentUserId, players: initialPlayers, isAiMatch = false }: MatchInterfaceProps) {
     const router = useRouter();
     const inputRef = useRef<HTMLInputElement>(null);

@@ -7,6 +7,13 @@ import { isEmailVerified } from "@/lib/actions/verification";
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Render the arena leaderboard page after ensuring the user is authenticated and email-verified.
+ *
+ * Redirects to "/auth/login" if there is no authenticated user and to "/arena/verify-email" if the user's email is not verified. Fetches initial leaderboard data and returns the page layout containing the authentication header and the ArenaLeaderboard component populated with that data.
+ *
+ * @returns The page's JSX tree containing AuthHeader and ArenaLeaderboard initialized with the fetched leaderboard data.
+ */
 export default async function ArenaLeaderboardPage() {
     const session = await auth();
 
@@ -60,5 +67,4 @@ export default async function ArenaLeaderboardPage() {
         </main>
     );
 }
-
 

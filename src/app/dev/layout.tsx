@@ -7,6 +7,12 @@
 
 import Link from 'next/link';
 
+/**
+ * Layout wrapper that guards dev-only routes and renders either the dev tools UI or an informational "Dev Tools Unavailable" screen.
+ *
+ * @param children - Content to render inside the layout when dev tools are enabled.
+ * @returns The layout element: the dev tools UI when enabled, otherwise an informational "Dev Tools Unavailable" screen.
+ */
 export default function DevLayout({
   children,
 }: {

@@ -29,6 +29,17 @@ interface UserManagerProps {
     currentUserRole: Role;
 }
 
+/**
+ * Render the user management admin interface including listing, searching, sorting, and per-user actions.
+ *
+ * The component provides controls and modal flows for banning/unbanning users, gifting or taking coins/XP,
+ * granting individual or all shop items, and changing user roles. Actions are permission- and role-guarded
+ * by the provided `currentUserRole`.
+ *
+ * @param users - The list of users to display and manage.
+ * @param currentUserRole - The role of the currently logged-in admin used for permission and role checks.
+ * @returns A React element containing the full user management UI (table, controls, and modals).
+ */
 export function UserManager({ users, currentUserRole }: UserManagerProps) {
     const [searchTerm, setSearchTerm] = useState("");
     const [processingId, setProcessingId] = useState<string | null>(null);

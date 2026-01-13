@@ -29,6 +29,11 @@ const pool = new Pool({
     password: process.env.POSTGRES_PASSWORD || 'flashmath_password',
 });
 
+/**
+ * Migrates per-user arena ELO, tiers, and basic match stats from the SQLite `users` table into the PostgreSQL `arena_players` table.
+ *
+ * The migration upserts each user's duel, team, 2v2/3v3/4v4/5v5 ELO variants, wins/losses and related streaks, computes a `practice_tier` from the user's `math_tiers` data (defaults to 50 when not present), and merges with existing PostgreSQL rows by preserving the maximum values for numeric fields. The function closes the PostgreSQL pool when finished.
+ */
 async function migrateEloData() {
     console.log('🚀 Starting ELO migration: SQLite → PostgreSQL\n');
     
@@ -243,4 +248,3 @@ migrateEloData()
         console.error('Migration failed:', error);
         process.exit(1);
     });
-

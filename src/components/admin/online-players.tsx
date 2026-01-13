@@ -7,6 +7,14 @@ interface OnlinePlayersProps {
     initialCount: number;
 }
 
+/**
+ * Display current number of online players and refresh the value periodically.
+ *
+ * Polls `/api/admin/online-count` every 10 seconds and updates the displayed count when a numeric `count` is returned. Fetch or parse errors are ignored.
+ *
+ * @param initialCount - Starting count shown until polling updates the value
+ * @returns The rendered UI showing an online indicator, user icon, the current count, and an "Online" label
+ */
 export function OnlinePlayers({ initialCount }: OnlinePlayersProps) {
     const [count, setCount] = useState(initialCount);
 

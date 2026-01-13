@@ -26,6 +26,18 @@ interface ArenaEligibilityProps {
     decayInfo?: DecayInfo;
 }
 
+/**
+ * Render the Arena eligibility interface and call-to-action based on the user's practice stats, age, and admin status.
+ *
+ * Renders a FlashAuditor summary, a collapsible requirements card (shown when not eligible), matchmaking info, optional accuracy warning, and CTA buttons. Admins bypass requirements; non-admin eligibility is determined by basic practice and age gates. The Enter Arena CTA may attempt to request fullscreen for an immersive experience.
+ *
+ * @param practiceStats - Object with user practice metrics: `totalSessions`, `recentAccuracy`, `daysSinceLastPractice`, and `confidence`.
+ * @param userAge - User age in years or `null` if not provided.
+ * @param isAdmin - If `true`, bypasses eligibility gates and collapses requirements (default `false`).
+ * @param confidenceBreakdown - Optional precomputed `ConfidenceBreakdown` to use instead of deriving from `practiceStats`.
+ * @param decayInfo - Optional `DecayInfo` providing placement/decay state for the FlashAuditor card.
+ * @returns The Arena eligibility UI as a JSX element.
+ */
 export function ArenaEligibility({ 
     practiceStats, 
     userAge, 
@@ -291,7 +303,13 @@ export function ArenaEligibility({
 
 // =============================================================================
 // FlashAuditor Card - Compact version that opens the slide-out panel
-// =============================================================================
+/**
+ * Render a compact FlashAuditor card showing overall confidence, a bracket badge, three mini progress bars, and an optional decay/placement warning.
+ *
+ * @param confidence - ConfidenceBreakdown with `overall`, `volume`, `consistency`, `recency`, and related metrics used to compute display values
+ * @param decayInfo - Optional DecayInfo describing decay/returning state; when present shows placement remaining or at-risk ELO information
+ * @returns The FlashAuditor card React element used as a compact interactive summary and entry point to the auditor panel
+ */
 
 function FlashAuditorCard({
     confidence,
@@ -420,6 +438,14 @@ function FlashAuditorCard({
     );
 }
 
+/**
+ * Render a compact animated horizontal progress bar with a label and percentage.
+ *
+ * The bar fills from 0 to `value * 100%` with a smooth animation and displays a rounded percentage.
+ *
+ * @param value - Fill level between 0 and 1. Colors: >= 0.7 -> emerald, >= 0.4 -> yellow, otherwise orange.
+ * @param label - Text label shown to the left of the percentage above the bar
+ */
 function MiniProgressBar({ value, label }: { value: number; label: string }) {
     const getColor = () => {
         if (value >= 0.7) return 'bg-emerald-500';

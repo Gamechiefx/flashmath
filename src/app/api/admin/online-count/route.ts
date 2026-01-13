@@ -3,6 +3,11 @@ import { getDatabase } from "@/lib/db";
 import { auth } from "@/auth";
 import { parseRole, hasPermission, Permission } from "@/lib/rbac";
 
+/**
+ * Handle GET requests that return the number of users active in the last five minutes, enforcing admin access.
+ *
+ * @returns A JSON response with `{ count: number }` representing users active within the last five minutes, or `{ error: string }` with an HTTP status of `401`, `403`, or `404` for unauthorized, forbidden, or user-not-found cases respectively.
+ */
 export async function GET() {
     // Check if user is admin
     const session = await auth();

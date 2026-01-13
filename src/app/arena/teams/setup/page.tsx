@@ -8,6 +8,19 @@ import { checkUserArenaEligibility } from '@/lib/actions/arena';
 // Disable Next.js router cache to prevent stale queueStatus during navigation
 export const dynamic = 'force-dynamic';
 
+/**
+ * Render the team setup page after enforcing authentication and arena eligibility.
+ *
+ * Awaits runtime search parameters, fetches party data and the user's teams in parallel,
+ * and returns the TeamSetupClient initialized with the resolved mode, party, invites,
+ * user teams, and current user information.
+ *
+ * @param searchParams - A Promise that resolves to runtime query parameters. Supported keys:
+ *   - `mode`: optional game mode string (defaults to `"5v5"` if omitted)
+ *   - `fromQueue`: optional string `"true"` when the user just left a queue (treated as boolean)
+ * @returns A JSX element that renders the team setup UI with fetched party data, invites,
+ *          user teams, and the current user's id and display name.
+ */
 export default async function TeamSetupPage({
     searchParams,
 }: {
@@ -53,4 +66,3 @@ export default async function TeamSetupPage({
         />
     );
 }
-

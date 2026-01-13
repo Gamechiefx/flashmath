@@ -18,6 +18,17 @@ try {
     // PostgreSQL not available during build
 }
 
+/**
+ * Handle GET requests for the service health endpoint, supporting shallow and deep checks.
+ *
+ * When the query parameter `deep=true` is provided, performs connectivity checks for the
+ * configured SQLite database and, if available, the optional PostgreSQL pool and includes
+ * per-component results in `checks`. Without `deep=true` returns a basic health object.
+ *
+ * @returns A JSON object with `status` (`'ok' | 'degraded' | 'error'`), `timestamp`, and
+ * optional `checks` detailing `sqlite` and `postgres` booleans. Responds with HTTP 200 when
+ * `status` is `'ok'` or `'degraded'`, and HTTP 503 when `status` is `'error'`.
+ */
 export async function GET(request: Request) {
     const url = new URL(request.url);
     const deep = url.searchParams.get('deep') === 'true';

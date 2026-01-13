@@ -7,6 +7,13 @@ import { motion } from "framer-motion";
 import { LogOut, ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 
+/**
+ * Renders the Sign Out confirmation page and handles the sign-out flow.
+ *
+ * When the primary action is triggered, it initiates sign-out and redirects to the home page on success; while signing out, the UI is disabled and shows a loading state.
+ *
+ * @returns The component's rendered JSX for the sign-out confirmation page.
+ */
 export default function SignOutPage() {
     const router = useRouter();
     const [isSigningOut, setIsSigningOut] = useState(false);
@@ -134,4 +141,3 @@ export default function SignOutPage() {
         </main>
     );
 }
-

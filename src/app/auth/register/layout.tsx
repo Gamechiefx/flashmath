@@ -3,6 +3,11 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 
+/**
+ * Wraps registration content and, when signups are disabled, presents a "REGISTRATION CLOSED" notice with alternative actions.
+ *
+ * @returns The registration-closed UI when signups are disabled, or the provided `children` when signups are enabled.
+ */
 export default async function RegisterLayout({
     children,
 }: {

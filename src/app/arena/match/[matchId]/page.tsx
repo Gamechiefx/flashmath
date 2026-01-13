@@ -11,6 +11,16 @@ interface PageProps {
     searchParams: Promise<{ operation?: string }>;
 }
 
+/**
+ * Render the arena match page and redirect unauthenticated or ineligible users.
+ *
+ * Fetches match data, determines AI mode and operation, constructs initial player state,
+ * and renders the RealTimeMatch component for the given matchId.
+ *
+ * @param params - Object providing the route `matchId` path parameter.
+ * @param searchParams - Object providing optional query `operation` (defaults to `"mixed"`).
+ * @returns A React element rendering the arena match UI configured for the current user and match.
+ */
 export default async function ArenaMatchPage({ params, searchParams }: PageProps) {
     const { matchId } = await params;
     const { operation = 'mixed' } = await searchParams;

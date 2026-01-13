@@ -47,6 +47,19 @@ interface EnhancedRealTimeMatchProps {
     }>;
 }
 
+/**
+ * Renders an enhanced real-time 1v1 match UI with robust connection handling, synchronization, lag compensation, optimistic answer submission, and post-match result persistence.
+ *
+ * The component manages socket-driven match state (players, questions, timing, connection metrics, sync/versioning), preserves state across navigation, plays contextual sounds, supports friend requests, and provides waiting, in-game, and game-over views with connection and sync diagnostics.
+ *
+ * @param matchId - The unique identifier for the match
+ * @param currentUserId - The current player's user id
+ * @param userName - The current player's display name
+ * @param operation - The match operation/type (used for result saving and matchmaking)
+ * @param isAiMatch - If true, opponent is an AI and social actions are disabled
+ * @param initialPlayers - Optional map of player metadata keyed by player id to seed banners, ranks, titles, and levels
+ * @returns The rendered enhanced real-time match interface (JSX element)
+ */
 export function EnhancedRealTimeMatch({
     matchId,
     currentUserId,

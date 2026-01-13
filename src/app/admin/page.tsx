@@ -18,6 +18,13 @@ import { Role, parseRole, hasPermission, Permission, ROLE_LABELS } from "@/lib/r
 import { checkAdminMfaSession } from "@/lib/actions/admin-mfa";
 import { AdminMfaGate } from "@/components/admin/admin-mfa-gate";
 
+/**
+ * Render the server-side Admin Console page with data loading, permission checks, and MFA gating.
+ *
+ * Performs authentication and authorisation, loads shop and user data and system settings, computes online player count, and conditionally renders the admin UI sections (Shop Inventory, User Management, System Controls, seed actions, and online players) based on the current user's role and permissions. If the user lacks authentication or required permissions an unauthorized message is returned; if an admin MFA session is not verified the admin UI is wrapped in an MFA gate.
+ *
+ * @returns A React element containing the admin console UI, an unauthorized message, or the admin UI wrapped in an MFA verification gate.
+ */
 export default async function AdminPage() {
     const session = await auth();
     if (!session?.user) return <div className="p-10 text-center">Unauthorized: Please log in</div>;
@@ -147,4 +154,3 @@ export default async function AdminPage() {
         </AdminMfaGate>
     );
 }
-

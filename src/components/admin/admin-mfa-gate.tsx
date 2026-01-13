@@ -12,6 +12,15 @@ interface AdminMfaGateProps {
     children: React.ReactNode;
 }
 
+/**
+ * Protects admin UI by gating access behind a two-step email MFA flow.
+ *
+ * Renders `children` directly after successful verification; otherwise presents a UI to send a 6-digit code to `userEmail`, enter the code, verify it, and resend with a cooldown.
+ *
+ * @param userEmail - The admin's registered email address where verification codes will be sent.
+ * @param children - React nodes to render once verification succeeds.
+ * @returns A React element that either renders the gated `children` (when verified) or the MFA verification UI.
+ */
 export function AdminMfaGate({ userEmail, children }: AdminMfaGateProps) {
     const router = useRouter();
     const [isVerified, setIsVerified] = useState(false);

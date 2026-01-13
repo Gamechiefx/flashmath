@@ -49,6 +49,20 @@ interface TeamQueueClientProps {
 // This tracks which parties are currently redirecting to prevent re-entry
 const redirectingParties = new Set<string>();
 
+/**
+ * Render a client-side team queue UI that manages teammate discovery, IGL/Anchor selection, and opponent matchmaking.
+ *
+ * This component orchestrates a three-phase flow (teammates → igl_selection → opponent), handles real-time
+ * presence updates, periodic polling, fullscreen toggle, and navigation/cleanup when leaving the queue.
+ *
+ * @param props.partyId - The active party identifier used for queue and navigation operations.
+ * @param props.party - The current party state (members, leader, queueState, etc.) used to render UI and determine behavior.
+ * @param props.currentUserId - The id of the current user (used for leader checks and presence).
+ * @param props.currentUserName - The display name of the current user (used for presence notifications).
+ * @param props.initialPhase - The initial phase to start in, either `'teammates'` or `'opponent'`.
+ * @param props.mode - Match mode, e.g., `'5v5'` or `'2v2'`, used to derive team size and matchmaking parameters.
+ * @returns The rendered React element for the team queue client UI and its managed flow.
+ */
 export function TeamQueueClient({
     partyId,
     party,

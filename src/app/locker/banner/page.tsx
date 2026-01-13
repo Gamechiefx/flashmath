@@ -6,6 +6,13 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { ArrowLeft, Flag } from "lucide-react";
 import Link from "next/link";
 
+/**
+ * Render the Banner Editor page for the authenticated user.
+ *
+ * Displays a banner customization UI populated with the user's equipped title, frame, and banner, and provides navigation to the locker and shop. If the request is unauthenticated or the user record is missing, renders a centered message prompting login or indicating "User not found".
+ *
+ * @returns The page's React element: the banner editor populated with the user's equipped items and owned banner IDs, or a centered login/user-not-found message.
+ */
 export default async function BannerEditorPage() {
     const session = await auth();
     if (!session?.user) {

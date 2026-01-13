@@ -7,6 +7,15 @@ import { checkUserArenaEligibility } from '@/lib/actions/arena';
 // Disable Next.js router cache to prevent stale queueStatus during navigation
 export const dynamic = 'force-dynamic';
 
+/**
+ * Render the TeamQueueClient page for an authenticated user's party queue while enforcing access and routing guards.
+ *
+ * Verifies authentication and arena eligibility, resolves URL search parameters, validates that the user belongs to the specified party
+ * and that the party is currently queued, and redirects to the appropriate setup or login routes when checks fail.
+ *
+ * @param searchParams - A promise that resolves to an object with optional `partyId`, `phase` (`'teammates' | 'opponent'`), and `mode` (`'5v5' | '2v2'`) URL parameters.
+ * @returns The TeamQueueClient React element configured for the authenticated user's party queue.
+ */
 export default async function TeamQueuePage({
     searchParams,
 }: {

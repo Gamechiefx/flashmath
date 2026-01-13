@@ -42,6 +42,17 @@ export default async function AdminPage() {
 // I will create `src/components/admin/item-editor.tsx` first, then the page.
 import { Check, Save, Loader2 } from "lucide-react";
 
+/**
+ * Renders a table row that allows inline editing of an Item's name, rarity, and price.
+ *
+ * Displays the item's id and type and provides controls to modify name, rarity, and price.
+ * Shows a save button when there are unsaved changes, persists updates via `updateItem`,
+ * and displays success or error toasts. Successful saves clear the dirty state and refresh
+ * the router cache so related views reflect the update.
+ *
+ * @param item - The item to display and edit
+ * @returns A table row element containing editable controls for the provided item
+ */
 export function ItemEditorRow({ item }: { item: Item }) {
     const [name, setName] = useState(item.name);
     const [priceStr, setPriceStr] = useState(String(item.price));

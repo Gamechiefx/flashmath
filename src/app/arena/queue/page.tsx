@@ -10,6 +10,15 @@ interface PageProps {
     searchParams: Promise<{ mode?: string; operation?: string }>;
 }
 
+/**
+ * Render the Arena queue page, preparing user, matchmaking, and arena stats for the queue client.
+ *
+ * If there is no authenticated user this page redirects to `/auth/login`. If the user is not eligible
+ * for full arena access this page redirects to `/arena`.
+ *
+ * @param searchParams - URL query parameters with optional `operation` (e.g., 'mixed', 'addition') and `mode` (e.g., '1v1', '2v2')
+ * @returns A React element that renders ArenaQueueClient with the resolved user/matchmaking data, chosen operation and mode, and computed arena statistics (ELO, rank, rank division, and whether the operation is ranked).
+ */
 export default async function ArenaQueuePage({ searchParams }: PageProps) {
     const session = await auth();
     const params = await searchParams;

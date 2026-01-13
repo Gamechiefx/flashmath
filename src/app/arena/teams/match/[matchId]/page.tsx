@@ -3,6 +3,18 @@ import { redirect } from 'next/navigation';
 import { TeamMatchClient } from './team-match-client';
 import { checkUserArenaEligibility } from '@/lib/actions/arena';
 
+/**
+ * Render the team match page, handling demo-mode shortcut, authentication, and arena eligibility.
+ *
+ * If `matchId` is "demo" and demo mode is enabled via query and environment, the page renders
+ * TeamMatchClient with a synthetic demo user. Otherwise the function requires an authenticated
+ * session and checks arena eligibility; unauthenticated requests are redirected to '/auth/login'
+ * and ineligible users are redirected to '/arena'.
+ *
+ * @param params - Promise resolving to an object with `matchId`
+ * @param searchParams - Promise resolving to an object that may include `demoMode` and `partyId`
+ * @returns A React element that renders `TeamMatchClient` configured for the requested match and current user
+ */
 export default async function TeamMatchPage({
     params,
     searchParams,
@@ -49,4 +61,3 @@ export default async function TeamMatchPage({
         />
     );
 }
-

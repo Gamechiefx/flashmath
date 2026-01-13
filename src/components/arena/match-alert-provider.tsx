@@ -25,6 +25,15 @@ interface MatchAlert {
     countdown: number;
 }
 
+/**
+ * Provides a global, theme-aware overlay that notifies the user when a match is found and allows immediate join or dismissal.
+ *
+ * The provider polls the user's party/queue status, plays a match-found sound, displays a fullscreen modal with a countdown,
+ * and auto-joins the match when the countdown expires. The overlay is not shown on match or queue pages.
+ *
+ * @param children - The wrapped application content to render beneath the overlay
+ * @returns A React element that renders `children` and, when a match is detected, a fullscreen match-found overlay with join/dismiss controls and a countdown
+ */
 export function MatchAlertProvider({ children }: { children: React.ReactNode }) {
     const { data: session } = useSession();
     const router = useRouter();
@@ -259,4 +268,3 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
         </>
     );
 }
-

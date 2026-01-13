@@ -11,6 +11,13 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
+/**
+ * Renders the registration page with username, email, date-of-birth, password (visibility toggle and strength indicator), and Google OAuth signup.
+ *
+ * The component checks the user's session, displays session-loading or redirecting UI when applicable, and redirects authenticated users to `/dashboard`.
+ *
+ * @returns The registration page React element.
+ */
 export default function RegisterPage() {
     const { data: session, status } = useSession();
     const router = useRouter();

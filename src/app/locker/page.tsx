@@ -8,6 +8,13 @@ import { AuthHeader } from "@/components/auth-header";
 import { CompactLockerView } from "@/components/locker/compact-locker-view";
 import { unstable_noStore as noStore } from 'next/cache';
 
+/**
+ * Render the Locker page for the current authenticated user.
+ *
+ * Disables caching, requires an authenticated session (returns a simple login prompt when unauthenticated), loads the user record, shop items, and inventory, and prepares item data for the UI by merging static ITEMS with database `shop_items` (database items take precedence). Computes the user's owned and equipped items and the total owned count, then renders the page containing the auth header, locker overview (CompactLockerView), action buttons, and a fixed bottom navigation.
+ *
+ * @returns The JSX element for the Locker page or a simple login prompt `div` when no user is authenticated.
+ */
 export default async function LockerPage() {
     noStore(); // Prevent caching - always fetch fresh data
 

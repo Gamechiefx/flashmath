@@ -5,6 +5,13 @@ import { checkUserArenaEligibility } from "@/lib/actions/arena";
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Server page that enforces authentication and arena eligibility, fetches arena statistics, and renders the ArenaModesClient.
+ *
+ * If no authenticated user is found, redirects to "/auth/login". If the user is not eligible for arena access, redirects to "/arena".
+ *
+ * @returns A React element that renders ArenaModesClient with the authenticated session and the fetched arenaStats.
+ */
 export default async function ArenaModesPage() {
     const session = await auth();
 

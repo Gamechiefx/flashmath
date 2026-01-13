@@ -38,6 +38,16 @@ import { AuditorProvider, AuditorPanel, AuditorFab } from "@/components/auditor"
 import { Toaster } from "sonner";
 import { MatchAlertProvider } from "@/components/arena/match-alert-provider";
 import { PartyProvider } from "@/lib/socket/party-context";
+/**
+ * Compose and render the application's root HTML layout with global providers, theme management, and UI panels.
+ *
+ * Initializes the current auth session and determines equipped and available items, then renders the full
+ * HTML document that wraps `children` with app-wide providers (auth, audio, item previews, theme, social,
+ * party, auditor, match alerts), global UI panels (social and auditor), a configured Toaster, and the DevFooter.
+ *
+ * @param children - Application content to render inside the root layout
+ * @returns The root HTML element containing providers, global UI components, and the rendered `children`
+ */
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -112,5 +122,4 @@ export default async function RootLayout({
     </html>
   );
 }
-
 

@@ -208,7 +208,13 @@ const RoundSummaryCard = () => (
   </Card>
 );
 
-// Main Page
+/**
+ * Render the Component Playground page with a tabbed interface showcasing 5v5 arena UI demos.
+ *
+ * Manages active tab and mode modal state, and composes header, tab bar, animated content area, demo panels, and a status card.
+ *
+ * @returns The page's React element containing the interactive component playground UI.
+ */
 export default function DevTeamsPage() {
   const [activeTab, setActiveTab] = useState('mode-selection');
   const [showModeModal, setShowModeModal] = useState(false);

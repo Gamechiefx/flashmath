@@ -11,6 +11,16 @@ interface ArenaModesClientProps {
     arenaStats: any;
 }
 
+/**
+ * Render the arena modes UI with header, decorative backgrounds, and mode selection.
+ *
+ * This component mounts the arena modes page and ensures any playing background
+ * music is stopped when the component unmounts.
+ *
+ * @param session - The current user's session object passed to the AuthHeader
+ * @param arenaStats - Arena statistics passed to the ModeSelection component
+ * @returns The React element for the arena modes page
+ */
 export function ArenaModesClient({ session, arenaStats }: ArenaModesClientProps) {
     // Client-side effect for music
     useEffect(() => {

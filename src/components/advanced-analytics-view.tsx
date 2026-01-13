@@ -72,6 +72,18 @@ const getRarityColor = (rarity: string) => {
     }
 };
 
+/**
+ * Render the Advanced Analytics dashboard with Trends, Suggestions, Achievements, and Share tabs.
+ *
+ * Renders a multi-tab interface that visualizes analytics trends, prioritized suggestions,
+ * achievement cards with rarity styling, and a shareable progress summary. Includes clipboard
+ * copy interactions with transient feedback.
+ *
+ * @param analytics - Analytics data used to populate trends, suggestions, performance patterns, and strengths/weaknesses.
+ * @param achievements - List of shareable achievements displayed in the Achievements and Share views.
+ * @param progressSummary - Aggregated progress summary used by the Share view (stats, highlights, improvements).
+ * @returns A JSX element representing the Advanced Analytics dashboard.
+ */
 export function AdvancedAnalyticsView({ analytics, achievements, progressSummary }: AdvancedAnalyticsViewProps) {
     const [selectedTab, setSelectedTab] = useState<'trends' | 'suggestions' | 'achievements' | 'share'>('trends');
     const [copiedText, setCopiedText] = useState<string | null>(null);

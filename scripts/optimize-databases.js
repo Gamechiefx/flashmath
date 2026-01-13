@@ -21,6 +21,11 @@ const pgPool = new Pool({
     password: process.env.POSTGRES_PASSWORD || 'flashmath_password',
 });
 
+/**
+ * Apply performance and safety pragmas, create common indexes, and update query planner statistics for the configured SQLite database.
+ *
+ * Executes pragmas (WAL, synchronous=NORMAL, increased cache and mmap sizes, temp_store=MEMORY), attempts to create a predefined set of indexes (silently skipping statements that fail, e.g., due to missing tables), runs ANALYZE to refresh planner statistics, and closes the database connection when finished.
+ */
 async function optimizeSQLite() {
     console.log('📊 Optimizing SQLite...\n');
     
@@ -104,6 +109,11 @@ async function optimizeSQLite() {
     console.log('\n✅ SQLite optimization complete!\n');
 }
 
+/**
+ * Optimize the PostgreSQL database by ensuring key indexes exist, refreshing planner statistics, and reporting pool connection settings.
+ *
+ * Attempts to create a predefined set of indexes (ignoring failures caused by missing tables or columns), runs ANALYZE on the arena_players table (non-fatal if it fails), and retrieves the pool's max_connections setting.
+ */
 async function optimizePostgreSQL() {
     console.log('🐘 Optimizing PostgreSQL...\n');
     
@@ -153,6 +163,12 @@ async function optimizePostgreSQL() {
     console.log('\n✅ PostgreSQL optimization complete!\n');
 }
 
+/**
+ * Logs basic SQLite and PostgreSQL database statistics to the console.
+ *
+ * Retrieves and prints SQLite counts for users, practice sessions, and friendships, plus the SQLite file size.
+ * Attempts to retrieve and print PostgreSQL count for arena_players and the PostgreSQL database size; if PostgreSQL queries fail, a message indicating stats could not be fetched is logged.
+ */
 async function showStats() {
     console.log('📈 Database Statistics\n');
     
@@ -192,6 +208,13 @@ async function showStats() {
     console.log('');
 }
 
+/**
+ * Orchestrates SQLite and PostgreSQL optimization routines, then displays resulting statistics.
+ *
+ * Runs the sequence of optimizations (SQLite then PostgreSQL), invokes statistics reporting,
+ * logs progress and recommendations, ensures the PostgreSQL connection pool is closed, and
+ * terminates the process with exit code 0. Any error during the sequence is logged to stderr.
+ */
 async function main() {
     console.log('🚀 FlashMath Database Optimization\n');
     console.log('═'.repeat(50) + '\n');
@@ -217,4 +240,3 @@ async function main() {
 }
 
 main();
-

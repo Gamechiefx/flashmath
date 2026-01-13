@@ -4,6 +4,14 @@ import { AuthHeader } from "@/components/auth-header";
 import { getLeagueData } from "@/lib/actions/leagues";
 import { LeaderboardView } from "@/components/leaderboard-view";
 
+/**
+ * Render the authenticated leaderboard page and display league standings or an initializing message.
+ *
+ * If there is no authenticated user session, redirects the client to /auth/login. Fetches league data and renders
+ * an AuthHeader and either the LeaderboardView when data is available or a centered "INITIALIZING CIRCUIT..." placeholder while data is absent.
+ *
+ * @returns A React element representing the leaderboard page.
+ */
 export default async function LeaderboardPage() {
     const session = await auth();
 

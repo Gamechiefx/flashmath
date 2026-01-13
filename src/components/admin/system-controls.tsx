@@ -11,6 +11,17 @@ interface SystemControlsProps {
     signupEnabled: boolean;
 }
 
+/**
+ * Render a UI for managing system settings: maintenance mode, a maintenance message, and signup availability.
+ *
+ * The component maintains internal state initialized from props and invokes `updateSystemSetting` to persist changes.
+ * On update failures it shows an alert; successfully saving the maintenance message briefly shows a saved indicator.
+ *
+ * @param maintenanceMode - Initial value indicating whether maintenance mode is enabled
+ * @param maintenanceMessage - Initial maintenance message text
+ * @param signupEnabled - Initial value indicating whether new user signups are allowed
+ * @returns The rendered React element containing controls for toggling settings and editing the maintenance message
+ */
 export function SystemControls({
     maintenanceMode: initialMaintenance,
     maintenanceMessage: initialMessage,

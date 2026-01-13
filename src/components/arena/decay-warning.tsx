@@ -24,6 +24,24 @@ export interface DecayWarningProps {
     onDismiss?: () => void;
 }
 
+/**
+ * Render a dismissible arena decay warning banner when the player's phase is not 'active'.
+ *
+ * Displays a compact "returning player" flow with placement-match progress when `isReturningPlayer`
+ * is true, otherwise shows phase-specific messaging, iconography, and a CTA for `warning`, `decaying`,
+ * and `severe` phases. The banner is hidden if `phase` is `'active'` or after it has been dismissed.
+ *
+ * @param phase - Current decay phase; controls visibility and phase-specific styling/message.
+ * @param phaseLabel - Optional human-readable label for the current phase (not required for visibility).
+ * @param daysUntilNextPhase - Days remaining until the next decay phase; used in the 'warning' message.
+ * @param eloAtRisk - Amount of ELO that may be lost; shown for relevant phases and when greater than 0.
+ * @param isReturningPlayer - When true, renders the placement-match flow instead of the phase flows.
+ * @param placementMatchesRequired - Total placement matches required for returning players (used to render progress).
+ * @param placementMatchesCompleted - Number of placement matches already completed (used to render progress).
+ * @param dismissable - If true, shows a dismiss button that hides the banner locally and invokes `onDismiss`.
+ * @param onDismiss - Optional callback invoked when the banner is dismissed.
+ * @returns A React element for the warning banner, or `null` when the banner should not be shown.
+ */
 export function DecayWarning({
     phase,
     phaseLabel,
@@ -210,7 +228,13 @@ export function DecayWarning({
     );
 }
 
-// Compact version for headers or sidebars
+/**
+ * Renders a compact arena decay status badge for use in headers or sidebars.
+ *
+ * @param phase - One of `'active' | 'warning' | 'decaying' | 'severe' | 'returning'` specifying which badge style and text to show
+ * @param eloAtRisk - The amount of ELO at risk; shown for non-returning phases
+ * @returns A small actionable badge linking to the arena page, or `null` when `phase` is `'active'` or not supported
+ */
 export function DecayWarningBadge({ phase, eloAtRisk }: { phase: DecayWarningProps['phase']; eloAtRisk: number }) {
     if (phase === 'active') return null;
 
@@ -242,5 +266,4 @@ export function DecayWarningBadge({ phase, eloAtRisk }: { phase: DecayWarningPro
 }
 
 export default DecayWarning;
-
 

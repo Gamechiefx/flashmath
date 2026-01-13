@@ -32,6 +32,11 @@ const pool = new Pool({
     password: process.env.POSTGRES_PASSWORD || 'flashmath_password',
 });
 
+/**
+ * Ensure the PostgreSQL schema for arena player data exists by creating the `arena_players` table if it does not already exist.
+ *
+ * The table includes player identifiers, username, main and per-operation ELO fields (duel, team, and 2v2–5v5 variants), win/loss statistics, practice tier, match aggregates, and created/updated timestamps.
+ */
 async function ensurePostgresSchema() {
     console.log('📋 Ensuring PostgreSQL schema exists...\n');
     
@@ -106,6 +111,11 @@ async function ensurePostgresSchema() {
     console.log('✓ PostgreSQL schema ready\n');
 }
 
+/**
+ * Migrates per-operation arena ELO and related stats from the local SQLite users table into the PostgreSQL arena_players table.
+ *
+ * Ensures the PostgreSQL schema exists, inspects the SQLite users table for available ELO-related columns, selects users that contain arena data, computes a practice tier from `math_tiers` when present, and upserts normalized rows into `arena_players`. Closes database connections when complete and logs a summary of migrated rows and errors.
+ */
 async function migrateEloData() {
     console.log('🚀 Starting ELO migration: SQLite → PostgreSQL\n');
     
@@ -350,4 +360,3 @@ migrateEloData()
         console.error('\n❌ Migration failed:', error);
         process.exit(1);
     });
-

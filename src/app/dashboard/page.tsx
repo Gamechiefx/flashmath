@@ -9,6 +9,13 @@ import { isMaintenanceMode, canBypassMaintenance } from "@/lib/actions/system";
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+/**
+ * Render the dashboard page after authenticating the user, checking maintenance mode, and loading dashboard statistics.
+ *
+ * If no authenticated user is present, redirects to "/auth/login". If maintenance mode is active and the user cannot bypass it, redirects to "/maintenance". When allowed, renders the dashboard UI including the auth header, decorative background elements, an unverified-email banner when applicable, and the main DashboardView populated with fetched stats.
+ *
+ * @returns The dashboard page JSX element. May trigger a redirect to "/auth/login" or "/maintenance" based on authentication and maintenance checks.
+ */
 export default async function DashboardPage() {
     const session = await auth();
 
@@ -49,4 +56,3 @@ export default async function DashboardPage() {
         </main>
     );
 }
-

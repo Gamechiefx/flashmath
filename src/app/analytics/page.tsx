@@ -12,6 +12,13 @@ import Link from "next/link";
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Render the Advanced Analytics page and enforce authenticated access.
+ *
+ * Renders a "Not Enough Data Yet" screen when analytics are unavailable, an "Unable to Load Analytics" message when the monthly progress summary cannot be loaded, or the full analytics UI when required data (analytics, shareable achievements, and monthly progress summary) is available. If the user is not authenticated, redirects to `/auth/login`.
+ *
+ * @returns A React element representing the Advanced Analytics page or a redirect to `/auth/login`.
+ */
 export default async function AnalyticsPage() {
     const session = await auth();
     if (!session?.user) redirect("/auth/login");

@@ -1,4 +1,3 @@
-
 import { auth } from "@/auth";
 import { queryOne, loadData } from "@/lib/db";
 import { getDailyShopSelection } from "@/lib/shop-engine";
@@ -27,6 +26,13 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: string }> = {
     [ItemType.FRAME]: { label: 'Frame', icon: '🖼️' },
 };
 
+/**
+ * Render the Daily Shop page for the current authenticated user.
+ *
+ * Displays the user's balance, a countdown timer, and the day's selectable items grouped by category.
+ *
+ * @returns The page's React element: the full daily shop UI showing balance, timer, and daily items for the authenticated user; if no session exists, a login prompt; if the user record is missing, an account-not-found UI with a sign-out action.
+ */
 export default async function ShopPage() {
     noStore(); // Prevent caching - always fetch fresh data
 
