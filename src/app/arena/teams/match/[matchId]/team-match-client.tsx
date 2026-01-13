@@ -38,6 +38,7 @@ import {
     RelayHandoff,
     AnchorSoloDecisionModal,
     PointsFeedFAB,
+    FirstToFinishBanner,
     createPointsEventFromResult,
     createTimeoutEvent,
     createFirstToFinishEvent,
@@ -519,6 +520,15 @@ export function TeamMatchClient({
     // Round start countdown state
     const [showRoundCountdown, setShowRoundCountdown] = useState(false);
     const [roundCountdownSeconds, setRoundCountdownSeconds] = useState(5);
+
+    // First-to-finish banner state
+    const [firstToFinishBanner, setFirstToFinishBanner] = useState<{
+        visible: boolean;
+        teamName: string;
+        bonus: number;
+        isMyTeam: boolean;
+        round: number;
+    } | null>(null);
 
     // Pre-match (versus screen) countdown state
     const [preMatchCountdownMs, setPreMatchCountdownMs] = useState<number | null>(null);
@@ -1448,7 +1458,7 @@ export function TeamMatchClient({
             round: number;
         }) => {
             console.log('[TeamMatch] First to finish bonus:', data);
-            
+
             // Update team score and add to points feed using current matchState
             setMatchState(prev => {
                 if (!prev) return prev;
@@ -1456,7 +1466,7 @@ export function TeamMatchClient({
                 const myTeamIdFromState = prev.isMyTeam;
                 const team = newState.team1.teamId === data.teamId ? newState.team1 : newState.team2;
                 const isMyTeamEvent = data.teamId === myTeamIdFromState;
-                
+
                 // Add to points feed
                 const event = createFirstToFinishEvent(
                     data.teamId,
@@ -1468,18 +1478,22 @@ export function TeamMatchClient({
                 setTimeout(() => {
                     setPointsEvents(prevEvents => [...prevEvents.slice(-49), event]);
                 }, 0);
-                
-                // Show toast
-                if (isMyTeamEvent) {
-                    toast.success(`🏆 First to finish! +${data.bonus} points`, {
-                        duration: 3000,
+
+                // Show prominent banner instead of just a toast
+                setTimeout(() => {
+                    setFirstToFinishBanner({
+                        visible: true,
+                        teamName: data.teamName,
+                        bonus: data.bonus,
+                        isMyTeam: isMyTeamEvent,
+                        round: data.round,
                     });
-                } else {
-                    toast.info(`${data.teamName} finished round first`, {
-                        duration: 2000,
-                    });
-                }
-                
+                    // Hide banner after 3 seconds (matches ROUND_END_DELAY_MS)
+                    setTimeout(() => {
+                        setFirstToFinishBanner(null);
+                    }, 3000);
+                }, 0);
+
                 team.score = data.newTeamScore;
                 return newState;
             });
@@ -4559,6 +4573,15 @@ export function TeamMatchClient({
                     events={pointsEvents}
                 />
             )}
+
+            {/* First to Finish Banner - Shows when a team completes relay first */}
+            <FirstToFinishBanner
+                visible={firstToFinishBanner?.visible || false}
+                teamName={firstToFinishBanner?.teamName || ''}
+                bonus={firstToFinishBanner?.bonus || 50}
+                isMyTeam={firstToFinishBanner?.isMyTeam || false}
+                round={firstToFinishBanner?.round || 1}
+            />
 
             {/* Player Stats Modal for Post-Match Results */}
             <AnimatePresence>
