@@ -1,0 +1,189 @@
+# ==============================================================================
+# FlashMath Production Docker Compose (with Nginx)
+# ==============================================================================
+#
+# IMPORTANT: Database Persistence
+# - SQLite database is stored in ./data/flashmath.db (bind mount)
+# - PostgreSQL data is stored in a named volume (arena matches, can be recreated)
+# - Redis data is stored in a named volume (cache/queues, can be recreated)
+#
+# Access URLs:
+# - HTTPS (via Nginx): https://flashmath.io (ports 80/443)
+# - Direct (internal):  http://localhost:3000 (not exposed externally)
+#
+# Before running:
+# 1. Copy .env.example to .env and fill in production values
+# 2. Ensure ./data directory exists with proper permissions
+# 3. Place SSL certificates in ./nginx/ssl/ (flashmath.crt, flashmath.key)
+# 4. Update nginx/nginx.conf server_name to flashmath.io
+#
+# Usage:
+#   docker-compose -f docker-compose.prod.yml up -d
+#   docker-compose -f docker-compose.prod.yml logs -f flashmath
+#   docker-compose -f docker-compose.prod.yml down      # Safe - keeps all data
+#   docker-compose -f docker-compose.prod.yml down -v   # WARNING: Deletes PostgreSQL/Redis volumes
+#
+# ==============================================================================
+
+services:
+  # ============================================
+  # NGINX - Security Layer & SSL Termination
+  # ============================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: flashmath-nginx
+    ports:
+      - "80:80"     # HTTP (redirects to HTTPS)
+      - "443:443"   # HTTPS - Primary access point
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      flashmath:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - flashmath-network
+
+  # ============================================
+  # NEXT.JS APPLICATION
+  # ============================================
+  flashmath:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flashmath
+    # Not exposed externally - nginx handles all traffic
+    expose:
+      - "3000"
+    volumes:
+      # CRITICAL: Use bind mount for SQLite database persistence
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      # ============================================
+      # AUTH CONFIGURATION
+      # ============================================
+      - NEXTAUTH_URL=https://flashmath.io
+      - AUTH_SECRET=${AUTH_SECRET:?AUTH_SECRET must be set}
+      # Trust proxy headers from Nginx
+      - TRUST_PROXY=1
+      
+      # ============================================
+      # DATABASE CONFIGURATION
+      # ============================================
+      # SQLite (main database - users, inventory, etc.)
+      - DATABASE_PATH=/app/data/flashmath.db
+      # PostgreSQL (arena matches - can be recreated if needed)
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=flashmath_arena
+      - POSTGRES_USER=flashmath
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      
+      # ============================================
+      # REDIS CONFIGURATION
+      # ============================================
+      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      
+      # ============================================
+      # EMAIL CONFIGURATION (SMTP)
+      # ============================================
+      - SMTP_HOST=${SMTP_HOST:-mail.lanit.services}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-auth-mailer@flashmath.io}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_SECURE=${SMTP_SECURE:-false}
+      - EMAIL_FROM=${EMAIL_FROM:-Flash Math <noreply@flashmath.io>}
+      - EMAIL_REPLY_TO=${EMAIL_REPLY_TO:-support@flashmath.io}
+      
+      # Dev Tools - DISABLED in production
+      - ENABLE_DEV_TOOLS=false
+      - NEXT_PUBLIC_ENABLE_DEV_TOOLS=false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      # Use node to check health - more reliable than wget
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - flashmath-network
+
+  # ============================================
+  # POSTGRESQL - Arena Match Data
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: flashmath-postgres
+    environment:
+      - POSTGRES_DB=flashmath_arena
+      - POSTGRES_USER=flashmath
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    volumes:
+      - flashmath_postgres_data:/var/lib/postgresql/data
+    # Not exposed externally in production (only internal network)
+    expose:
+      - "5432"
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashmath -d flashmath_arena"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flashmath-network
+
+  # ============================================
+  # REDIS - Matchmaking Queue & Presence
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: flashmath-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - flashmath_redis_data:/data
+    # Not exposed externally in production (only internal network)
+    expose:
+      - "6379"
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flashmath-network
+
+# ==============================================================================
+# NETWORKS
+# ==============================================================================
+networks:
+  flashmath-network:
+    name: flashmath-network
+    driver: bridge
+
+# ==============================================================================
+# VOLUMES
+# ==============================================================================
+# NOTE: SQLite database uses a bind mount (./data) instead of a volume
+# This prevents accidental data loss from `docker-compose down -v`
+volumes:
+  flashmath_postgres_data:
+    name: flashmath_postgres_data
+  flashmath_redis_data:
+    name: flashmath_redis_data
