@@ -316,7 +316,7 @@ export function TeamResultsClient({
     const losingTeamScore = team1Won ? match.team2_score : match.team1_score;
 
     const currentUserTeamId = players.find(p => p.user_id === currentUserId)?.team_id;
-    const userWon = currentUserTeamId === match.winner_team_id;
+    const userWon = currentUserTeamId != null && currentUserTeamId === match.winner_team_id;
 
     // Sort players by score
     const sortedWinners = [...winningTeamPlayers].sort((a, b) =>

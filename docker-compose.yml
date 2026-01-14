@@ -54,7 +54,7 @@ services:
       - POSTGRES_PORT=5432
       - POSTGRES_DB=flashmath_arena
       - POSTGRES_USER=flashmath
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-flashmath_prod_password}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       
       # ============================================
       # REDIS CONFIGURATION
@@ -99,7 +99,7 @@ services:
     environment:
       - POSTGRES_DB=flashmath_arena
       - POSTGRES_USER=flashmath
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-flashmath_prod_password}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
     volumes:
       - flashmath_postgres_data:/var/lib/postgresql/data
     # Not exposed externally in production (only internal network)

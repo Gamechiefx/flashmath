@@ -33,6 +33,16 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
     const [countdown, setCountdown] = useState(30);
     const countdownRef = useRef<NodeJS.Timeout | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    
+    // Ref to hold current matchAlert - prevents stale closure in setInterval callback
+    // When handleJoinMatch is called from inside setInterval, it needs the latest
+    // matchAlert value, not the one captured when the effect ran
+    const matchAlertRef = useRef<MatchAlert | null>(null);
+    
+    // Keep ref in sync with state
+    useEffect(() => {
+        matchAlertRef.current = matchAlert;
+    }, [matchAlert]);
 
     // Check if already on match page or queue page (queue page has its own match found UI)
     const isOnMatchPage = pathname?.includes('/arena/teams/match/') || 
@@ -141,14 +151,17 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
     }, [matchAlert]);
 
     const handleJoinMatch = useCallback(() => {
-        if (!matchAlert) return;
+        // Read from ref to get the latest value, avoiding stale closure
+        // when called from inside setInterval callback
+        const alert = matchAlertRef.current;
+        if (!alert) return;
         
         // Clear the alert
         setMatchAlert(null);
         
         // Navigate to match
-        router.push(`/arena/teams/match/${matchAlert.matchId}?partyId=${matchAlert.partyId}`);
-    }, [matchAlert, router]);
+        router.push(`/arena/teams/match/${alert.matchId}?partyId=${alert.partyId}`);
+    }, [router]);
 
     const handleDismiss = useCallback(() => {
         setMatchAlert(null);

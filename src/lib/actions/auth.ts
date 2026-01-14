@@ -24,6 +24,28 @@ export async function signInWithGoogle() {
     await signIn("google", { redirectTo: "/dashboard" });
 }
 
+// Minimum age requirement for registration (GDPR/COPPA compliance)
+const MIN_AGE = 13;
+
+/**
+ * Calculate age from a date of birth string (YYYY-MM-DD format)
+ * Returns the user's age in years, accounting for whether their birthday has occurred this year
+ */
+function calculateAge(dob: string): number {
+    const birthDate = new Date(dob);
+    const today = new Date();
+    
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    // If birthday hasn't occurred yet this year, subtract 1
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    
+    return age;
+}
+
 export async function registerUser(formData: FormData) {
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
@@ -32,6 +54,23 @@ export async function registerUser(formData: FormData) {
 
     if (!name || !email || !password || !dob) {
         return { error: "Missing required fields" };
+    }
+
+    // Validate date of birth format and value
+    const dobDate = new Date(dob);
+    if (isNaN(dobDate.getTime())) {
+        return { error: "Invalid date of birth" };
+    }
+    
+    // Prevent future dates
+    if (dobDate > new Date()) {
+        return { error: "Date of birth cannot be in the future" };
+    }
+    
+    // Validate minimum age requirement (GDPR/COPPA compliance)
+    const age = calculateAge(dob);
+    if (age < MIN_AGE) {
+        return { error: `You must be at least ${MIN_AGE} years old to register` };
     }
 
     // Check if signups are enabled

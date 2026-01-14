@@ -21,12 +21,20 @@ import { getDatabase } from '../src/lib/db/sqlite';
 // PostgreSQL connection
 const { Pool } = require('pg');
 
+// Validate PostgreSQL credentials are set (no hardcoded defaults for security)
+if (!process.env.POSTGRES_PASSWORD) {
+    console.error('❌ ERROR: POSTGRES_PASSWORD environment variable is required.');
+    console.error('   Set POSTGRES_PASSWORD before running this migration script.');
+    console.error('   Example: POSTGRES_PASSWORD=your_secure_password npx ts-node scripts/migrate-elo-to-postgres.ts');
+    process.exit(1);
+}
+
 const pool = new Pool({
     host: process.env.POSTGRES_HOST || 'postgres',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
     database: process.env.POSTGRES_DB || 'flashmath_arena',
     user: process.env.POSTGRES_USER || 'flashmath',
-    password: process.env.POSTGRES_PASSWORD || 'flashmath_password',
+    password: process.env.POSTGRES_PASSWORD,
 });
 
 async function migrateEloData() {

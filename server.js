@@ -1739,7 +1739,7 @@ app.prepare().then(async () => {
         socket.on('presence:notify_party_queue_status', async (data) => {
             const { queueStatus, partyId, updaterId } = data;
             console.log(`[Presence] 📢 BROADCASTING queue status change for party ${partyId}`);
-            
+
             // Use party room for efficient broadcast (no member iteration needed)
             broadcastToParty(partyId, 'party:queue_status_changed', {
                 queueStatus,
@@ -1747,7 +1747,21 @@ app.prepare().then(async () => {
                 updaterId,
             });
         });
-        
+
+        // Party step changed notification (for syncing party/roles/ready flow)
+        socket.on('presence:notify_party_step_change', async (data) => {
+            const { step, partyId, updaterId } = data;
+            console.log(`[Presence] 📢 BROADCASTING step change for party ${partyId}: ${step}`);
+
+            // Use party room for efficient broadcast
+            broadcastToParty(partyId, 'party:step_changed', {
+                step,
+                partyId,
+                updaterId,
+                timestamp: Date.now(),
+            });
+        });
+
         // =============================================================================
         // REDIS-BASED PARTY EVENTS (New)
         // =============================================================================

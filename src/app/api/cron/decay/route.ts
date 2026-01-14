@@ -15,11 +15,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runDecayJob } from '@/lib/arena/decay';
 
 export async function POST(request: NextRequest) {
-    // Verify cron secret
+    // Verify cron secret - CRON_SECRET must be configured
     const authHeader = request.headers.get('authorization');
     const expectedSecret = process.env.CRON_SECRET;
     
-    if (expectedSecret && authHeader !== `Bearer ${expectedSecret}`) {
+    if (!expectedSecret) {
+        console.error('[Cron/Decay] CRON_SECRET not configured');
+        return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
+    }
+    
+    if (authHeader !== `Bearer ${expectedSecret}`) {
         console.log('[Cron/Decay] Unauthorized request');
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

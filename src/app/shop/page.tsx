@@ -88,7 +88,7 @@ export default async function ShopPage() {
                                 <span className="text-xs font-bold uppercase tracking-widest text-primary/70">Balance</span>
                                 <span className="text-2xl font-black text-primary flex items-center gap-2">
                                     <Coins size={20} />
-                                    {user.coins.toLocaleString()}
+                                    {(user.coins ?? 0).toLocaleString()}
                                 </span>
                             </div>
                         </GlassCard>

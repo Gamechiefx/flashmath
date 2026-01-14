@@ -138,9 +138,16 @@ export function TeamSetupClient({
     const readyCount = party?.members.filter(m => m.isReady || m.isLeader).length || 0;
     const allReady = readyCount >= (party?.members.length || 0);
     
-    // Real-time presence for queue status updates
+    // Real-time presence for queue status updates and step sync
     // Pass userId/userName to avoid useSession dependency during navigation transitions
-    const { latestQueueStatusUpdate, clearQueueStatusUpdate, notifyQueueStatusChange } = usePresence({
+    const {
+        latestQueueStatusUpdate,
+        clearQueueStatusUpdate,
+        notifyQueueStatusChange,
+        latestStepUpdate,
+        clearStepUpdate,
+        notifyStepChange,
+    } = usePresence({
         userId: currentUserId,
         userName: currentUserName,
     });
@@ -479,11 +486,23 @@ export function TeamSetupClient({
         router.push(`/arena/teams/queue?partyId=${party?.id}&phase=${phase}&mode=${mode}`);
     }, [latestQueueStatusUpdate, party?.id, router, clearQueueStatusUpdate, mode]);
 
-    // Auto-advance steps
+    // Listen for step changes from party leader via socket (for non-leaders)
+    useEffect(() => {
+        if (!latestStepUpdate) return;
+        if (latestStepUpdate.partyId !== party?.id) return;
+
+        console.log('[TeamSetup] 🔔 Step change received via socket:', latestStepUpdate.step);
+
+        // Update local step state to match leader's broadcast
+        setStep(latestStepUpdate.step);
+        clearStepUpdate();
+    }, [latestStepUpdate, party?.id, clearStepUpdate]);
+
+    // Auto-advance to roles only when party is full AND we're on party step
+    // (Manual advancement via Start Match button handles partial parties)
     useEffect(() => {
         if (hasFullParty && step === 'party') setStep('roles');
-        if (hasIgl && hasAnchor && step === 'roles') setStep('ready');
-    }, [hasFullParty, hasIgl, hasAnchor, step]);
+    }, [hasFullParty, step]);
 
     const handleCreateParty = async () => {
         setLoading(true);
@@ -683,6 +702,51 @@ export function TeamSetupClient({
         }
     };
 
+    // Handle "Start Match" for partial parties - go to roles step first
+    const handleStartMatch = async () => {
+        if (!party || !isLeader) {
+            console.log('[TeamSetup] handleStartMatch early return - conditions not met:', {
+                hasParty: !!party,
+                isLeader
+            });
+            return;
+        }
+        console.log('[TeamSetup] === handleStartMatch CALLED ===');
+        console.log('[TeamSetup] Going to roles step, partySize:', party.members.length);
+
+        // Go to roles step for leader
+        setStep('roles');
+
+        // Broadcast step change to party members - they also go to roles step
+        // where they'll see "Waiting for leader to assign roles..."
+        if (party.id) {
+            notifyStepChange('roles', party.id);
+        }
+    };
+
+    // Confirm roles and advance everyone to ready step
+    const handleConfirmRoles = async () => {
+        if (!party || !isLeader || !hasIgl || !hasAnchor) {
+            console.log('[TeamSetup] handleConfirmRoles early return - conditions not met:', {
+                hasParty: !!party,
+                isLeader,
+                hasIgl,
+                hasAnchor
+            });
+            return;
+        }
+        console.log('[TeamSetup] === handleConfirmRoles CALLED ===');
+        console.log('[TeamSetup] Advancing everyone to ready step');
+
+        // Advance to ready step
+        setStep('ready');
+
+        // Broadcast step change to party members
+        if (party.id) {
+            notifyStepChange('ready', party.id);
+        }
+    };
+
     const handleFindTeammates = async () => {
         if (!party || !isLeader) {
             console.log('[TeamSetup] handleFindTeammates early return - conditions not met:', {
@@ -691,11 +755,26 @@ export function TeamSetupClient({
             });
             return;
         }
+
+        // Validate roles are set (required for all match types with 2+ players)
+        if (party.members.length >= 2 && (!hasIgl || !hasAnchor)) {
+            console.log('[TeamSetup] handleFindTeammates - roles not set:', { hasIgl, hasAnchor });
+            setError('Please assign IGL and Anchor roles before queueing');
+            return;
+        }
+
+        // Validate all members are ready
+        if (!allReady) {
+            console.log('[TeamSetup] handleFindTeammates - not all ready:', { readyCount, total: party.members.length });
+            setError('All party members must be ready');
+            return;
+        }
+
         console.log('[TeamSetup] === handleFindTeammates CALLED ===');
         console.log('[TeamSetup] partyId:', party.id, 'currentSize:', party.members.length, 'matchType:', matchType);
         // #region agent log
         // #endregion
-        
+
         // FIX: Clear the fromQueue URL parameter to reset navigation state
         // This prevents stale fromQueue=true from affecting future navigations
         if (typeof window !== 'undefined' && window.location.search.includes('fromQueue=true')) {
@@ -1174,10 +1253,10 @@ export function TeamSetupClient({
                                                     </AnimatePresence>
                                                 </div>
                                                 
-                                                {/* Action Button */}
+                                                {/* Action Button - All match types go to roles step first */}
                                                 {matchType === 'vs_ai' ? (
                                                     <button
-                                                        onClick={handleStartAIMatchFromParty}
+                                                        onClick={handleStartMatch}
                                                         disabled={loading}
                                                         className={cn(
                                                             "w-full px-6 py-3 rounded-xl font-bold transition-all",
@@ -1191,7 +1270,7 @@ export function TeamSetupClient({
                                                             <Loader2 className="w-5 h-5 animate-spin" />
                                                         ) : (
                                                             <>
-                                                                🤖 Start VS AI Match
+                                                                🤖 Start Match
                                                                 <span className="text-sm opacity-75">
                                                                     (+{needsTeammates} AI teammates)
                                                                 </span>
@@ -1200,7 +1279,7 @@ export function TeamSetupClient({
                                                     </button>
                                                 ) : (
                                                     <button
-                                                        onClick={handleFindTeammates}
+                                                        onClick={handleStartMatch}
                                                         disabled={loading}
                                                         className={cn(
                                                             "w-full px-6 py-3 rounded-xl font-bold transition-all",
@@ -1215,7 +1294,7 @@ export function TeamSetupClient({
                                                         ) : (
                                                             <>
                                                                 <Zap className="w-5 h-5" />
-                                                                Find Teammates
+                                                                Start Match
                                                                 <span className="ml-1 px-2 py-0.5 rounded-full bg-white/20 text-xs">
                                                                     {partySize}/{requiredSize}
                                                                 </span>
@@ -1329,6 +1408,38 @@ export function TeamSetupClient({
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Confirm Roles Button - Leader only */}
+                            {isLeader && (
+                                <div className="mt-4 flex flex-col items-center gap-2">
+                                    <button
+                                        onClick={handleConfirmRoles}
+                                        disabled={!hasIgl || !hasAnchor || loading}
+                                        className={cn(
+                                            "px-8 py-4 rounded-xl font-bold transition-all",
+                                            hasIgl && hasAnchor
+                                                ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white hover:scale-105 hover:shadow-lg"
+                                                : "bg-card text-muted-foreground cursor-not-allowed"
+                                        )}
+                                    >
+                                        {loading ? (
+                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                        ) : hasIgl && hasAnchor ? (
+                                            <span className="flex items-center gap-2">
+                                                <Check className="w-5 h-5" />
+                                                Confirm Roles
+                                            </span>
+                                        ) : (
+                                            'Select IGL and Anchor'
+                                        )}
+                                    </button>
+                                    {(!hasIgl || !hasAnchor) && (
+                                        <p className="text-xs text-muted-foreground">
+                                            Assign both roles to continue
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             {!isLeader && (
                                 <p className="text-center text-muted-foreground text-sm mt-4 flex items-center justify-center gap-2">
@@ -1550,10 +1661,10 @@ export function TeamSetupClient({
                                                 )}
                                             </button>
                                         ) : (
-                                            /* Ranked or Casual - Queue for opponents */
+                                            /* Ranked or Casual - Queue for opponents/teammates */
                                             <button
                                                 data-testid="find-match-button"
-                                                onClick={handleStartQueue}
+                                                onClick={handleFindTeammates}
                                                 disabled={!allReady || loading}
                                                 className={cn(
                                                     "px-12 py-5 rounded-xl font-bold text-lg transition-all",
@@ -1570,6 +1681,11 @@ export function TeamSetupClient({
                                                     <span className="flex items-center gap-2">
                                                         {matchType === 'ranked' ? '🏆' : '🎮'}
                                                         {matchType === 'ranked' ? 'Find Ranked Match' : 'Find Casual Match'}
+                                                        {hasPartialParty && matchType === 'casual' && (
+                                                            <span className="text-sm opacity-75">
+                                                                (+{needsTeammates} AI)
+                                                            </span>
+                                                        )}
                                                     </span>
                                                 ) : (
                                                     `Waiting (${readyCount}/${party.members.length})`

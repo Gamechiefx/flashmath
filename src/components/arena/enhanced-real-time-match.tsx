@@ -254,6 +254,8 @@ export function EnhancedRealTimeMatch({
     }, [matchEnded, you, opponent, finalStats, userName, currentUserId, opponentId, initialPlayers]);
 
     // Enhanced match result saving with retry logic
+    const MAX_RETRIES = 3;
+    
     useEffect(() => {
         if (!matchEnded || hasSavedResult || savingRef.current) return;
         if (!you || !opponent) return;
@@ -296,6 +298,8 @@ export function EnhancedRealTimeMatch({
                     setEloChange(youWon ? result.winnerEloChange || 0 : result.loserEloChange || 0);
                     setCoinsEarned(youWon ? result.winnerCoinsEarned || 0 : result.loserCoinsEarned || 0);
                     setResultData(result);
+                    setHasSavedResult(true);
+                    savingRef.current = false;
                     router.refresh();
                     await update();
                 } else {
@@ -305,13 +309,14 @@ export function EnhancedRealTimeMatch({
                 console.error('[Enhanced Match] Save result error:', error);
                 
                 // Retry logic for network issues
-                if (retryCount < 3) {
+                if (retryCount < MAX_RETRIES) {
                     setTimeout(() => saveResultWithRetry(retryCount + 1), 2000 * (retryCount + 1));
                 } else {
                     console.error('[Enhanced Match] Max save retries reached');
+                    // Only mark as "saved" after exhausting all retries to prevent infinite loops
+                    setHasSavedResult(true);
+                    savingRef.current = false;
                 }
-            } finally {
-                setHasSavedResult(true);
             }
         }
 
@@ -353,6 +358,7 @@ export function EnhancedRealTimeMatch({
     }, [answer, currentQuestion, socketSubmitAnswer, showResult, connected]);
 
     // Enhanced auto-submit with connection awareness
+    // Delegates to handleSubmit to avoid duplicate logic and prevent race conditions
     useEffect(() => {
         if (!answer.trim() || !currentQuestion || showResult || isProcessingRef.current || !connected) return;
 
@@ -364,30 +370,10 @@ export function EnhancedRealTimeMatch({
         
         if (typedDigits.length < expectedAnswerStr.length) return;
 
-        isProcessingRef.current = true;
-        const isCorrect = numAnswer === currentQuestion.answer;
-        
-        if (isCorrect) {
-            setShowResult('correct');
-            socketSubmitAnswer(numAnswer);
-            setTimeout(() => {
-                setShowResult(null);
-                setAnswer('');
-                setLastCorrectAnswer(null);
-                isProcessingRef.current = false;
-            }, 200);
-        } else {
-            setShowResult('wrong');
-            setLastCorrectAnswer(currentQuestion.answer);
-            socketSubmitAnswer(numAnswer);
-            setTimeout(() => {
-                setShowResult(null);
-                setAnswer('');
-                setLastCorrectAnswer(null);
-                isProcessingRef.current = false;
-            }, 400);
-        }
-    }, [answer, currentQuestion, socketSubmitAnswer, showResult, connected]);
+        // Delegate to handleSubmit to use a single submission path
+        // This prevents race conditions between manual and auto-submit
+        handleSubmit();
+    }, [answer, currentQuestion, showResult, connected, handleSubmit]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !showResult && !isProcessingRef.current && connected) {

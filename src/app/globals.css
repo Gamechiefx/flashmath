@@ -526,34 +526,12 @@ input[type="number"] {
 }
 
 .frame-rainbow {
-  position: relative;
   border-radius: 9999px;
-}
-
-.frame-rainbow::before {
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 9999px;
-  background: conic-gradient(#ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
+  background: conic-gradient(from 0deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
   animation: rainbow-rotate 2s linear infinite;
-  z-index: -1;
-}
-
-.frame-rainbow::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 9999px;
-  background: var(--background);
-  z-index: -1;
 }
 
 @keyframes rainbow-rotate {
-  0% {
-    transform: rotate(0deg);
-  }
-
   100% {
     transform: rotate(360deg);
   }
@@ -686,20 +664,6 @@ input[type="number"] {
 }
 
 /* =============================================================================
-   SCROLLBAR HIDING - Full page lock for arena flows
-   ============================================================================= */
-
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-  overflow: hidden;
-}
-
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-/* =============================================================================
    SCROLLBAR HIDING UTILITIES
    ============================================================================= */
 
@@ -711,6 +675,17 @@ input[type="number"] {
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;  /* Chrome, Safari, Opera */
+}
+
+/* Hide scrollbar AND lock scrolling */
+.no-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  overflow: hidden;
+}
+
+.no-scroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* Hide scrollbar on html/body for specific pages */

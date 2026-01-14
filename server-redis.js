@@ -313,32 +313,72 @@ async function updateMatch(matchId, updates) {
 }
 
 /**
- * Update player score atomically
+ * Lua script for atomic player score update.
+ * 
+ * This script runs atomically in Redis, preventing race conditions when
+ * two players submit answers simultaneously. Without this, a get-modify-set
+ * pattern could lose updates if concurrent requests interleave.
+ * 
+ * KEYS[1]: The hash key for match players (arena:match:players:{matchId})
+ * ARGV[1]: The user ID (hash field name)
+ * ARGV[2]: JSON string of additional fields to update
+ * ARGV[3]: Score change amount (can be negative)
+ * 
+ * Returns: Updated player JSON, or nil if player not found
+ */
+const UPDATE_PLAYER_SCORE_SCRIPT = `
+local playerJson = redis.call('HGET', KEYS[1], ARGV[1])
+if not playerJson then return nil end
+
+local player = cjson.decode(playerJson)
+local updates = cjson.decode(ARGV[2])
+
+-- Apply additional field updates
+for k, v in pairs(updates) do 
+    player[k] = v 
+end
+
+-- Calculate new score with floor at 0
+local currentScore = player.score or 0
+local scoreChange = tonumber(ARGV[3])
+player.score = math.max(0, currentScore + scoreChange)
+
+-- Save back to Redis
+local updatedJson = cjson.encode(player)
+redis.call('HSET', KEYS[1], ARGV[1], updatedJson)
+
+return updatedJson
+`;
+
+/**
+ * Update player score atomically using Lua script.
+ * 
+ * This function uses a Lua script to perform an atomic read-modify-write
+ * operation in Redis. This prevents race conditions when multiple players
+ * submit answers simultaneously (e.g., in multi-server deployments).
+ * 
  * @param {string} matchId - Match ID
  * @param {string} odUserId - User ID
  * @param {number} scoreChange - Score change (can be negative)
  * @param {Object} playerUpdate - Additional player fields to update
+ * @returns {Object|null} Updated player object, or null if player not found
  */
 async function updatePlayerScore(matchId, odUserId, scoreChange, playerUpdate = {}) {
     return safeRedisOp(async () => {
         const playersKey = KEYS.MATCH_PLAYERS + matchId;
         
-        // Get current player state
-        const playerJson = await redis.hget(playersKey, odUserId);
-        if (!playerJson) {
-            return null;
-        }
+        // Execute Lua script atomically
+        // Args: KEYS[1]=playersKey, ARGV[1]=userId, ARGV[2]=updates JSON, ARGV[3]=scoreChange
+        const result = await redis.eval(
+            UPDATE_PLAYER_SCORE_SCRIPT,
+            1,                              // Number of KEYS
+            playersKey,                     // KEYS[1]
+            odUserId,                       // ARGV[1]
+            JSON.stringify(playerUpdate),   // ARGV[2]
+            scoreChange.toString()          // ARGV[3]
+        );
         
-        const player = JSON.parse(playerJson);
-        
-        // Update fields
-        Object.assign(player, playerUpdate);
-        player.score = Math.max(0, (player.score || 0) + scoreChange);
-        
-        // Save back
-        await redis.hset(playersKey, odUserId, JSON.stringify(player));
-        
-        return player;
+        return result ? JSON.parse(result) : null;
     }, null);
 }
 

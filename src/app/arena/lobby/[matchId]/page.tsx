@@ -32,6 +32,11 @@ export default async function ArenaLobbyPage({ params, searchParams }: PageProps
     const userStats = await getArenaStats(userId);
     const matchResult = await getMatch(matchId);
 
+    // Handle match retrieval errors - redirect to arena if match not found or service unavailable
+    if (matchResult.error) {
+        redirect("/arena");
+    }
+
     // Helper to get operation-specific ELO
     const getOperationElo = (mode: string, op: string): number => {
         const isDuel = mode === '1v1';

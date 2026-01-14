@@ -9,6 +9,7 @@ interface Player {
     name: string;
     score: number;
     streak: number;
+    maxStreak: number;  // Tracks the highest streak achieved during the match
     lastAnswerCorrect: boolean | null;
 }
 
@@ -17,6 +18,8 @@ interface MatchInterfaceProps {
     currentUserId: string;
     players: Player[];
     isAiMatch?: boolean;
+    /** Match-level operation (e.g., 'addition', 'subtraction', 'multiplication') for result saving */
+    operation: string;
 }
 
 // Question generator inside client component
@@ -53,22 +56,32 @@ function generateQuestion() {
     return { question, answer, operation };
 }
 
-export function MatchInterface({ matchId, currentUserId, players: initialPlayers, isAiMatch = false }: MatchInterfaceProps) {
+export function MatchInterface({ matchId, currentUserId, players: initialPlayers, isAiMatch = false, operation }: MatchInterfaceProps) {
     const router = useRouter();
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [timeLeft, setTimeLeft] = useState(60);
     const [currentQuestion, setCurrentQuestion] = useState(() => generateQuestion());
     const [answer, setAnswer] = useState('');
-    const [players, setPlayers] = useState(initialPlayers);
+    // Initialize players with maxStreak defaulting to the initial streak value
+    const [players, setPlayers] = useState(() => 
+        initialPlayers.map(p => ({
+            ...p,
+            maxStreak: p.maxStreak ?? p.streak  // Default to current streak if maxStreak not provided
+        }))
+    );
     const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
     const [gameOver, setGameOver] = useState(false);
     const [questionsAnswered, setQuestionsAnswered] = useState(0);
     const [eloChange, setEloChange] = useState<number | null>(null);
     const [hasSavedResult, setHasSavedResult] = useState(false);
 
-    const you = players.find(p => p.id === currentUserId)!;
-    const opponent = players.find(p => p.id !== currentUserId)!;
+    const you = players.find(p => p.id === currentUserId);
+    const opponent = players.find(p => p.id !== currentUserId);
+
+    if (!you || !opponent) {
+        return <div className="text-center text-red-500">Error: Invalid match state</div>;
+    }
 
     // 60 second match timer
     useEffect(() => {
@@ -93,29 +106,39 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
         if (!gameOver || hasSavedResult) return;
 
         async function saveResult() {
+            const isDraw = you.score === opponent.score;
             const winner = you.score > opponent.score ? you : opponent;
             const loser = you.score > opponent.score ? opponent : you;
-            const isWinner = winner.id === currentUserId;
 
             const { saveMatchResult } = await import('@/lib/actions/matchmaking');
             const result = await saveMatchResult({
                 matchId,
-                winnerId: winner.id,
-                loserId: loser.id,
-                winnerScore: winner.score,
-                loserScore: loser.score,
-                operation: currentQuestion.operation,
+                // For draws, we still need to pass IDs but they don't determine a winner
+                winnerId: isDraw ? you.id : winner.id,
+                loserId: isDraw ? opponent.id : loser.id,
+                winnerScore: isDraw ? you.score : winner.score,
+                loserScore: isDraw ? opponent.score : loser.score,
+                operation,
                 mode: '1v1',
+                isDraw,
             });
 
             if (result.success) {
-                setEloChange(isWinner ? result.winnerEloChange || 0 : result.loserEloChange || 0);
+                // For draws, both players get the same ELO change (typically 0 or small)
+                // For wins/losses, use the appropriate change based on whether we won
+                const isWinner = you.score > opponent.score;
+                if (isDraw) {
+                    // Both players get the draw ELO change (use winnerEloChange as draw change)
+                    setEloChange(result.winnerEloChange || 0);
+                } else {
+                    setEloChange(isWinner ? result.winnerEloChange || 0 : result.loserEloChange || 0);
+                }
             }
             setHasSavedResult(true);
         }
 
         saveResult();
-    }, [gameOver, hasSavedResult, you, opponent, currentUserId, matchId, currentQuestion.operation]);
+    }, [gameOver, hasSavedResult, you, opponent, currentUserId, matchId, operation]);
 
     // Auto-focus input
     useEffect(() => {
@@ -136,20 +159,24 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
         // Update your score
         setPlayers(prev => prev.map(p => {
             if (p.id === currentUserId) {
+                const newStreak = isCorrect ? p.streak + 1 : 0;
                 return {
                     ...p,
                     score: p.score + (isCorrect ? 100 : 0),
-                    streak: isCorrect ? p.streak + 1 : 0,
+                    streak: newStreak,
+                    maxStreak: Math.max(p.maxStreak, newStreak),  // Track best streak
                     lastAnswerCorrect: isCorrect
                 };
             }
             // Simulate opponent answering
             if (p.id !== currentUserId && Math.random() > 0.3) {
                 const opponentCorrect = Math.random() > 0.4;
+                const opponentNewStreak = opponentCorrect ? p.streak + 1 : 0;
                 return {
                     ...p,
                     score: p.score + (opponentCorrect ? 100 : 0),
-                    streak: opponentCorrect ? p.streak + 1 : 0,
+                    streak: opponentNewStreak,
+                    maxStreak: Math.max(p.maxStreak, opponentNewStreak),  // Track best streak
                     lastAnswerCorrect: opponentCorrect
                 };
             }
@@ -174,8 +201,27 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
     const timeProgress = (timeLeft / 60) * 100;
 
     if (gameOver) {
-        const winner = you.score > opponent.score ? you : opponent;
-        const isWinner = winner.id === currentUserId;
+        const isDraw = you.score === opponent.score;
+        const isWinner = you.score > opponent.score;
+
+        // Determine display text and styling based on result
+        const getResultEmoji = () => {
+            if (isDraw) return '🤝';
+            if (isWinner) return '🏆';
+            return '💪';
+        };
+
+        const getResultText = () => {
+            if (isDraw) return 'Draw!';
+            if (isWinner) return 'Victory!';
+            return 'Good Fight!';
+        };
+
+        const getResultColor = () => {
+            if (isDraw) return 'text-yellow-500';
+            if (isWinner) return 'text-green-500';
+            return 'text-accent';
+        };
 
         return (
             <motion.div
@@ -191,10 +237,10 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
                         transition={{ type: "spring", damping: 10 }}
                         className="text-8xl"
                     >
-                        {isWinner ? '🏆' : '💪'}
+                        {getResultEmoji()}
                     </motion.div>
-                    <h1 className={`text-4xl font-bold ${isWinner ? 'text-green-500' : 'text-accent'}`}>
-                        {isWinner ? 'Victory!' : 'Good Fight!'}
+                    <h1 className={`text-4xl font-bold ${getResultColor()}`}>
+                        {getResultText()}
                     </h1>
                 </div>
 
@@ -220,7 +266,7 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">Best Streak</p>
-                            <p className="text-xl font-bold">{you.streak}🔥</p>
+                            <p className="text-xl font-bold">{you.maxStreak}🔥</p>
                         </div>
                     </div>
 

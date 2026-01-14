@@ -47,12 +47,16 @@ let repaired = 0;
 const repair = db.transaction(() => {
     for (const f of oneWayFriendships) {
         const newId = uuidv4();
-        db.prepare(`
+        const result = db.prepare(`
             INSERT OR IGNORE INTO friendships (id, user_id, friend_id, created_at)
             VALUES (?, ?, ?, ?)
         `).run(newId, f.friend_id, f.user_id, f.created_at || timestamp);
-        repaired++;
-        console.log(`[Repair] Created: ${f.friend_name || f.friend_id} -> ${f.user_name || f.user_id}`);
+        if (result.changes > 0) {
+            repaired++;
+            console.log(`[Repair] Created: ${f.friend_name || f.friend_id} -> ${f.user_name || f.user_id}`);
+        } else {
+            console.log(`[Repair] Skipped (already exists): ${f.friend_name || f.friend_id} -> ${f.user_name || f.user_id}`);
+        }
     }
 });
 

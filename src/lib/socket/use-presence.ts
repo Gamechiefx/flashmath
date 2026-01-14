@@ -38,6 +38,13 @@ interface PartyQueueStatusUpdate {
     timestamp: number;
 }
 
+interface PartyStepUpdate {
+    step: 'party' | 'roles' | 'ready';
+    partyId: string;
+    updaterId: string;
+    timestamp: number;
+}
+
 interface UsePresenceReturn {
     isConnected: boolean;
     myStatus: PresenceStatus;
@@ -57,6 +64,10 @@ interface UsePresenceReturn {
     latestQueueStatusUpdate: PartyQueueStatusUpdate | null;
     clearQueueStatusUpdate: () => void;
     notifyQueueStatusChange: (partyMemberIds: string[], queueStatus: string | null, partyId: string) => void;
+    // Party step real-time update (for party/roles/ready flow)
+    latestStepUpdate: PartyStepUpdate | null;
+    clearStepUpdate: () => void;
+    notifyStepChange: (step: 'party' | 'roles' | 'ready', partyId: string) => void;
 }
 
 let presenceSocket: Socket | null = null;
@@ -97,6 +108,9 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     
     // Queue status update for real-time sync when leader changes queue
     const [latestQueueStatusUpdate, setLatestQueueStatusUpdate] = useState<PartyQueueStatusUpdate | null>(null);
+
+    // Step update for real-time sync (party/roles/ready flow)
+    const [latestStepUpdate, setLatestStepUpdate] = useState<PartyStepUpdate | null>(null);
     
     const userIdRef = useRef<string | null>(null);
     const statusRef = useRef<PresenceStatus>('online');
@@ -214,7 +228,16 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             setLatestQueueStatusUpdate(data);
             setPartyChanged(prev => prev + 1);
         };
-        
+
+        const handlePartyStepChanged = (data: PartyStepUpdate) => {
+            console.log('[Presence] 🔔 SOCKET RECEIVED: party:step_changed');
+            console.log('[Presence] partyId:', data.partyId);
+            console.log('[Presence] step:', data.step);
+            console.log('[Presence] updaterId:', data.updaterId);
+            setLatestStepUpdate(data);
+            setPartyChanged(prev => prev + 1);
+        };
+
         // Register handlers
         // #region agent log - H5: Track handler registration
         handlerRegistrationCount++;
@@ -231,7 +254,8 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         socket.on('party:member_left', handlePartyMemberLeft);
         socket.on('party:settings_updated', handlePartySettingsUpdated);
         socket.on('party:queue_status_changed', handlePartyQueueStatusChanged);
-        
+        socket.on('party:step_changed', handlePartyStepChanged);
+
         // Connect if not already
         if (!socket.connected) {
             socket.connect();
@@ -257,6 +281,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             socket.off('party:member_left', handlePartyMemberLeft);
             socket.off('party:settings_updated', handlePartySettingsUpdated);
             socket.off('party:queue_status_changed', handlePartyQueueStatusChanged);
+            socket.off('party:step_changed', handlePartyStepChanged);
         };
     }, [autoConnect, effectiveUserId, effectiveUserName]);
     
@@ -296,7 +321,11 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     const clearQueueStatusUpdate = useCallback(() => {
         setLatestQueueStatusUpdate(null);
     }, []);
-    
+
+    const clearStepUpdate = useCallback(() => {
+        setLatestStepUpdate(null);
+    }, []);
+
     // Notify all party members of queue status change (called by leader)
     const notifyQueueStatusChange = useCallback((
         partyMemberIds: string[], 
@@ -323,7 +352,27 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             console.log('[Presence] ⚠️ Socket not connected, cannot emit');
         }
     }, []);
-    
+
+    // Notify all party members of step change (called by leader)
+    const notifyStepChange = useCallback((
+        step: 'party' | 'roles' | 'ready',
+        partyId: string
+    ) => {
+        console.log('[Presence] 📤 SOCKET EMIT: presence:notify_party_step_change');
+        console.log('[Presence] partyId:', partyId);
+        console.log('[Presence] step:', step);
+
+        if (presenceSocket?.connected && userIdRef.current) {
+            presenceSocket.emit('presence:notify_party_step_change', {
+                step,
+                partyId,
+                updaterId: userIdRef.current,
+            });
+        } else {
+            console.log('[Presence] ⚠️ Socket not connected, cannot emit step change');
+        }
+    }, []);
+
     return {
         isConnected,
         myStatus,
@@ -345,6 +394,10 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
         latestQueueStatusUpdate,
         clearQueueStatusUpdate,
         notifyQueueStatusChange,
+        // Step real-time update (party/roles/ready flow)
+        latestStepUpdate,
+        clearStepUpdate,
+        notifyStepChange,
     };
 }
 

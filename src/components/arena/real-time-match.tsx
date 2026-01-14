@@ -365,6 +365,7 @@ export function RealTimeMatch({
     }, [answer, currentQuestion, socketSubmitAnswer, showResult]);
 
     // Auto-submit when answer has enough digits (correct OR wrong)
+    // Delegates to handleSubmit to avoid duplicate logic and prevent race conditions
     useEffect(() => {
         // Don't process if already showing result or currently processing
         if (!answer.trim() || !currentQuestion || showResult || isProcessingRef.current) return;
@@ -379,36 +380,10 @@ export function RealTimeMatch({
         // Only auto-submit when we have typed enough digits
         if (typedDigits.length < expectedAnswerStr.length) return;
 
-        // Mark as processing
-        isProcessingRef.current = true;
-
-        const isCorrect = numAnswer === currentQuestion.answer;
-        
-        if (isCorrect) {
-            // Correct: quick feedback and continue
-            setShowResult('correct');
-            socketSubmitAnswer(numAnswer);
-
-            setTimeout(() => {
-                setShowResult(null);
-                setAnswer('');
-                setLastCorrectAnswer(null);
-                isProcessingRef.current = false;
-            }, 200);
-        } else {
-            // Wrong: show error, submit to server, brief flash then continue
-            setShowResult('wrong');
-            setLastCorrectAnswer(currentQuestion.answer);
-            socketSubmitAnswer(numAnswer);
-
-            setTimeout(() => {
-                setShowResult(null);
-                setAnswer('');
-                setLastCorrectAnswer(null);
-                isProcessingRef.current = false;
-            }, 400); // Slightly longer for wrong so they notice
-        }
-    }, [answer, currentQuestion, socketSubmitAnswer, showResult]);
+        // Delegate to handleSubmit to use a single submission path
+        // This prevents race conditions between manual and auto-submit
+        handleSubmit();
+    }, [answer, currentQuestion, showResult, handleSubmit]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         // Only allow Enter if not already processing

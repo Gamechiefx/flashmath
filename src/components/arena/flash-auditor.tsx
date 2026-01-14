@@ -29,29 +29,20 @@ import {
     Info
 } from 'lucide-react';
 
+// Import shared types to avoid duplication
+import { type ConfidenceBreakdown } from '@/lib/actions/confidence';
+import { type DecayStatus } from '@/lib/arena/decay';
+
 // =============================================================================
 // TYPES
 // =============================================================================
 
-export interface ConfidenceBreakdown {
-    overall: number;           // 0-1 overall confidence
-    volume: number;            // 0-1 volume factor
-    consistency: number;       // 0-1 consistency factor
-    recency: number;           // 0-1 recency factor
-    totalSessions: number;     // Total practice sessions
-    sessionsPerWeek: number;   // Average sessions per week
-    daysSinceLastPractice: number;
-}
+// Re-export ConfidenceBreakdown for backward compatibility with consumers
+export type { ConfidenceBreakdown };
 
-export interface DecayInfo {
-    phase: 'active' | 'warning' | 'decaying' | 'severe' | 'returning';
-    phaseLabel: string;
-    daysUntilNextPhase: number;
-    eloAtRisk: number;
-    isReturningPlayer: boolean;
-    placementMatchesRequired: number;
-    placementMatchesCompleted: number;
-}
+// Type alias to maintain existing DecayInfo usage throughout this file
+// DecayStatus is the canonical type with additional fields (daysSinceActivity, tierAtRisk, etc.)
+export type DecayInfo = DecayStatus;
 
 interface FlashAuditorProps {
     confidence: ConfidenceBreakdown;
@@ -183,7 +174,9 @@ function ImprovementTip({ tip }: { tip: string }) {
 }
 
 function PlacementProgress({ decay }: { decay: DecayInfo }) {
-    const progress = decay.placementMatchesCompleted / decay.placementMatchesRequired;
+    const progress = decay.placementMatchesRequired > 0 
+        ? decay.placementMatchesCompleted / decay.placementMatchesRequired 
+        : 0;
     const remaining = decay.placementMatchesRequired - decay.placementMatchesCompleted;
     
     return (

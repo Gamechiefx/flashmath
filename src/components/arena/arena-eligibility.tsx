@@ -62,7 +62,7 @@ export function ArenaEligibility({
         if (eligible) {
             setRequirementsExpanded(false);
         }
-    }, [isAdmin, hasEnoughPractice, hasGoodAccuracy, meetsAge]);
+    }, [isAdmin, hasEnoughPractice, meetsAge]);
 
     // Build confidence breakdown from practiceStats if not provided
     const confidence: ConfidenceBreakdown = confidenceBreakdown || {

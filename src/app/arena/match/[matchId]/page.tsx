@@ -32,6 +32,11 @@ export default async function ArenaMatchPage({ params, searchParams }: PageProps
     // Try to get match data from matchmaking service
     const matchResult = await getMatch(matchId);
 
+    // Handle match retrieval errors - redirect to arena if match not found or service unavailable
+    if (matchResult.error) {
+        redirect("/arena");
+    }
+
     let isAiMatch = false;
     let matchOperation = operation;
 

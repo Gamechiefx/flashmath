@@ -10,7 +10,7 @@ Arena matchmaking now filters players by practice tier before matching by ELO. T
 Tier → Mode → ELO
 ```
 
-1. **Tier**: Players must be within ±5 tiers of each other
+1. **Tier**: Players must be within ±20 tiers of each other (one full band)
 2. **Mode**: Players must be in the same queue (1v1, 2v2, 3v3) and operation
 3. **ELO**: Players must be within ±200 ELO of each other
 
@@ -53,7 +53,7 @@ When no human opponent is found:
 Matchmaking logs include tier information:
 ```
 [Matchmaking] Candidate: PlayerName (id), elo=500, tier=45
-[Matchmaking] Skipping PlayerName: tier 45 outside range ±5 from 30
+[Matchmaking] Skipping PlayerName: tier 45 outside range ±20 from 30
 ```
 
 ## Future Considerations

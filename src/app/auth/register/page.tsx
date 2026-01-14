@@ -140,6 +140,7 @@ export default function RegisterPage() {
                                     type="date"
                                     name="dob"
                                     required
+                                    max={new Date().toISOString().split('T')[0]}
                                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all [color-scheme:dark] text-muted-foreground focus:text-foreground"
                                 />
                             </div>

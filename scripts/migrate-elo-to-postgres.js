@@ -23,13 +23,21 @@ const path = require('path');
 // Database paths
 const SQLITE_PATH = process.env.DATABASE_URL || '/app/flashmath.db';
 
+// Validate PostgreSQL credentials are set (no hardcoded defaults for security)
+if (!process.env.POSTGRES_PASSWORD) {
+    console.error('❌ ERROR: POSTGRES_PASSWORD environment variable is required.');
+    console.error('   Set POSTGRES_PASSWORD before running this migration script.');
+    console.error('   Example: POSTGRES_PASSWORD=your_secure_password node scripts/migrate-elo-to-postgres.js');
+    process.exit(1);
+}
+
 // PostgreSQL connection
 const pool = new Pool({
     host: process.env.POSTGRES_HOST || 'postgres',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
     database: process.env.POSTGRES_DB || 'flashmath_arena',
     user: process.env.POSTGRES_USER || 'flashmath',
-    password: process.env.POSTGRES_PASSWORD || 'flashmath_password',
+    password: process.env.POSTGRES_PASSWORD,
 });
 
 async function ensurePostgresSchema() {

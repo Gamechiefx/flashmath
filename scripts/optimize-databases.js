@@ -13,12 +13,19 @@ const { Pool } = require('pg');
 // Configuration
 const SQLITE_PATH = process.env.DATABASE_URL || '/app/flashmath.db';
 
+// Validate PostgreSQL credentials are set (no hardcoded defaults for security)
+if (!process.env.POSTGRES_PASSWORD) {
+    console.warn('⚠️  WARNING: POSTGRES_PASSWORD environment variable is not set.');
+    console.warn('   Set POSTGRES_PASSWORD before running this script in production.');
+    console.warn('   Example: POSTGRES_PASSWORD=your_secure_password node scripts/optimize-databases.js\n');
+}
+
 const pgPool = new Pool({
     host: process.env.POSTGRES_HOST || 'postgres',
     port: parseInt(process.env.POSTGRES_PORT || '5432'),
     database: process.env.POSTGRES_DB || 'flashmath_arena',
     user: process.env.POSTGRES_USER || 'flashmath',
-    password: process.env.POSTGRES_PASSWORD || 'flashmath_password',
+    password: process.env.POSTGRES_PASSWORD,
 });
 
 async function optimizeSQLite() {
@@ -196,6 +203,7 @@ async function main() {
     console.log('🚀 FlashMath Database Optimization\n');
     console.log('═'.repeat(50) + '\n');
     
+    let exitCode = 0;
     try {
         await optimizeSQLite();
         await optimizePostgreSQL();
@@ -210,10 +218,11 @@ async function main() {
         
     } catch (error) {
         console.error('❌ Optimization failed:', error);
+        exitCode = 1;
     }
     
     await pgPool.end();
-    process.exit(0);
+    process.exit(exitCode);
 }
 
 main();

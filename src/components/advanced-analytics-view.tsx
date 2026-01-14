@@ -72,15 +72,36 @@ const getRarityColor = (rarity: string) => {
     }
 };
 
+// Rarity border classes for achievements (static classes for Tailwind purge)
+const getRarityBorderClass = (rarity: string, opacity: '30' | '50' = '30') => {
+    if (opacity === '50') {
+        switch (rarity) {
+            case 'legendary': return 'border-yellow-500/50';
+            case 'epic': return 'border-purple-500/50';
+            case 'rare': return 'border-blue-500/50';
+            case 'common': return 'border-green-500/50';
+            default: return 'border-white/50';
+        }
+    }
+    // Default opacity: 30
+    switch (rarity) {
+        case 'legendary': return 'border-yellow-500/30';
+        case 'epic': return 'border-purple-500/30';
+        case 'rare': return 'border-blue-500/30';
+        case 'common': return 'border-green-500/30';
+        default: return 'border-white/30';
+    }
+};
+
 export function AdvancedAnalyticsView({ analytics, achievements, progressSummary }: AdvancedAnalyticsViewProps) {
     const [selectedTab, setSelectedTab] = useState<'trends' | 'suggestions' | 'achievements' | 'share'>('trends');
-    const [copiedText, setCopiedText] = useState<string | null>(null);
+    const [copiedId, setCopiedId] = useState<string | null>(null);
 
-    const handleCopyShare = async (text: string) => {
+    const handleCopyShare = async (text: string, id: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            setCopiedText(text);
-            setTimeout(() => setCopiedText(null), 2000);
+            setCopiedId(id);
+            setTimeout(() => setCopiedId(null), 2000);
         } catch (error) {
             console.error('Failed to copy:', error);
         }
@@ -279,9 +300,7 @@ export function AdvancedAnalyticsView({ analytics, achievements, progressSummary
                                 >
                                     <GlassCard className={cn(
                                         "p-6 relative overflow-hidden border-2",
-                                        `border-${achievement.rarity === 'legendary' ? 'yellow' : 
-                                                  achievement.rarity === 'epic' ? 'purple' :
-                                                  achievement.rarity === 'rare' ? 'blue' : 'green'}-500/30`
+                                        getRarityBorderClass(achievement.rarity)
                                     )}>
                                         <div className={cn(
                                             "absolute inset-0 bg-gradient-to-br opacity-10",
@@ -351,11 +370,11 @@ export function AdvancedAnalyticsView({ analytics, achievements, progressSummary
 
                             <div className="flex gap-3 mt-4">
                                 <NeonButton
-                                    onClick={() => handleCopyShare(`🚀 My FlashMath progress: ${progressSummary.highlights[0]} Level ${progressSummary.stats.level} with ${progressSummary.stats.averageAccuracy}% accuracy! #FlashMath`)}
+                                    onClick={() => handleCopyShare(`🚀 My FlashMath progress: ${progressSummary.highlights[0]} Level ${progressSummary.stats.level} with ${progressSummary.stats.averageAccuracy}% accuracy! #FlashMath`, 'progress')}
                                     className="flex items-center gap-2"
                                 >
-                                    {copiedText ? <CheckCircle2 size={16} /> : <Copy size={16} />}
-                                    {copiedText ? 'Copied!' : 'Copy Share Text'}
+                                    {copiedId === 'progress' ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+                                    {copiedId === 'progress' ? 'Copied!' : 'Copy Share Text'}
                                 </NeonButton>
                                 <NeonButton variant="ghost" className="flex items-center gap-2">
                                     <Download size={16} />
@@ -371,9 +390,7 @@ export function AdvancedAnalyticsView({ analytics, achievements, progressSummary
                                 <div className={cn(
                                     "bg-gradient-to-br rounded-xl p-6 border-2 relative overflow-hidden",
                                     getRarityColor(achievements[0].rarity),
-                                    `border-${achievements[0].rarity === 'legendary' ? 'yellow' : 
-                                              achievements[0].rarity === 'epic' ? 'purple' :
-                                              achievements[0].rarity === 'rare' ? 'blue' : 'green'}-500/50`
+                                    getRarityBorderClass(achievements[0].rarity, '50')
                                 )}>
                                     <div className="text-center text-white">
                                         <div className="text-4xl mb-2">{achievements[0].icon}</div>
@@ -385,11 +402,11 @@ export function AdvancedAnalyticsView({ analytics, achievements, progressSummary
 
                                 <div className="flex gap-3 mt-4">
                                     <NeonButton
-                                        onClick={() => handleCopyShare(`🎉 Just unlocked "${achievements[0].title}" in FlashMath! ${achievements[0].description} ${achievements[0].icon} #FlashMath #Achievement`)}
+                                        onClick={() => handleCopyShare(`🎉 Just unlocked "${achievements[0].title}" in FlashMath! ${achievements[0].description} ${achievements[0].icon} #FlashMath #Achievement`, 'achievement')}
                                         className="flex items-center gap-2"
                                     >
-                                        {copiedText ? <CheckCircle2 size={16} /> : <Copy size={16} />}
-                                        {copiedText ? 'Copied!' : 'Share Achievement'}
+                                        {copiedId === 'achievement' ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+                                        {copiedId === 'achievement' ? 'Copied!' : 'Share Achievement'}
                                     </NeonButton>
                                 </div>
                             </GlassCard>

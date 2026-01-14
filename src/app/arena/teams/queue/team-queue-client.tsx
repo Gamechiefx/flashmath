@@ -191,7 +191,7 @@ export function TeamQueueClient({
         };
         
         checkFreshStatus();
-    }, [party.queueStatus, partyId, router, currentUserId]);
+    }, [party.queueStatus, partyId, router, currentUserId, mode]);
     
     // Real-time queue status listener - instant notification when leader cancels
     useEffect(() => {
@@ -343,7 +343,7 @@ export function TeamQueueClient({
             clearTimeout(initialDelay);
             clearInterval(interval);
         };
-    }, [isLeader, match, router, partyId]);
+    }, [isLeader, match, router, partyId, mode]);
 
     // Format queue time as mm:ss
     const formatTime = (ms: number) => {
@@ -433,7 +433,7 @@ export function TeamQueueClient({
                 leaveTeammateQueue(partyId);
             }
         };
-    }, [partyId, phase, isLeader, router]);
+    }, [partyId, phase, isLeader, router, mode]);
 
     // Poll for teammates
     useEffect(() => {
@@ -470,6 +470,7 @@ export function TeamQueueClient({
     // =========================================================================
     
     // IGL selection timer countdown
+    // When timer expires, auto-assigns roles based on ELO ranking
     useEffect(() => {
         if (phase !== 'igl_selection' || !assembledTeam) return;
         
@@ -489,7 +490,7 @@ export function TeamQueueClient({
         }, 1000);
         
         return () => clearInterval(interval);
-    }, [phase, assembledTeam]);
+    }, [phase, assembledTeam, handleAutoSelectRoles]);
 
     // Refresh assembled team data periodically during IGL selection
     useEffect(() => {
@@ -536,7 +537,10 @@ export function TeamQueueClient({
         }
     };
 
-    const handleConfirmRoles = async () => {
+    // Wrapped in useCallback to ensure stable reference for dependency tracking
+    // Dependencies: assembledTeam (needed for ID and role checks)
+    // State setters and imported actions are stable and don't need to be listed
+    const handleConfirmRoles = useCallback(async () => {
         if (!assembledTeam || !assembledTeam.odIglId || !assembledTeam.odAnchorId) return;
         
         const result = await confirmIGLSelection(assembledTeam.id);
@@ -548,9 +552,14 @@ export function TeamQueueClient({
         } else {
             setError(result.error || 'Failed to confirm roles');
         }
-    };
+    }, [assembledTeam]);
 
-    const handleAutoSelectRoles = async () => {
+    // Wrapped in useCallback to prevent stale closure when called from useEffect timer
+    // This function auto-assigns IGL/Anchor roles based on highest ELO when timer expires
+    // Dependencies: 
+    //   - assembledTeam: needed for member list, IDs, and role state
+    //   - handleConfirmRoles: called after role assignment to finalize
+    const handleAutoSelectRoles = useCallback(async () => {
         if (!assembledTeam) return;
         
         // Sort by ELO and auto-select
@@ -571,9 +580,9 @@ export function TeamQueueClient({
             }
         }
         
-        // Auto-confirm
+        // Auto-confirm after a short delay to allow state updates
         setTimeout(handleConfirmRoles, 500);
-    };
+    }, [assembledTeam, handleConfirmRoles]);
 
     // =========================================================================
     // PHASE 3: OPPONENT SEARCH
@@ -1077,7 +1086,7 @@ export function TeamQueueClient({
                             ))}
                             
                             {/* Empty slots for teammates phase */}
-                            {phase === 'teammates' && Array.from({ length: 5 - partySize }).map((_, i) => (
+                            {phase === 'teammates' && Array.from({ length: teamSize - partySize }).map((_, i) => (
                                 <motion.div
                                     key={`empty-${i}`}
                                     initial={{ opacity: 0.5 }}

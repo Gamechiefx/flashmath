@@ -40,11 +40,14 @@ export async function POST(request: NextRequest) {
             })),
         };
         
-        // Generate AI team
-        const aiTeam = generateAITeam(difficulty);
-        
-        // Create match ID
+        // Create match ID first (needed for AI team generation)
         const matchId = uuidv4();
+        
+        // Default target ELO for testing
+        const targetElo = 500;
+        
+        // Generate AI team with proper parameters
+        const aiTeam = generateAITeam(matchId, targetElo, difficulty);
         
         // Store match setup in Redis (simplified for testing)
         // In real implementation, this would use the full createAITeamMatch flow
@@ -55,9 +58,9 @@ export async function POST(request: NextRequest) {
             partyId: testPartyId,
             humanTeam: testTeam,
             aiTeam: {
-                teamId: aiTeam.teamId,
-                teamName: aiTeam.teamName,
-                playerCount: aiTeam.players.length,
+                teamId: aiTeam.odTeamId,
+                teamName: aiTeam.odTeamName,
+                playerCount: aiTeam.odMembers.length,
             },
             testMode,
         });
