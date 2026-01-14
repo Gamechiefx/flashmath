@@ -38,6 +38,7 @@ jobs:
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           # Stop existing containers gracefully
           docker compose down || true

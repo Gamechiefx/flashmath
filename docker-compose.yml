@@ -76,6 +76,11 @@ services:
       
       # Dev Tools - DISABLED in production
       - ENABLE_DEV_TOOLS=false
+      
+      # ============================================
+      # AI HINTS (Claude/Anthropic)
+      # ============================================
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
