@@ -27,7 +27,6 @@ jobs:
           mkdir -p ./data
           
           # Fix permissions for nextjs user (UID 1001)
-          # Use sudo if available, otherwise try without
           sudo chown -R 1001:1001 ./data 2>/dev/null || chown -R 1001:1001 ./data 2>/dev/null || true
           
           # Create PostgreSQL and Redis volumes if they don't exist
@@ -61,10 +60,11 @@ jobs:
 
       - name: Verify deployment
         run: |
-          # Wait for health check to pass
+          # Wait for health check to pass using docker exec (not compose)
           echo "Verifying deployment..."
           for i in {1..30}; do
-            if docker compose exec -T flashmath node -e "require('http').get('http://127.0.0.1:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))"; then
+            # Use curl directly in container or check container health
+            if docker exec flashmath node -e "require('http').get('http://127.0.0.1:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))" 2>/dev/null; then
               echo "✅ FlashMath is healthy!"
               exit 0
             fi
@@ -72,5 +72,5 @@ jobs:
             sleep 5
           done
           echo "❌ Health check failed after 150 seconds"
-          docker compose logs flashmath --tail=50
+          docker logs flashmath --tail=50
           exit 1
