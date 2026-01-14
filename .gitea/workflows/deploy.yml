@@ -26,7 +26,14 @@ jobs:
           # Create data directory for SQLite bind mount
           mkdir -p ./data
           
-          # Create nginx directories
+          # Verify nginx config files exist (should be from checkout)
+          if [ ! -f ./nginx/nginx.prod.conf ]; then
+            echo "❌ ERROR: nginx/nginx.prod.conf not found after checkout!"
+            ls -la ./nginx/
+            exit 1
+          fi
+          
+          # Create nginx subdirectories (NOT the config file!)
           mkdir -p ./nginx/ssl
           mkdir -p ./nginx/logs
           
