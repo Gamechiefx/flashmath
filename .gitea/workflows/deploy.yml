@@ -21,13 +21,33 @@ jobs:
           fetch-depth: 0
           clean: true
 
-      - name: Ensure data directory has correct permissions
+      - name: Ensure directories and SSL certificates
         run: |
           # Create data directory for SQLite bind mount
           mkdir -p ./data
           
+          # Create nginx directories
+          mkdir -p ./nginx/ssl
+          mkdir -p ./nginx/logs
+          
           # Fix permissions for nextjs user (UID 1001)
           sudo chown -R 1001:1001 ./data 2>/dev/null || chown -R 1001:1001 ./data 2>/dev/null || true
+          
+          # Fix permissions for nginx logs (nginx user in container)
+          chmod 755 ./nginx/logs
+          
+          # Generate self-signed SSL certificate if it doesn't exist
+          if [ ! -f ./nginx/ssl/flashmath.crt ] || [ ! -f ./nginx/ssl/flashmath.key ]; then
+            echo "🔐 Generating self-signed SSL certificate for flashmath.io..."
+            openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+              -keyout ./nginx/ssl/flashmath.key \
+              -out ./nginx/ssl/flashmath.crt \
+              -subj "/C=US/ST=State/L=City/O=FlashMath/OU=Production/CN=flashmath.io" \
+              -addext "subjectAltName=DNS:flashmath.io,DNS:www.flashmath.io,IP:127.0.0.1"
+            echo "✅ SSL certificate generated"
+          else
+            echo "✅ SSL certificate already exists"
+          fi
           
           # Create PostgreSQL and Redis volumes if they don't exist
           docker volume create flashmath_postgres_data 2>/dev/null || true

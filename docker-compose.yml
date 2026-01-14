@@ -22,6 +22,29 @@
 
 services:
   # ============================================
+  # NGINX - Security Layer & SSL Termination
+  # ============================================
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: flashmath-nginx
+    ports:
+      - "80:80"     # HTTP (redirects to HTTPS)
+      - "443:443"   # HTTPS - Primary access point
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      flashmath:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
   # NEXT.JS APPLICATION
   # ============================================
   flashmath:
@@ -29,8 +52,12 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: flashmath
-    ports:
-      - "3000:3000"
+    # Not exposed externally - Nginx handles public traffic
+    # Uncomment for debugging direct access:
+    # ports:
+    #   - "3000:3000"
+    expose:
+      - "3000"
     volumes:
       # CRITICAL: Use bind mount for SQLite database persistence
       - ./data:/app/data
