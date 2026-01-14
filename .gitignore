@@ -12,6 +12,10 @@
 
 # testing
 /coverage
+/test-results/
+tests/e2e/playwright-report/
+tests/e2e/playwright-results.json
+tests/history/
 
 # next.js
 /.next/
@@ -47,4 +51,26 @@ next-env.d.ts
 *.db
 *.db-wal
 *.db-shm
-/data/
+
+# Data directory (keep structure, ignore contents)
+/data/*
+!/data/.gitkeep
+
+# Backup directory
+/backups/
+
+# Test credentials
+tests/e2e/.test-credentials.json
+
+# Nginx logs (keep structure)
+nginx/logs/*
+!nginx/logs/.gitignore
+
+# Nginx SSL certificates (sensitive)
+nginx/ssl/
+
+# IDE debug logs
+.cursor/debug.log
+
+# Archive files
+*.zip

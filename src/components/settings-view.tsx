@@ -2,7 +2,7 @@
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2, Shield, Monitor, ChevronRight, Link2, Clock, Mail, CheckCircle } from "lucide-react";
+import { Settings, User, Lock, Trash2, ArrowLeft, AlertTriangle, RefreshCw, Volume2, Shield, Monitor, ChevronRight, Link2, Clock, Mail, CheckCircle, Eye, EyeOff, Calendar } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { resetUserData, deleteUserAccount, updateUsername } from "@/lib/actions/settings";
@@ -92,8 +92,8 @@ function KeybindSettings() {
                     onClick={() => setIsListening(true)}
                     onKeyDown={isListening ? handleKeyCapture : undefined}
                     className={`w-full p-4 rounded-xl border text-left transition-all ${isListening
-                            ? 'bg-purple-500/20 border-purple-500/50 animate-pulse'
-                            : 'bg-white/5 border-white/10 hover:bg-white/10'
+                        ? 'bg-purple-500/20 border-purple-500/50 animate-pulse'
+                        : 'bg-white/5 border-white/10 hover:bg-white/10'
                         }`}
                 >
                     <div className="flex items-center justify-between">
@@ -145,6 +145,19 @@ export function SettingsView({ user }: SettingsViewProps) {
 
         setIsUpdatingUsername(false);
     };
+
+    const [showDOB, setShowDOB] = useState(false);
+
+    // Format DOB for masked display - parse as local time to avoid timezone shift
+    const formatDOB = (dobString: string) => {
+        if (!dobString) return "";
+        // Parse as local time by appending T00:00:00 to avoid UTC interpretation
+        const [year, month, day] = dobString.split('-').map(Number);
+        const date = new Date(year, month - 1, day); // Month is 0-indexed
+        return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    };
+
+    const maskedDOB = "••/••/••••";
 
     const handleResetData = async () => {
         setIsResetting(true);
@@ -231,6 +244,39 @@ export function SettingsView({ user }: SettingsViewProps) {
                             </div>
 
                             <div>
+                                <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">Date of Birth</label>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10">
+                                    {user?.dob ? (
+                                        // DOB is set - show masked display with eye toggle
+                                        <>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <Calendar size={16} className="text-muted-foreground" />
+                                                    <span className="text-lg font-bold font-mono">
+                                                        {showDOB ? formatDOB(user.dob) : maskedDOB}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    onClick={() => setShowDOB(!showDOB)}
+                                                    className="p-2 rounded-lg hover:bg-white/10 transition-colors text-muted-foreground hover:text-white"
+                                                    title={showDOB ? "Hide date of birth" : "Show date of birth"}
+                                                >
+                                                    {showDOB ? <EyeOff size={18} /> : <Eye size={18} />}
+                                                </button>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-2">Date of birth cannot be changed</p>
+                                        </>
+                                    ) : (
+                                        // DOB not set - show message
+                                        <div className="flex items-center gap-3 text-muted-foreground">
+                                            <Calendar size={16} />
+                                            <span className="text-sm">Not set - DOB is set during registration</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div>
                                 <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">Email</label>
                                 <div className="p-4 rounded-xl bg-white/5 border border-white/10">
                                     <div className="flex items-center justify-between">
@@ -242,7 +288,7 @@ export function SettingsView({ user }: SettingsViewProps) {
                                             </span>
                                         ) : (
                                             <Link
-                                                href={`/verify-email?email=${encodeURIComponent(user?.email || '')}`}
+                                                href="/arena/verify-email"
                                                 className="flex items-center gap-1 text-xs text-yellow-400 bg-yellow-500/10 px-3 py-1.5 rounded-full hover:bg-yellow-500/20 transition-colors"
                                             >
                                                 <Mail size={12} />

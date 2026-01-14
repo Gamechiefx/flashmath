@@ -143,9 +143,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         (session.user as any).id = user.id;
                         (session.user as any).level = user.level;
                         (session.user as any).coins = user.coins;
+                        console.log(`[SESSION] User ${user.name} coins from DB: ${user.coins}`);
                         (session.user as any).equipped_items = user.equipped_items;
                         (session.user as any).emailVerified = !!user.email_verified;
                         (session.user as any).createdAt = user.created_at;
+                        (session.user as any).role = user.role; // For admin bypass
+                        (session.user as any).dob = user.dob; // Date of birth for settings
+
+                        // Update last_active timestamp for online tracking
+                        const db = getDatabase();
+                        db.prepare("UPDATE users SET last_active = ? WHERE id = ?").run(now(), user.id);
 
                         // Lookup equipped title name from database
                         const titleId = user.equipped_items?.title;

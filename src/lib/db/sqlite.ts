@@ -92,6 +92,79 @@ function initializeSchema() {
         }
     }
 
+    // Add last_active column for tracking online users
+    try {
+        database.exec("ALTER TABLE users ADD COLUMN last_active TEXT");
+        console.log('[SQLite] Added last_active column');
+    } catch (e: any) {
+        if (!e.message.includes('duplicate column')) {
+            // Expected if column already exists
+        }
+    }
+
+    // Add new arena ELO structure - Duel (1v1) per-operation + Team per-mode per-operation
+    const arenaColumns = [
+        // Duel (1v1) stats
+        { name: 'arena_elo_duel', default: 300 },
+        { name: 'arena_elo_duel_addition', default: 300 },
+        { name: 'arena_elo_duel_subtraction', default: 300 },
+        { name: 'arena_elo_duel_multiplication', default: 300 },
+        { name: 'arena_elo_duel_division', default: 300 },
+        { name: 'arena_duel_wins', default: 0 },
+        { name: 'arena_duel_losses', default: 0 },
+        { name: 'arena_duel_win_streak', default: 0 },
+        { name: 'arena_duel_best_win_streak', default: 0 },
+        
+        // Team overall
+        { name: 'arena_elo_team', default: 300 },
+        { name: 'arena_team_wins', default: 0 },
+        { name: 'arena_team_losses', default: 0 },
+        { name: 'arena_team_win_streak', default: 0 },
+        { name: 'arena_team_best_win_streak', default: 0 },
+        
+        // 2v2 per-operation
+        { name: 'arena_elo_2v2', default: 300 },
+        { name: 'arena_elo_2v2_addition', default: 300 },
+        { name: 'arena_elo_2v2_subtraction', default: 300 },
+        { name: 'arena_elo_2v2_multiplication', default: 300 },
+        { name: 'arena_elo_2v2_division', default: 300 },
+        
+        // 3v3 per-operation
+        { name: 'arena_elo_3v3', default: 300 },
+        { name: 'arena_elo_3v3_addition', default: 300 },
+        { name: 'arena_elo_3v3_subtraction', default: 300 },
+        { name: 'arena_elo_3v3_multiplication', default: 300 },
+        { name: 'arena_elo_3v3_division', default: 300 },
+        
+        // 4v4 per-operation
+        { name: 'arena_elo_4v4', default: 300 },
+        { name: 'arena_elo_4v4_addition', default: 300 },
+        { name: 'arena_elo_4v4_subtraction', default: 300 },
+        { name: 'arena_elo_4v4_multiplication', default: 300 },
+        { name: 'arena_elo_4v4_division', default: 300 },
+        
+        // 5v5 per-operation
+        { name: 'arena_elo_5v5', default: 300 },
+        { name: 'arena_elo_5v5_addition', default: 300 },
+        { name: 'arena_elo_5v5_subtraction', default: 300 },
+        { name: 'arena_elo_5v5_multiplication', default: 300 },
+        { name: 'arena_elo_5v5_division', default: 300 },
+        
+        // Legacy columns (kept for backwards compatibility during migration)
+        { name: 'arena_win_streak', default: 0 },
+        { name: 'arena_best_win_streak', default: 0 },
+    ];
+    for (const col of arenaColumns) {
+        try {
+            database.exec(`ALTER TABLE users ADD COLUMN ${col.name} INTEGER DEFAULT ${col.default}`);
+            console.log(`[SQLite] Added ${col.name} column`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exists
+            }
+        }
+    }
+
     // Ensure security_activity table exists
     database.exec(`
         CREATE TABLE IF NOT EXISTS security_activity (
@@ -106,6 +179,144 @@ function initializeSchema() {
         );
         CREATE INDEX IF NOT EXISTS idx_security_activity_user ON security_activity(user_id);
     `);
+
+    // Migrate party max_size from 3 to 5 (for existing parties)
+    try {
+        database.exec("UPDATE parties SET max_size = 5 WHERE max_size = 3");
+        console.log('[SQLite] Updated party max_size to 5');
+    } catch (e: any) {
+        // Table might not exist yet, that's fine
+    }
+
+    // Add party invite_mode column for privacy settings
+    try {
+        database.exec("ALTER TABLE parties ADD COLUMN invite_mode TEXT DEFAULT 'open'");
+        console.log('[SQLite] Added invite_mode column to parties');
+    } catch (e: any) {
+        // Column might already exist, that's fine
+    }
+
+    // Add party team mode columns (for 5v5 Arena Teams)
+    const partyTeamColumns = [
+        { name: 'igl_id', type: 'TEXT' },      // In-Game Leader
+        { name: 'anchor_id', type: 'TEXT' },   // Anchor player
+        { name: 'target_mode', type: 'TEXT' }, // '5v5', '2v2', etc.
+        { name: 'team_id', type: 'TEXT' },     // Link to persistent team
+        { name: 'queue_status', type: 'TEXT' }, // 'idle', 'finding_teammates', 'finding_opponents'
+        { name: 'queue_started_at', type: 'TEXT' }, // ISO timestamp when queue started
+    ];
+    for (const col of partyTeamColumns) {
+        try {
+            database.exec(`ALTER TABLE parties ADD COLUMN ${col.name} ${col.type}`);
+            console.log(`[SQLite] Added ${col.name} column to parties`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exists
+            }
+        }
+    }
+
+    // Add party_members team mode columns
+    const partyMemberTeamColumns = [
+        { name: 'is_ready', type: 'INTEGER', default: 0 },
+        { name: 'preferred_operation', type: 'TEXT' },
+    ];
+    for (const col of partyMemberTeamColumns) {
+        try {
+            const defaultClause = col.default !== undefined ? ` DEFAULT ${col.default}` : '';
+            database.exec(`ALTER TABLE party_members ADD COLUMN ${col.name} ${col.type}${defaultClause}`);
+            console.log(`[SQLite] Added ${col.name} column to party_members`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exist
+            }
+        }
+    }
+
+    // Add arena_matches performance stats columns for speed/accuracy ELO integration
+    const arenaMatchesColumns = [
+        { name: 'winner_accuracy', type: 'REAL' },
+        { name: 'winner_avg_speed_ms', type: 'INTEGER' },
+        { name: 'winner_max_streak', type: 'INTEGER' },
+        { name: 'winner_aps', type: 'INTEGER' },
+        { name: 'loser_accuracy', type: 'REAL' },
+        { name: 'loser_avg_speed_ms', type: 'INTEGER' },
+        { name: 'loser_max_streak', type: 'INTEGER' },
+        { name: 'loser_aps', type: 'INTEGER' },
+    ];
+    for (const col of arenaMatchesColumns) {
+        try {
+            database.exec(`ALTER TABLE arena_matches ADD COLUMN ${col.name} ${col.type}`);
+            console.log(`[SQLite] Added ${col.name} column to arena_matches`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exists
+            }
+        }
+    }
+
+    // Add match_reasoning column for storing matchmaking rationale (FlashAuditor Match History)
+    try {
+        database.exec("ALTER TABLE arena_matches ADD COLUMN match_reasoning TEXT");
+        console.log('[SQLite] Added match_reasoning column to arena_matches');
+    } catch (e: any) {
+        if (!e.message.includes('duplicate column')) {
+            // Expected if column already exists
+        }
+    }
+
+    // Add decay & returning player system columns
+    const decayColumns = [
+        { name: 'last_arena_activity', type: 'TEXT' },
+        { name: 'decay_warning_sent', type: 'TEXT' },
+        { name: 'is_returning_player', type: 'INTEGER', default: 0 },
+        { name: 'placement_matches_required', type: 'INTEGER', default: 0 },
+        { name: 'placement_matches_completed', type: 'INTEGER', default: 0 },
+        { name: 'total_elo_decayed', type: 'INTEGER', default: 0 },
+        { name: 'last_decay_applied', type: 'TEXT' },
+    ];
+    for (const col of decayColumns) {
+        try {
+            const defaultClause = col.default !== undefined ? ` DEFAULT ${col.default}` : '';
+            database.exec(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}${defaultClause}`);
+            console.log(`[SQLite] Added ${col.name} column for decay system`);
+        } catch (e: any) {
+            if (!e.message.includes('duplicate column')) {
+                // Expected if column already exists
+            }
+        }
+    }
+    
+    // Initialize last_arena_activity for existing users with arena matches
+    try {
+        database.exec(`
+            UPDATE users SET last_arena_activity = created_at 
+            WHERE last_arena_activity IS NULL 
+            AND (arena_duel_wins > 0 OR arena_duel_losses > 0 OR arena_team_wins > 0 OR arena_team_losses > 0)
+        `);
+    } catch (e: any) {
+        // Expected if no users match
+    }
+
+    // Add leaderboard indexes for efficient ranking queries
+    const leaderboardIndexes = [
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_elo ON users(arena_elo_duel DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_team_elo ON users(arena_elo_team DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_addition ON users(arena_elo_duel_addition DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_subtraction ON users(arena_elo_duel_subtraction DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_multiplication ON users(arena_elo_duel_multiplication DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_users_duel_division ON users(arena_elo_duel_division DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_arena_matches_operation ON arena_matches(operation, created_at DESC)',
+        'CREATE INDEX IF NOT EXISTS idx_arena_matches_mode ON arena_matches(mode, created_at DESC)'
+    ];
+    for (const indexSql of leaderboardIndexes) {
+        try {
+            database.exec(indexSql);
+        } catch (e: any) {
+            // Index might already exist
+        }
+    }
+    console.log('[SQLite] Ensured leaderboard indexes exist');
 
     // Seed default leagues if empty
     const leagueCount = database.prepare('SELECT COUNT(*) as count FROM leagues').get() as { count: number };

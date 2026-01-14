@@ -32,6 +32,12 @@ import { AuthProvider } from "@/components/auth-provider";
 import { ItemPreviewProvider } from "@/components/item-preview-provider";
 import { AudioSettingsProvider } from "@/components/audio-settings-provider";
 import { SessionGuard } from "@/components/session-guard";
+import { DevFooter } from "@/components/dev-footer";
+import { SocialProvider, SocialFAB, SocialPanel } from "@/components/social";
+import { AuditorProvider, AuditorPanel, AuditorFab } from "@/components/auditor";
+import { Toaster } from "sonner";
+import { MatchAlertProvider } from "@/components/arena/match-alert-provider";
+import { PartyProvider } from "@/lib/socket/party-context";
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -52,7 +58,7 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`} suppressHydrationWarning>
         <AuthProvider session={session}>
           <AudioSettingsProvider>
             <ItemPreviewProvider>
@@ -62,12 +68,46 @@ export default async function RootLayout({
                 enableSystem
                 disableTransitionOnChange
               >
-                <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
-                {children}
+                <SocialProvider>
+                  <PartyProvider>
+                  <AuditorProvider>
+                    <MatchAlertProvider>
+                      <GlobalThemeManager equippedItems={equippedItems} availableItems={availableItems} />
+                      {children}
+                    </MatchAlertProvider>
+                    {/* Social Panel - Right side */}
+                    <SocialFAB />
+                    <SocialPanel />
+                    {/* FlashAuditor Panel - Left side */}
+                    <AuditorFab />
+                    <AuditorPanel />
+                    <Toaster 
+                    position="top-center" 
+                    closeButton
+                    theme="dark"
+                    toastOptions={{
+                      className: 'font-sans',
+                      style: {
+                        background: 'rgba(15, 23, 42, 0.95)',
+                        backdropFilter: 'blur(12px)',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        color: '#f8fafc',
+                      },
+                      classNames: {
+                        success: '!border-green-500/30 !text-green-400',
+                        error: '!border-red-500/30 !text-red-400',
+                        info: '!border-primary/30 !text-primary',
+                      },
+                    }}
+                  />
+                  </AuditorProvider>
+                  </PartyProvider>
+                </SocialProvider>
               </ThemeProvider>
             </ItemPreviewProvider>
           </AudioSettingsProvider>
         </AuthProvider>
+        <DevFooter />
       </body>
     </html>
   );

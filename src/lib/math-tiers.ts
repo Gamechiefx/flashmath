@@ -1,518 +1,362 @@
+/**
+ * Math Problem Generation for 100-Tier System
+ *
+ * Uses parametric operand scaling based on tier (1-100) and band.
+ * Problem complexity increases progressively within each band.
+ */
+
+import {
+    getBandForTier,
+    getTierOperandRange,
+    getTierWithinBand,
+    isMasteryTestAvailable,
+    isAtBandBoundary,
+    TIERS_PER_BAND,
+    MIN_TIER,
+    MAX_TIER,
+} from './tier-system';
 
 export type MathOperation = 'addition' | 'subtraction' | 'multiplication' | 'division';
-
-export interface TierConfig {
-    id: number;
-    name: string; // "I", "II", "III", "IV"
-    description: string;
-    criteria: string;
-    generate: () => MathProblem;
-}
 
 export interface MathProblem {
     question: string;
     answer: number;
-    type: 'basic' | 'variable' | 'multi-digit';
+    type: 'basic' | 'variable' | 'multi-digit' | 'word';
     explanation: string;
     tier: number;
+    band?: string;
 }
 
 const rand = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-// Helper to generate a variable problem like "5 + x = 12"
-const generateVariableProblem = (op: MathOperation, a: number, b: number, result: number): MathProblem => {
-    // 50% chance for "a [op] x = res" vs "x [op] b = res"
-    const missingA = Math.random() < 0.5;
-    let question = "";
-    let answer = 0;
-    let explanation = "";
+/**
+ * Determines problem complexity based on tier within band
+ * - Tiers 1-5 within band: Basic problems
+ * - Tiers 6-10: Introduce variables occasionally
+ * - Tiers 11-15: More variables, harder ranges
+ * - Tiers 16-20: Full complexity for the band
+ */
+function getProblemComplexity(tier: number): {
+    variableChance: number;
+    useHarderRange: boolean;
+    multiOperandChance: number;
+} {
+    const tierInBand = getTierWithinBand(tier);
+
+    if (tierInBand <= 5) {
+        return { variableChance: 0, useHarderRange: false, multiOperandChance: 0 };
+    } else if (tierInBand <= 10) {
+        return { variableChance: 0.15, useHarderRange: false, multiOperandChance: 0 };
+    } else if (tierInBand <= 15) {
+        return { variableChance: 0.25, useHarderRange: true, multiOperandChance: 0.1 };
+    } else {
+        return { variableChance: 0.3, useHarderRange: true, multiOperandChance: 0.2 };
+    }
+}
+
+/**
+ * Generate a variable problem like "5 + x = 12" or "7x = 56"
+ */
+function generateVariableProblem(
+    op: MathOperation,
+    minOp: number,
+    maxOp: number,
+    tier: number
+): MathProblem {
+    const band = getBandForTier(tier);
 
     if (op === 'addition') {
-        // a + x = res OR x + b = res
-        // result should be the sum
-        // Actually for addition: a + b = res. If we solve for x, x is one of the addends.
-        // The result passed in is likely the sum.
-        // Let's restructure. We want "a + x = sum" where a and x are generated.
-        // Wait, "5 + x = 25".
-        const x = b;
+        const a = rand(minOp, maxOp);
+        const x = rand(minOp, maxOp);
         const sum = a + x;
-        answer = x;
-        question = missingA
-            ? `x + ${a} = ${sum}`
-            : `${a} + x = ${sum}`;
-        explanation = `To find the missing number, subtract ${a} from ${sum}. ${sum} - ${a} = ${answer}.`;
-    } else if (op === 'subtraction') {
-        // "58 - x = 7" or "x - 5 = 20"
-        if (missingA) {
-            // x - b = result
-            // x = result + b
-            const x = a + b; // generated a is effectively the result?
-            const sub = b;
-            const res = a;
-            // Re-mapping args for clarity
-            // We want randomly: 
-            // Type A: A - x = B (58 - x = 7) -> x = 51. 
-            // Type B: x - A = B (x - 5 = 20) -> x = 25.
+        const missingFirst = Math.random() < 0.5;
 
-            if (Math.random() < 0.5) {
-                // A - x = B
-                // A must be > B
-                const big = rand(10, 100);
-                const small = rand(1, big - 1);
-                const diff = big - small;
-                question = `${big} - x = ${diff}`;
-                answer = small;
-                explanation = `To find x, subtract the difference from the total: ${big} - ${diff} = ${answer}.`;
-            } else {
-                // x - A = B
-                const sub = rand(2, 50);
-                const diff = rand(2, 50);
-                const total = sub + diff;
-                question = `x - ${sub} = ${diff}`;
-                answer = total;
-                explanation = `To find x, add the number being subtracted to the difference: ${diff} + ${sub} = ${answer}.`;
-            }
+        return {
+            question: missingFirst ? `x + ${a} = ${sum}` : `${a} + x = ${sum}`,
+            answer: x,
+            type: 'variable',
+            explanation: `To find x, subtract ${a} from ${sum}. ${sum} - ${a} = ${x}.`,
+            tier,
+            band: band.name,
+        };
+    } else if (op === 'subtraction') {
+        if (Math.random() < 0.5) {
+            // A - x = B
+            const x = rand(minOp, maxOp);
+            const b = rand(minOp, maxOp);
+            const a = x + b;
+            return {
+                question: `${a} - x = ${b}`,
+                answer: x,
+                type: 'variable',
+                explanation: `To find x, subtract ${b} from ${a}. ${a} - ${b} = ${x}.`,
+                tier,
+                band: band.name,
+            };
         } else {
-            // Fallback to simple variable
-            const total = rand(20, 100);
-            const sub = rand(1, 15);
-            question = `${total} - x = ${total - sub}`;
-            answer = sub;
-            explanation = `Subtract ${total - sub} from ${total} to find x.`;
+            // x - A = B
+            const a = rand(minOp, maxOp);
+            const b = rand(minOp, maxOp);
+            const x = a + b;
+            return {
+                question: `x - ${a} = ${b}`,
+                answer: x,
+                type: 'variable',
+                explanation: `To find x, add ${a} to ${b}. ${a} + ${b} = ${x}.`,
+                tier,
+                band: band.name,
+            };
         }
     } else if (op === 'multiplication') {
-        // 7x = 58 ... wait 7x=58 is not integer. User example: "7x = 56" probably.
-        // 5x = 25
-        const factor = a;
-        const x = b;
-        const prod = factor * x;
-        question = `${factor}x = ${prod}`;
-        answer = x;
-        explanation = `Divide the product by the known factor: ${prod} / ${factor} = ${answer}.`;
-    } else if (op === 'division') {
-        // 105 / x = 15
-        // x / 5 = 20
+        const factor = rand(Math.max(2, minOp), Math.min(maxOp, 25));
+        const x = rand(2, Math.min(maxOp, 20));
+        const product = factor * x;
+        return {
+            question: `${factor}x = ${product}`,
+            answer: x,
+            type: 'variable',
+            explanation: `Divide the product by the factor: ${product} / ${factor} = ${x}.`,
+            tier,
+            band: band.name,
+        };
+    } else {
+        // division
         if (Math.random() < 0.5) {
             // Total / x = Result
-            const x = rand(2, 12);
-            const res = rand(2, 20);
-            const total = x * res;
-            question = `${total} / x = ${res}`;
-            answer = x;
-            explanation = `Divide the total by the result to find x: ${total} / ${res} = ${answer}.`;
+            const x = rand(2, Math.min(maxOp, 15));
+            const result = rand(2, Math.min(maxOp, 20));
+            const total = x * result;
+            return {
+                question: `${total} / x = ${result}`,
+                answer: x,
+                type: 'variable',
+                explanation: `Divide the total by the result: ${total} / ${result} = ${x}.`,
+                tier,
+                band: band.name,
+            };
         } else {
             // x / Factor = Result
-            const factor = rand(2, 12);
-            const res = rand(2, 20);
-            const total = factor * res;
-            question = `x / ${factor} = ${res}`;
-            answer = total;
-            explanation = `Multiply the result by the divisor to find x: ${res} * ${factor} = ${answer}.`;
+            const factor = rand(2, Math.min(maxOp, 15));
+            const result = rand(2, Math.min(maxOp, 20));
+            const x = factor * result;
+            return {
+                question: `x / ${factor} = ${result}`,
+                answer: x,
+                type: 'variable',
+                explanation: `Multiply the result by the divisor: ${result} * ${factor} = ${x}.`,
+                tier,
+                band: band.name,
+            };
         }
+    }
+}
+
+/**
+ * Generate a basic arithmetic problem using parametric tier scaling
+ */
+function generateBasicProblem(
+    op: MathOperation,
+    tier: number
+): MathProblem {
+    const [minOp, maxOp] = getTierOperandRange(tier, op);
+    const band = getBandForTier(tier);
+    const complexity = getProblemComplexity(tier);
+
+    // Check if we should generate a variable problem
+    if (Math.random() < complexity.variableChance) {
+        return generateVariableProblem(op, minOp, maxOp, tier);
+    }
+
+    // Generate operands based on tier range
+    let a = rand(minOp, maxOp);
+    let b = rand(minOp, maxOp);
+
+    // Determine problem type based on operand sizes
+    const isMultiDigit = a >= 10 || b >= 10;
+    const type: MathProblem['type'] = isMultiDigit ? 'multi-digit' : 'basic';
+
+    let question: string;
+    let answer: number;
+    let explanation: string;
+
+    switch (op) {
+        case 'addition':
+            question = `${a} + ${b}`;
+            answer = a + b;
+            explanation = `Add ${a} and ${b}.`;
+            break;
+
+        case 'subtraction':
+            // Ensure positive result
+            if (a < b) [a, b] = [b, a];
+            question = `${a} - ${b}`;
+            answer = a - b;
+            explanation = `Subtract ${b} from ${a}.`;
+            break;
+
+        case 'multiplication':
+            question = `${a} × ${b}`;
+            answer = a * b;
+            explanation = `Multiply ${a} by ${b}.`;
+            break;
+
+        case 'division':
+            // Ensure exact division
+            const divisor = Math.max(2, b);
+            const quotient = a;
+            const dividend = divisor * quotient;
+            question = `${dividend} / ${divisor}`;
+            answer = quotient;
+            explanation = `${dividend} divided by ${divisor} is ${quotient}.`;
+            break;
+
+        default:
+            question = `${a} + ${b}`;
+            answer = a + b;
+            explanation = `Add ${a} and ${b}.`;
     }
 
     return {
         question,
         answer,
-        type: 'variable',
+        type,
         explanation,
-        tier: 0 // Caller sets tier
+        tier,
+        band: band.name,
     };
-};
+}
 
-const TIERS = {
-    multiplication: {
-        1: {
-            generate: () => {
-                // Tier I: Basic Mult (5x7) -> Harder (12x7, 25x2)
-                // Range: 2-12 x 2-12 primarily.
-                // "Harder": 12x7, 25x2.
-                // Let's mix: 70% simple (2-9 x 2-9), 30% "harder" (10-25 x 2-9).
-                const isHard = Math.random() < 0.3;
-                let a, b;
-                if (isHard) {
-                    a = rand(10, 25);
-                    b = rand(2, 9);
-                } else {
-                    a = rand(2, 9);
-                    b = rand(2, 9);
-                }
-                return {
-                    question: `${a} × ${b}`,
-                    answer: a * b,
-                    type: 'basic',
-                    explanation: `Multiply ${a} by ${b}.`,
-                    tier: 1
-                };
-            }
-        },
-        2: {
-            generate: () => {
-                // Tier II: Variables (5x=25), 52*3, 48*2.
-                // "Harder": 105x4 (3digit x 1digit), 23x15 (2digit x 2digit)?? 
-                // Spec says Tier II closer to mastery: 105x4, 23x15.
-                // Wait, Tier III says "25x25, 105x12". 
-                // Let's stick roughly to: 2Digit x 1Digit, Simple Variables.
-                if (Math.random() < 0.3) {
-                    // Variable
-                    const a = rand(3, 12);
-                    const b = rand(3, 12);
-                    return { ...generateVariableProblem('multiplication', a, b, 0), tier: 2 };
-                } else {
-                    // 2 Digit x 1 Digit
-                    // 52 * 3
-                    const a = rand(20, 99);
-                    const b = rand(2, 9);
-                    return {
-                        question: `${a} × ${b}`,
-                        answer: a * b,
-                        type: 'multi-digit',
-                        explanation: `Multiply ${a} by ${b}. Break it down: (${Math.floor(a / 10) * 10} * ${b}) + (${a % 10} * ${b}).`,
-                        tier: 2
-                    };
-                }
-            }
-        },
-        3: {
-            generate: () => {
-                // Tier III: Variables (15x=105), 125x5, 144x8.
-                // Mastery approach: 25x25, 105x12.
-                // So 2Digit x 2Digit, 3Digit x 1Digit.
-                if (Math.random() < 0.2) {
-                    // Harder Variables
-                    const a = rand(12, 25);
-                    const b = rand(5, 15);
-                    return { ...generateVariableProblem('multiplication', a, b, 0), tier: 3 };
-                }
-                const isTwoByTwo = Math.random() < 0.5;
-                let a, b;
-                if (isTwoByTwo) {
-                    a = rand(11, 50);
-                    b = rand(11, 50);
-                } else {
-                    a = rand(100, 200);
-                    b = rand(2, 9);
-                }
-                return {
-                    question: `${a} × ${b}`,
-                    answer: a * b,
-                    type: 'multi-digit',
-                    explanation: `Multiply ${a} by ${b}.`,
-                    tier: 3
-                };
-            }
-        },
-        4: {
-            generate: () => {
-                // Tier IV: 12x=144, 205x20, 500x15.
-                // Mastery: 100x100, 500x500.
-                // 3Digit x 2Digit, 3Digit x 3Digit.
-                const type = Math.random();
-                if (type < 0.1) {
-                    // Variable
-                    return { ...generateVariableProblem('multiplication', rand(15, 30), rand(10, 30), 0), tier: 4 };
-                } else if (type < 0.6) {
-                    // 3D x 2D
-                    const a = rand(100, 500);
-                    const b = rand(11, 99);
-                    return {
-                        question: `${a} × ${b}`,
-                        answer: a * b,
-                        type: 'multi-digit',
-                        explanation: `Multiply ${a} by ${b}.`,
-                        tier: 4
-                    };
-                } else {
-                    // 3D x 3D
-                    const a = rand(100, 500);
-                    const b = rand(100, 500);
-                    return {
-                        question: `${a} × ${b}`,
-                        answer: a * b,
-                        type: 'multi-digit',
-                        explanation: `Multiply ${a} by ${b}.`,
-                        tier: 4
-                    };
-                }
-            }
-        }
-    },
-    addition: {
-        1: {
-            generate: () => {
-                // Basic 1D+1D -> 2D+1D
-                const isHard = Math.random() < 0.3;
-                let a, b;
-                if (isHard) {
-                    a = rand(10, 25);
-                    b = rand(2, 9);
-                } else {
-                    a = rand(2, 9);
-                    b = rand(2, 9);
-                }
-                return {
-                    question: `${a} + ${b}`,
-                    answer: a + b,
-                    type: 'basic',
-                    explanation: `Add ${a} and ${b}.`,
-                    tier: 1
-                };
-            }
-        },
-        2: {
-            generate: () => {
-                // Variables, 2D+1D, 2D+2D light
-                if (Math.random() < 0.3) {
-                    return { ...generateVariableProblem('addition', rand(5, 20), rand(5, 20), 0), tier: 2 };
-                }
-                const a = rand(20, 99);
-                const b = rand(2, 15);
-                return {
-                    question: `${a} + ${b}`,
-                    answer: a + b,
-                    type: 'multi-digit',
-                    explanation: `Sum ${a} and ${b}.`,
-                    tier: 2
-                };
-            }
-        },
-        3: {
-            generate: () => {
-                if (Math.random() < 0.2) return { ...generateVariableProblem('addition', rand(15, 50), rand(15, 50), 0), tier: 3 };
-                // 2D+2D, 3D+1D
-                const a = rand(20, 99);
-                const b = rand(20, 99);
-                return {
-                    question: `${a} + ${b}`,
-                    answer: a + b,
-                    type: 'multi-digit',
-                    explanation: `Sum ${a} and ${b}.`,
-                    tier: 3
-                };
-            }
-        },
-        4: {
-            generate: () => {
-                // 3D+2D, 3D+3D
-                const a = rand(100, 500);
-                const b = rand(50, 500);
-                return {
-                    question: `${a} + ${b}`,
-                    answer: a + b,
-                    type: 'multi-digit',
-                    explanation: `Sum ${a} and ${b}.`,
-                    tier: 4
-                };
-            }
-        }
-    },
-    // Implementing Subtraction and Division with similar scaling
-    subtraction: {
-        1: {
-            generate: () => {
-                // 1D - 1D (positive), 2D - 1D
-                const b = rand(2, 9);
-                const a = rand(b, 19);
-                return {
-                    question: `${a} - ${b}`,
-                    answer: a - b,
-                    type: 'basic',
-                    explanation: `Subtract ${b} from ${a}.`,
-                    tier: 1
-                };
-            }
-        },
-        2: {
-            generate: () => {
-                if (Math.random() < 0.3) {
-                    // x - 5 = 7
-                    return { ...generateVariableProblem('subtraction', rand(5, 20), rand(5, 20), 0), tier: 2 };
-                }
-                const a = rand(20, 99);
-                const b = rand(2, 15);
-                return {
-                    question: `${a} - ${b}`,
-                    answer: a - b,
-                    type: 'multi-digit',
-                    explanation: `Subtract ${b} from ${a}.`,
-                    tier: 2
-                };
-            }
-        },
-        3: {
-            generate: () => {
-                if (Math.random() < 0.2) return { ...generateVariableProblem('subtraction', rand(20, 50), rand(20, 50), 0), tier: 3 };
-                const a = rand(50, 150);
-                const b = rand(20, 99);
-                // Ensure positive result? Typically yes for this level.
-                const start = Math.max(a, b);
-                const sub = Math.min(a, b);
-                return {
-                    question: `${start} - ${sub}`,
-                    answer: start - sub,
-                    type: 'multi-digit',
-                    explanation: `Subtract ${sub} from ${start}.`,
-                    tier: 3
-                };
-            }
-        },
-        4: {
-            generate: () => {
-                const a = rand(200, 900);
-                const b = rand(100, 800);
-                const start = Math.max(a, b);
-                const sub = Math.min(a, b);
-                return {
-                    question: `${start} - ${sub}`,
-                    answer: start - sub,
-                    type: 'multi-digit',
-                    explanation: `Subtract ${sub} from ${start}.`,
-                    tier: 4
-                };
-            }
-        }
-    },
-    division: {
-        1: {
-            generate: () => {
-                // Basic division tables 
-                const b = rand(2, 9); // divisor
-                const res = rand(2, 9);
-                const a = b * res; // dividend
-                return {
-                    question: `${a} / ${b}`,
-                    answer: res,
-                    type: 'basic',
-                    explanation: `How many times does ${b} fit into ${a}?`,
-                    tier: 1
-                };
-            }
-        },
-        2: {
-            generate: () => {
-                if (Math.random() < 0.3) {
-                    // x / 5 = 4
-                    return { ...generateVariableProblem('division', rand(2, 10), rand(2, 10), 0), tier: 2 };
-                }
-                // Remainder? spec says "(With Remainder)" for 2Digit / 1Digit.
-                // But game engine expects single number answer usually? 
-                // If the answer input only accepts numbers, remainders are tricky.
-                // "Exact" is safer, or "floor"? 
-                // Spec: "3 Digit / Single Digit (Exact)" for Tier II mastery.
-                // let's stick to Exact for now to avoid UI complexity of "R2".
-                const b = rand(3, 12);
-                const res = rand(5, 20);
-                const a = b * res;
-                return {
-                    question: `${a} / ${b}`,
-                    answer: res,
-                    type: 'basic',
-                    explanation: `${a} divided by ${b} is ${res}.`,
-                    tier: 2
-                };
-            }
-        },
-        3: {
-            generate: () => {
-                const b = rand(5, 20);
-                const res = rand(10, 30);
-                const a = b * res;
-                return {
-                    question: `${a} / ${b}`,
-                    answer: res,
-                    type: 'multi-digit',
-                    explanation: `${a} divided by ${b} is ${res}.`,
-                    tier: 3
-                };
-            }
-        },
-        4: {
-            generate: () => {
-                const b = rand(15, 50);
-                const res = rand(20, 50);
-                const a = b * res;
-                return {
-                    question: `${a} / ${b}`,
-                    answer: res,
-                    type: 'multi-digit',
-                    explanation: `${a} divided by ${b} is ${res}.`,
-                    tier: 4
-                };
-            }
-        }
-    }
-};
-
+/**
+ * Main problem generation function for the 100-tier system
+ */
 export const generateProblemForSession = (op: MathOperation, tier: number): MathProblem => {
-    // Safety check
-    if (tier < 1) tier = 1;
-    if (tier > 4) tier = 4;
+    // Clamp tier to valid range
+    const clampedTier = Math.max(MIN_TIER, Math.min(MAX_TIER, tier));
 
-    // Check if op exists
-    const opConfig = (TIERS as any)[op];
-    if (!opConfig) {
-        // Fallback
-        return TIERS.addition[1].generate();
-    }
-
-    return opConfig[tier].generate();
-};
-
-export const generatePlacementTest = (): Record<MathOperation, MathProblem[]> => {
-    // Generate 5 questions per operation
-    // 1 from Tier I, 2 from Tier II, 1 from Tier III, 1 from Tier IV?
-    // Or progressive.
-    const ops: MathOperation[] = ['addition', 'subtraction', 'multiplication', 'division'];
-    const test: any = {};
-
-    ops.forEach(op => {
-        test[op] = [
-            (TIERS as any)[op][1].generate(),
-            (TIERS as any)[op][1].generate(),
-            (TIERS as any)[op][2].generate(),
-            (TIERS as any)[op][3].generate(),
-            (TIERS as any)[op][4].generate(),
-        ];
-    });
-
-    return test;
-};
-
-// Returns new tier or same tier
-// Logic: 
-// - >= 70% accuracy over recent problems: advance to next tier
-// - < 70% accuracy: stay at current tier (slower progression)
-export const checkProgression = (currentTier: number, recentAccuracy: number): number => {
-    // Advance only if doing well (70%+)
-    if (recentAccuracy >= 70 && currentTier < 4) {
-        return currentTier + 1;
-    }
-    // Below 70%: no progression, stay at current tier
-    return currentTier;
+    return generateBasicProblem(op, clampedTier);
 };
 
 /**
- * Generates a mastery test for a specific operation and tier
- * 10 problems from the current tier to prove mastery before advancing
+ * Generate placement test with problems across difficulty range
  */
-export const generateMasteryTest = (operation: MathOperation, tier: number): MathProblem[] => {
-    const problems: MathProblem[] = [];
-    const opConfig = (TIERS as any)[operation];
+export const generatePlacementTest = (): Record<MathOperation, MathProblem[]> => {
+    const ops: MathOperation[] = ['addition', 'subtraction', 'multiplication', 'division'];
+    const test: Record<string, MathProblem[]> = {};
 
-    if (!opConfig || !opConfig[tier]) {
-        // Fallback to tier 1
-        for (let i = 0; i < 10; i++) {
-            problems.push(TIERS.addition[1].generate());
+    // Sample from different bands for comprehensive placement
+    const sampleTiers = [5, 15, 25, 45, 65]; // Foundation mid/end, Intermediate, Advanced, Expert
+
+    ops.forEach(op => {
+        test[op] = sampleTiers.map(tier => generateProblemForSession(op, tier));
+    });
+
+    return test as Record<MathOperation, MathProblem[]>;
+};
+
+/**
+ * Check progression for 100-tier system
+ *
+ * Returns new tier based on performance:
+ * - 85%+ accuracy: +1 tier
+ * - 90%+ accuracy with good streaks: +2 tiers
+ * - 95%+ accuracy with excellent streaks: +3 tiers
+ * - Band boundaries require mastery test
+ */
+export const checkProgression = (
+    currentTier: number,
+    recentAccuracy: number,
+    streak: number = 0
+): { newTier: number; requiresMasteryTest: boolean } => {
+    if (currentTier >= MAX_TIER) {
+        return { newTier: MAX_TIER, requiresMasteryTest: false };
+    }
+
+    let tierAdvance = 0;
+
+    // Determine advancement based on accuracy and streak
+    if (recentAccuracy >= 95 && streak >= 10) {
+        tierAdvance = 3;
+    } else if (recentAccuracy >= 90 && streak >= 8) {
+        tierAdvance = 2;
+    } else if (recentAccuracy >= 85) {
+        tierAdvance = 1;
+    }
+
+    if (tierAdvance === 0) {
+        return { newTier: currentTier, requiresMasteryTest: false };
+    }
+
+    const proposedTier = Math.min(MAX_TIER, currentTier + tierAdvance);
+    const currentBand = getBandForTier(currentTier);
+    const proposedBand = getBandForTier(proposedTier);
+
+    // Check if crossing band boundary
+    if (proposedBand.id > currentBand.id) {
+        // Can only advance to current band's end, then require mastery test
+        const bandEndTier = currentBand.tierRange[1];
+        if (currentTier < bandEndTier) {
+            return {
+                newTier: Math.min(bandEndTier, proposedTier),
+                requiresMasteryTest: isAtBandBoundary(Math.min(bandEndTier, proposedTier)),
+            };
         }
-        return problems;
+        // Already at band boundary, require mastery test to proceed
+        return { newTier: currentTier, requiresMasteryTest: true };
     }
 
-    // Generate 10 problems from the current tier
-    for (let i = 0; i < 10; i++) {
-        problems.push(opConfig[tier].generate());
+    // Check if hitting a mastery test tier (every 10)
+    const requiresTest = isMasteryTestAvailable(proposedTier) && !isMasteryTestAvailable(currentTier);
+
+    return { newTier: proposedTier, requiresMasteryTest: requiresTest };
+};
+
+/**
+ * Legacy checkProgression for backwards compatibility
+ */
+export const checkProgressionLegacy = (currentTier: number, recentAccuracy: number): number => {
+    const { newTier } = checkProgression(currentTier, recentAccuracy);
+    return newTier;
+};
+
+/**
+ * Generate mastery test for a specific tier
+ *
+ * - Within-band tests (every 10 tiers): 5 questions, 80% required
+ * - Cross-band tests (tier 20, 40, 60, 80): 10 questions, 90% required
+ */
+export const generateMasteryTest = (
+    operation: MathOperation,
+    tier: number
+): { problems: MathProblem[]; requiredAccuracy: number } => {
+    const isBandBoundary = isAtBandBoundary(tier);
+    const questionCount = isBandBoundary ? 10 : 5;
+    const requiredAccuracy = isBandBoundary ? 90 : 80;
+
+    const problems: MathProblem[] = [];
+
+    // Generate problems at the current tier level
+    for (let i = 0; i < questionCount; i++) {
+        // Slight tier variation for diversity
+        const problemTier = Math.max(MIN_TIER, tier - rand(0, 2));
+        problems.push(generateProblemForSession(operation, problemTier));
     }
 
+    return { problems, requiredAccuracy };
+};
+
+/**
+ * Legacy generateMasteryTest for backwards compatibility
+ */
+export const generateMasteryTestLegacy = (operation: MathOperation, tier: number): MathProblem[] => {
+    // Map old tier (1-4) to new tier if needed
+    const mappedTier = tier <= 4 ? tier * 20 : tier;
+    const { problems } = generateMasteryTest(operation, mappedTier);
     return problems;
 };
 
-export default TIERS;
+export default {
+    generateProblemForSession,
+    generatePlacementTest,
+    checkProgression,
+    generateMasteryTest,
+};

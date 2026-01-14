@@ -8,7 +8,8 @@ export enum ItemType {
     SOUND = 'sound',
     BGM = 'bgm',
     TITLE = 'title',
-    FRAME = 'frame'
+    FRAME = 'frame',
+    BANNER = 'banner'
 }
 
 export enum Rarity {
@@ -306,4 +307,83 @@ export const ITEMS: Item[] = [
     { id: 'frame_hologram', name: 'Hologram', description: 'Unstable photonic containment.', type: ItemType.FRAME, rarity: Rarity.RARE, price: 5000, assetValue: 'frame-hologram', icon: Monitor },
     { id: 'frame_rainbow', name: 'Rainbow Glitch', description: 'Taste the spectrum error.', type: ItemType.FRAME, rarity: Rarity.EPIC, price: 20000, assetValue: 'frame-rainbow', icon: Zap },
     { id: 'frame_diamond', name: 'Diamond', description: 'Indestructible brilliance.', type: ItemType.FRAME, rarity: Rarity.LEGENDARY, price: 60000, assetValue: 'frame-diamond', icon: Hexagon },
+
+    // --- 8. Arena Banners ---
+    { id: 'banner_caution', name: 'Caution High Math', description: 'Animated amber hazard stripes.', type: ItemType.BANNER, rarity: Rarity.UNCOMMON, price: 500, assetValue: 'caution', icon: Shield },
+    { id: 'banner_matrices', name: 'System Override', description: 'Matrix rain dots falling.', type: ItemType.BANNER, rarity: Rarity.RARE, price: 2500, assetValue: 'matrices', icon: Monitor },
+    { id: 'banner_synthwave', name: 'Retro Pulse', description: 'Neon scan lines sweep.', type: ItemType.BANNER, rarity: Rarity.EPIC, price: 10000, assetValue: 'synthwave', icon: Zap },
+    { id: 'banner_royal', name: 'The King', description: 'Subtle royal shimmer.', type: ItemType.BANNER, rarity: Rarity.EPIC, price: 15000, assetValue: 'royal', icon: Crown },
+    { id: 'banner_legendary', name: 'Grand Champion', description: 'Golden sparkle particles.', type: ItemType.BANNER, rarity: Rarity.LEGENDARY, price: 50000, assetValue: 'legendary', icon: Trophy },
+    { id: 'banner_plasma', name: 'Plasma Core', description: 'Pulsing gradient wave.', type: ItemType.BANNER, rarity: Rarity.LEGENDARY, price: 60000, assetValue: 'plasma', icon: Flame },
 ];
+
+// ============================================================================
+// Helper functions for resolving item IDs to display values
+// ============================================================================
+
+/**
+ * Look up an item's assetValue from its ID
+ * e.g., "banner_caution" -> "caution", "title_unstoppable" -> "The Unstoppable"
+ */
+export function getItemAssetValue(itemId: string | undefined | null, fallback: string = 'default'): string {
+    if (!itemId) return fallback;
+
+    const item = ITEMS.find(i => i.id === itemId);
+    if (item) {
+        return item.assetValue;
+    }
+
+    // If not found and it looks like an ID with a prefix, try to extract just the suffix
+    // This handles cases where the assetValue might have been stored directly
+    if (itemId.includes('_')) {
+        const parts = itemId.split('_');
+        parts.shift(); // Remove the type prefix (banner, title, etc.)
+        return parts.join('_') || fallback;
+    }
+
+    return itemId; // Return as-is if it might already be an assetValue
+}
+
+/**
+ * Get the display name for a title ID
+ * e.g., "title_unstoppable" -> "The Unstoppable"
+ */
+export function getTitleDisplayName(titleId: string | undefined | null): string {
+    if (!titleId || titleId === 'default') return 'FlashMath Competitor';
+
+    const item = ITEMS.find(i => i.id === titleId && i.type === ItemType.TITLE);
+    if (item) {
+        return item.assetValue; // assetValue is the display name for titles
+    }
+
+    // If not found, check if it's already a display name (no underscore prefix)
+    if (!titleId.startsWith('title_')) {
+        return titleId;
+    }
+
+    // Fallback: convert ID to readable format
+    // e.g., "title_unstoppable" -> "Unstoppable"
+    const parts = titleId.replace('title_', '').split('_');
+    return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}
+
+/**
+ * Get the banner assetValue from a banner ID
+ * e.g., "banner_caution" -> "caution"
+ */
+export function getBannerAssetValue(bannerId: string | undefined | null): string {
+    if (!bannerId || bannerId === 'default') return 'default';
+
+    const item = ITEMS.find(i => i.id === bannerId && i.type === ItemType.BANNER);
+    if (item) {
+        return item.assetValue;
+    }
+
+    // If not found, check if it already looks like an assetValue (no prefix)
+    if (!bannerId.startsWith('banner_')) {
+        return bannerId;
+    }
+
+    // Fallback: strip the prefix
+    return bannerId.replace('banner_', '');
+}

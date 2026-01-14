@@ -6,7 +6,7 @@
 import crypto from 'crypto';
 import { getDatabase } from '@/lib/db/sqlite';
 
-export type TokenType = 'email_verification' | 'password_reset' | 'magic_link';
+export type TokenType = 'email_verification' | 'password_reset' | 'magic_link' | 'admin_mfa' | 'admin_mfa_session';
 
 /**
  * Generate a secure token
@@ -32,7 +32,7 @@ export async function createToken(
     expiresInMinutes: number = 15
 ): Promise<string> {
     const db = getDatabase();
-    const token = type === 'email_verification' ? generateVerificationCode() : generateSecureToken();
+    const token = (type === 'email_verification' || type === 'admin_mfa') ? generateVerificationCode() : generateSecureToken();
     const id = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000).toISOString();
     const createdAt = new Date().toISOString();

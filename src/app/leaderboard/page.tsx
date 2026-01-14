@@ -15,9 +15,7 @@ export default async function LeaderboardPage() {
 
     return (
         <main className="min-h-screen bg-background text-foreground flex flex-col relative overflow-hidden">
-            <div className="w-full max-w-7xl mx-auto">
-                <AuthHeader session={session} />
-            </div>
+            <AuthHeader session={session} />
 
             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/5 rounded-full blur-[120px] -mr-64 -mt-64" />
             <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[120px] -ml-64 -mb-64" />

@@ -25,14 +25,27 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
             width = previewRect.width;
             height = previewRect.height;
         } else {
-            // Gameplay fallback: Active Input
-            const active = document.activeElement;
-            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
-                const rect = active.getBoundingClientRect();
+            // Check for arena answer display first (more specific targeting)
+            const arenaAnswer = document.querySelector('[data-particle-target="arena-answer"]');
+            if (arenaAnswer) {
+                const rect = arenaAnswer.getBoundingClientRect();
                 x = rect.left + rect.width / 2;
                 y = rect.top + rect.height / 2;
                 width = rect.width;
                 height = rect.height;
+            } else {
+                // Fallback: Active Input (practice mode, etc.)
+                const active = document.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+                    const rect = active.getBoundingClientRect();
+                    // Skip if input covers entire viewport (arena hidden input)
+                    if (rect.width < window.innerWidth * 0.8) {
+                        x = rect.left + rect.width / 2;
+                        y = rect.top + rect.height / 2;
+                        width = rect.width;
+                        height = rect.height;
+                    }
+                }
             }
         }
         return { x, y, width, height };
@@ -70,8 +83,8 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
                 x: cx + (Math.random() - 0.5) * (width || 200),
                 y: cy + (Math.random() - 0.5) * (height || 100),
                 w, h,
-                life: 0.2,
-                color: `rgba(${Math.random() > 0.5 ? 255 : 0}, ${Math.random() * 255}, ${Math.random() > 0.5 ? 255 : 0}, 0.8)`
+                life: 0.4,
+                color: `rgba(${Math.random() > 0.5 ? 255 : 0}, ${Math.random() * 255}, ${Math.random() > 0.5 ? 255 : 0}, 0.6)`
             });
         }
     };
@@ -145,11 +158,15 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
 
     // 1. INPUT LISTENER EFFECT
     useEffect(() => {
-        const allowedPaths = ['/practice', '/placement', '/shop', '/locker'];
+        // Only show particles in practice and arena matches (including 5v5 team matches)
+        const allowedPaths = ['/practice', '/arena/match', '/arena/teams/match'];
         if (effectType === 'default' || !allowedPaths.some(p => pathname.includes(p))) return;
 
         const handleInput = (e: KeyboardEvent) => {
-            // Check keydown event for actual typing
+            // Only trigger particles for number keys, minus, and plus
+            const allowedKeys = /^[0-9\-+]$/;
+            if (!allowedKeys.test(e.key)) return;
+
             if (effectType.includes('sparks')) spawnFragments();
             if (effectType.includes('glitch')) spawnGlitch();
 

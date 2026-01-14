@@ -6,14 +6,58 @@ import { NeonButton } from "@/components/ui/neon-button";
 import { Zap, Mail, Lock, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { loginUser, signInWithGoogle } from "@/lib/actions/auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [shake, setShake] = useState(false);
 
+    // Redirect authenticated users to dashboard
+    useEffect(() => {
+        if (status === 'authenticated' && session?.user) {
+            router.replace('/dashboard');
+        }
+    }, [status, session, router]);
+
+    // Show loading state while checking session (theme-aware)
+    if (status === 'loading') {
+        return (
+            <main className="min-h-screen flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <div 
+                        className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent' }}
+                    />
+                    <span className="text-muted-foreground text-sm font-medium animate-pulse">
+                        Checking authentication...
+                    </span>
+                </div>
+            </main>
+        );
+    }
+
+    // If authenticated, show redirect message (theme-aware)
+    if (status === 'authenticated') {
+        return (
+            <main className="min-h-screen flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <div 
+                        className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+                    />
+                    <span style={{ color: 'var(--primary)' }} className="text-sm font-medium animate-pulse">
+                        Redirecting to dashboard...
+                    </span>
+                </div>
+            </main>
+        );
+    }
 
     return (
         <main className="min-h-screen flex items-center justify-center p-6 relative overflow-hidden bg-background text-foreground">
@@ -100,9 +144,31 @@ export default function LoginPage() {
                             </div>
                         </div>
 
-                        <NeonButton className="w-full mt-4" type="submit" disabled={loading}>
-                            {loading ? "AUTHENTICATING..." : "LOGIN"}
-                        </NeonButton>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full mt-4 relative py-4 px-8 rounded-xl font-black uppercase tracking-widest overflow-hidden bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 hover:border-primary/50 transition-all disabled:opacity-50"
+                        >
+                            <motion.span
+                                animate={{
+                                    backgroundPosition: ["200% center", "-200% center"],
+                                }}
+                                transition={{
+                                    duration: 3,
+                                    repeat: Infinity,
+                                    ease: "linear"
+                                }}
+                                style={{
+                                    backgroundImage: "linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 25%, #ffffff 50%, var(--color-accent) 75%, var(--color-primary) 100%)",
+                                    backgroundSize: "200% auto",
+                                    WebkitBackgroundClip: "text",
+                                    WebkitTextFillColor: "transparent",
+                                }}
+                                className="inline-block"
+                            >
+                                {loading ? "AUTHENTICATING..." : "SIGN IN"}
+                            </motion.span>
+                        </button>
                     </form>
 
                     {/* OAuth Separator */}

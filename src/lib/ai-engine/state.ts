@@ -512,16 +512,9 @@ export function calculateEffectiveDifficulty(
     return baseDifficulty;
 }
 
-/**
- * Map tier (1-4) to difficulty (0-1)
- */
-export function tierToDifficulty(tier: number): number {
-    return Math.min(1.0, (tier - 1) / 3 * 0.6 + 0.2);  // Tier 1 = 0.2, Tier 4 = 0.8
-}
-
-/**
- * Map difficulty (0-1) to tier (1-4)
- */
-export function difficultyToTier(difficulty: number): number {
-    return Math.min(4, Math.max(1, Math.round((difficulty - 0.2) / 0.6 * 3 + 1)));
-}
+// Import tier-to-difficulty mapping from the new 100-tier system
+// Re-export for backward compatibility with existing imports
+export {
+    tierToDifficulty,
+    difficultyToTier,
+} from '@/lib/tier-system';

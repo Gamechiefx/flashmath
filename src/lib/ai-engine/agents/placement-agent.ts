@@ -32,6 +32,10 @@ import {
     createSkillId,
     generateVariantFromProblem,
 } from '../content-variants';
+import {
+    getTierOperandRange,
+    MAX_TIER,
+} from '@/lib/tier-system';
 
 // =============================================================================
 // PLACEMENT AGENT STATE
@@ -161,18 +165,8 @@ export function generatePlacementItems(
     return items;
 }
 
-/**
- * Get operand range for a tier
- */
-function getTierOperandRange(tier: number): [number, number] {
-    switch (tier) {
-        case 1: return [2, 5];
-        case 2: return [2, 9];
-        case 3: return [2, 12];
-        case 4: return [5, 15];
-        default: return [2, 5];
-    }
-}
+// getTierOperandRange is now imported from @/lib/tier-system
+// It uses parametric scaling for 100 tiers across 5 bands
 
 /**
  * Select next skill to probe during placement
@@ -257,12 +251,13 @@ export function processPlacementAnswer(
     );
 
     // Adjust difficulty estimate based on performance
+    // Using finer increments for 100-tier system
     if (isCorrect) {
-        // Try harder next time
-        updatedState.estimatedDifficulty = Math.min(1.0, updatedState.estimatedDifficulty + 0.05);
+        // Try harder next time - small increment (~1 tier)
+        updatedState.estimatedDifficulty = Math.min(0.95, updatedState.estimatedDifficulty + 0.01);
     } else {
-        // Step back
-        updatedState.estimatedDifficulty = Math.max(0.1, updatedState.estimatedDifficulty - 0.08);
+        // Step back - slightly larger decrement (~2 tiers)
+        updatedState.estimatedDifficulty = Math.max(0.05, updatedState.estimatedDifficulty - 0.02);
     }
 
     // Map to tier

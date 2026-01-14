@@ -6,8 +6,11 @@ import { Archive } from "lucide-react";
 import Link from "next/link";
 import { AuthHeader } from "@/components/auth-header";
 import { CompactLockerView } from "@/components/locker/compact-locker-view";
+import { unstable_noStore as noStore } from 'next/cache';
 
 export default async function LockerPage() {
+    noStore(); // Prevent caching - always fetch fresh data
+
     const session = await auth();
     if (!session?.user) return <div>Please log in</div>;
     const userId = (session.user as any).id;
@@ -33,13 +36,11 @@ export default async function LockerPage() {
     const totalOwned = ownedItems.length;
 
     return (
-        <div className="min-h-screen bg-background text-foreground p-6 md:p-12 relative">
-            {/* Auth Header */}
-            <div className="w-full max-w-7xl mx-auto">
-                <AuthHeader session={session} />
-            </div>
+        <div className="min-h-screen bg-background text-foreground relative">
+            {/* Auth Header - Full Width */}
+            <AuthHeader session={session} />
 
-            <div className="max-w-5xl mx-auto relative z-10 space-y-6">
+            <div className="p-6 md:p-12">
                 {/* Compact Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
@@ -56,9 +57,14 @@ export default async function LockerPage() {
                         </div>
                     </div>
 
-                    <Link href="/shop">
-                        <NeonButton variant="accent" className="text-sm">Visit Shop</NeonButton>
-                    </Link>
+                    <div className="flex gap-3">
+                        <Link href="/locker/banner">
+                            <NeonButton variant="primary" className="text-sm">Customize Banner</NeonButton>
+                        </Link>
+                        <Link href="/shop">
+                            <NeonButton variant="accent" className="text-sm">Visit Shop</NeonButton>
+                        </Link>
+                    </div>
                 </div>
 
                 {/* Compact Locker View */}

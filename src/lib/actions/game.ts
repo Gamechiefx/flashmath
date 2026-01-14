@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { syncLeagueState } from "@/lib/league-engine";
 import { generateProblemForSession, checkProgression, MathOperation, generateMasteryTest } from "@/lib/math-tiers";
+import { MAX_TIER, isAtBandBoundary, getBandForTier, checkMilestoneReward, isMasteryTestAvailable } from "@/lib/tier-system";
 
 export async function getNextProblems(operation: string, count: number = 20) {
     const session = await auth();
@@ -176,6 +177,10 @@ export async function updateMastery(stats: any[]) {
 
 /**
  * Get mastery test problems for a specific operation
+ *
+ * 100-tier system: Tests available every 10 tiers
+ * - Within-band tests: 5 questions, 80% required
+ * - Cross-band tests (tier 20, 40, 60, 80): 10 questions, 90% required
  */
 export async function getMasteryTestProblems(operation: string) {
     const session = await auth();
@@ -185,18 +190,40 @@ export async function getMasteryTestProblems(operation: string) {
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
     const currentTier = user?.math_tiers?.[operation.toLowerCase()] || 1;
 
-    // Can't take mastery test for tier 4 (already max)
-    if (currentTier >= 4) {
+    // Already at max tier
+    if (currentTier >= MAX_TIER) {
         return { error: "Already at max tier" };
     }
 
-    const problems = generateMasteryTest(operation.toLowerCase() as MathOperation, currentTier);
-    return { problems, currentTier, operation };
+    // Check if mastery test is available for this tier
+    if (!isMasteryTestAvailable(currentTier)) {
+        return { error: "Mastery test not available at this tier" };
+    }
+
+    const { problems, requiredAccuracy } = generateMasteryTest(
+        operation.toLowerCase() as MathOperation,
+        currentTier
+    );
+    const band = getBandForTier(currentTier);
+    const isBandBoundary = isAtBandBoundary(currentTier);
+
+    return {
+        problems,
+        currentTier,
+        operation,
+        requiredAccuracy,
+        isBandBoundary,
+        bandName: band.name,
+    };
 }
 
 /**
  * Complete mastery test - advance tier if passed
- * Requires 80% accuracy to pass
+ *
+ * 100-tier system:
+ * - Within-band tests: 80% required, advance 1-5 tiers (to next test point)
+ * - Cross-band tests: 90% required, advance to next band
+ * - Milestone rewards at 5/10/20 tier intervals
  */
 export async function completeMasteryTest(operation: string, correctCount: number, totalCount: number) {
     const session = await auth();
@@ -211,35 +238,78 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
     const currentTier = currentTiers[opKey] || 1;
 
     const accuracy = totalCount > 0 ? (correctCount / totalCount) * 100 : 0;
-    const passed = accuracy >= 80;
+    const isBandBoundary = isAtBandBoundary(currentTier);
+    const requiredAccuracy = isBandBoundary ? 90 : 80;
+    const passed = accuracy >= requiredAccuracy;
 
-    if (passed && currentTier < 4) {
-        // Advance to next tier
-        const updated = { ...currentTiers, [opKey]: currentTier + 1 };
+    if (passed && currentTier < MAX_TIER) {
+        // Calculate new tier (advance to next milestone or band)
+        let newTier: number;
+        if (isBandBoundary) {
+            // Cross band boundary - advance to next band start
+            const currentBand = getBandForTier(currentTier);
+            newTier = Math.min(MAX_TIER, currentBand.tierRange[1] + 1);
+        } else {
+            // Advance to next test tier (every 10)
+            const nextTestTier = Math.ceil((currentTier + 1) / 10) * 10;
+            newTier = Math.min(MAX_TIER, nextTestTier);
+        }
+
+        // Update tier
+        const updated = { ...currentTiers, [opKey]: newTier };
         execute("UPDATE users SET math_tiers = ? WHERE id = ?", [updated, userId]);
 
-        // Reset skill points for this operation (start fresh for new tier)
-        let skillPoints = user.skill_points;
-        if (typeof skillPoints === 'string') {
-            try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
-        }
-        skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
-        skillPoints[opKey] = 0;
-        execute("UPDATE users SET skill_points = ? WHERE id = ?", [JSON.stringify(skillPoints), userId]);
+        // Check for milestone rewards
+        const milestone = checkMilestoneReward(currentTier, newTier);
+        let coinsAwarded = 0;
+        let xpAwarded = 0;
 
-        // Clear mastery stats for this operation so progress resets for new tier
-        const { getDatabase } = await import("@/lib/db");
-        const db = getDatabase();
-        db.prepare('DELETE FROM mastery_stats WHERE user_id = ? AND operation = ?').run(userId, operation);
+        if (milestone) {
+            coinsAwarded = milestone.coins;
+            xpAwarded = milestone.xp;
+
+            // Award coins and XP
+            const currentCoins = Number(user.coins) || 0;
+            const currentXp = Number(user.total_xp) || 0;
+            execute(
+                "UPDATE users SET coins = ?, total_xp = ? WHERE id = ?",
+                [currentCoins + coinsAwarded, currentXp + xpAwarded, userId]
+            );
+        }
+
+        // Reset skill points only at band boundaries
+        if (isBandBoundary) {
+            let skillPoints = user.skill_points;
+            if (typeof skillPoints === 'string') {
+                try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+            }
+            skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+            skillPoints[opKey] = 0;
+            execute("UPDATE users SET skill_points = ? WHERE id = ?", [JSON.stringify(skillPoints), userId]);
+
+            // Clear mastery stats for this operation at band boundaries
+            const { getDatabase } = await import("@/lib/db");
+            const db = getDatabase();
+            db.prepare('DELETE FROM mastery_stats WHERE user_id = ? AND operation = ?').run(userId, operation);
+        }
 
         revalidatePath("/practice");
         revalidatePath("/dashboard");
 
+        const newBand = getBandForTier(newTier);
         return {
             success: true,
             passed: true,
-            newTier: currentTier + 1,
-            accuracy
+            newTier,
+            previousTier: currentTier,
+            accuracy,
+            bandName: newBand.name,
+            crossedBand: isBandBoundary,
+            milestone: milestone ? {
+                type: milestone.type,
+                coins: coinsAwarded,
+                xp: xpAwarded,
+            } : null,
         };
     }
 
@@ -248,6 +318,7 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
         passed: false,
         newTier: currentTier,
         accuracy,
-        message: `Need 80% to pass. You got ${accuracy.toFixed(0)}%`
+        requiredAccuracy,
+        message: `Need ${requiredAccuracy}% to pass. You got ${accuracy.toFixed(0)}%`
     };
 }

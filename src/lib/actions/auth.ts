@@ -2,7 +2,7 @@
 
 import { execute, queryOne, initSchema, getDatabase } from "@/lib/db";
 import bcrypt from "bcryptjs";
-import { signIn } from "@/auth";
+import { signIn, auth } from "@/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
@@ -24,29 +24,103 @@ export async function signInWithGoogle() {
     await signIn("google", { redirectTo: "/dashboard" });
 }
 
+// Minimum age requirement for registration (GDPR/COPPA compliance)
+const MIN_AGE = 13;
+
+/**
+ * Calculate age from a date of birth string (YYYY-MM-DD format)
+ * Returns the user's age in years, accounting for whether their birthday has occurred this year
+ */
+function calculateAge(dob: string): number {
+    const birthDate = new Date(dob);
+    const today = new Date();
+    
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    // If birthday hasn't occurred yet this year, subtract 1
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    
+    return age;
+}
+
 export async function registerUser(formData: FormData) {
     const name = formData.get("name") as string;
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
+    const dob = formData.get("dob") as string;
 
-    if (!name || !email || !password) {
+    if (!name || !email || !password || !dob) {
         return { error: "Missing required fields" };
     }
 
+    // Validate date of birth format and value
+    const dobDate = new Date(dob);
+    if (isNaN(dobDate.getTime())) {
+        return { error: "Invalid date of birth" };
+    }
+    
+    // Prevent future dates
+    if (dobDate > new Date()) {
+        return { error: "Date of birth cannot be in the future" };
+    }
+    
+    // Validate minimum age requirement (GDPR/COPPA compliance)
+    const age = calculateAge(dob);
+    if (age < MIN_AGE) {
+        return { error: `You must be at least ${MIN_AGE} years old to register` };
+    }
+
+    // Check if signups are enabled
+    const { isSignupEnabled } = await import("@/lib/actions/system");
+    const signupEnabled = await isSignupEnabled();
+    if (!signupEnabled) {
+        return { error: "Registration is currently disabled. Please try again later." };
+    }
+
+    // Validate username
+    const { validateUsername, isUsernameAvailable } = await import("@/lib/username-validator");
+
+    const usernameValidation = validateUsername(name);
+    if (!usernameValidation.valid) {
+        return { error: usernameValidation.error || "Invalid username" };
+    }
+
+    const usernameAvailable = await isUsernameAvailable(name);
+    if (!usernameAvailable) {
+        return { error: "Username is already taken" };
+    }
+
     try {
+        const db = getDatabase();
+
         // Check if user exists
         const existing = queryOne("SELECT id FROM users WHERE email = ?", [email]);
         if (existing) {
             return { error: "Email already registered" };
         }
 
+        // Ensure dob column exists (for databases created before this column was added)
+        try {
+            db.prepare("ALTER TABLE users ADD COLUMN dob TEXT").run();
+            console.log('[Auth] Added dob column to users table');
+        } catch (e) {
+            // Column likely already exists - this is expected
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const id = uuidv4();
 
-        execute(
-            "INSERT INTO users (id, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-            [id, name, email, hashedPassword, now()]
-        );
+        console.log(`[Auth] Registering user: ${email}, DOB: ${dob}`);
+
+        // Insert user with DOB
+        db.prepare(
+            "INSERT INTO users (id, name, email, password_hash, created_at, dob) VALUES (?, ?, ?, ?, ?, ?)"
+        ).run(id, name, email, hashedPassword, now(), dob);
+
+        console.log(`[Auth] User registered successfully with DOB: ${dob}`);
 
         // Send verification email (fire-and-forget to avoid slow registration)
         sendVerificationEmail(email).catch(err => {
@@ -104,9 +178,9 @@ export async function loginUser(formData: FormData) {
             switch (error.type) {
                 case "CredentialsSignin":
                     if (lockResult.locked) {
-                        return { error: "Too many failed attempts. Account locked for 15 minutes." };
+                        return { error: "Too many failed attempts. Account locked for 1 minute." };
                     }
-                    return { error: `Invalid credentials. ${lockResult.attemptsRemaining} attempts remaining.` };
+                    return { error: "Invalid email or password." };
                 case "CallbackRouteError":
                     // Sometimes the ban error comes through here if thrown in authorize
                     if (error.message.includes("Account suspended")) {
@@ -198,6 +272,36 @@ export async function verifyEmailCode(
 
 export async function resendVerificationCode(email: string): Promise<{ success: boolean; error?: string }> {
     return sendVerificationEmail(email);
+}
+
+/**
+ * Resend verification email to the currently logged-in user
+ * Used when user is authenticated but hasn't verified their email yet
+ */
+export async function resendVerificationEmail(): Promise<{ success: boolean; error?: string }> {
+    const session = await auth();
+    
+    if (!session?.user) {
+        return { success: false, error: 'Not authenticated' };
+    }
+    
+    const userId = (session.user as any).id;
+    if (!userId) {
+        return { success: false, error: 'User ID not found' };
+    }
+    
+    const db = getDatabase();
+    const user = db.prepare('SELECT email, email_verified FROM users WHERE id = ?').get(userId) as any;
+    
+    if (!user) {
+        return { success: false, error: 'User not found' };
+    }
+    
+    if (user.email_verified === 1) {
+        return { success: false, error: 'Email is already verified' };
+    }
+    
+    return sendVerificationEmail(user.email);
 }
 
 // ============================================
@@ -329,24 +433,17 @@ export async function incrementFailedAttempts(email: string): Promise<{ locked: 
         return { locked: false };
     }
 
+    // Track failed attempts for analytics but never lock the account
     const newAttempts = (user.failed_login_attempts || 0) + 1;
-    const maxAttempts = 5;
-
-    if (newAttempts >= maxAttempts) {
-        const lockedUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-        db.prepare(`
-            UPDATE users 
-            SET failed_login_attempts = ?, locked_until = ?
-            WHERE id = ?
-        `).run(newAttempts, lockedUntil, user.id);
-
-        console.log(`[Auth] Account locked for ${email} until ${lockedUntil}`);
-        return { locked: true };
-    }
-
     db.prepare('UPDATE users SET failed_login_attempts = ? WHERE id = ?').run(newAttempts, user.id);
 
-    return { locked: false, attemptsRemaining: maxAttempts - newAttempts };
+    // Log for monitoring purposes
+    if (newAttempts >= 10) {
+        console.log(`[Auth] High failed login attempts (${newAttempts}) for ${email}`);
+    }
+
+    // Never lock - allow unlimited attempts
+    return { locked: false };
 }
 
 export async function resetFailedAttempts(email: string): Promise<void> {

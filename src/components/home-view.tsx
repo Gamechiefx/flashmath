@@ -1,22 +1,43 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Zap, Trophy, ArrowRight, Play } from "lucide-react";
+import { Zap, Trophy, ArrowRight, Play, AlertTriangle } from "lucide-react";
 import { NeonButton } from "@/components/ui/neon-button";
 import Link from "next/link";
 import { AuthHeader } from "@/components/auth-header";
 
 interface HomeViewProps {
     session: any;
+    maintenanceMode?: boolean;
+    maintenanceMessage?: string | null;
 }
 
-export function HomeView({ session }: HomeViewProps) {
+export function HomeView({ session, maintenanceMode = false, maintenanceMessage }: HomeViewProps) {
     return (
         <main className="relative min-h-screen flex flex-col overflow-hidden bg-background">
+            {/* Maintenance Banner */}
+            {maintenanceMode && (
+                <motion.div
+                    initial={{ opacity: 0, y: -50 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="relative z-50 w-full bg-gradient-to-r from-yellow-500/20 via-orange-500/20 to-red-500/20 border-b border-yellow-500/30"
+                >
+                    <div className="container mx-auto px-6 py-4">
+                        <div className="flex items-center justify-center gap-3 text-center">
+                            <AlertTriangle className="w-5 h-5 text-yellow-400 shrink-0" />
+                            <div>
+                                <span className="font-bold text-yellow-400 uppercase tracking-widest text-sm">Maintenance Mode</span>
+                                {maintenanceMessage && (
+                                    <p className="text-sm text-yellow-200/80 mt-1">{maintenanceMessage}</p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+            )}
+
             {/* Auth Header */}
-            <div className="w-full max-w-7xl mx-auto px-4 relative z-50">
-                <AuthHeader session={session} />
-            </div>
+            <AuthHeader session={session} />
 
             {/* Background Animated Geometry */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
@@ -65,14 +86,16 @@ export function HomeView({ session }: HomeViewProps) {
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                        {/* Quick Practice - always available */}
                         <Link href="/practice">
-                            <NeonButton className="px-8">
+                            <NeonButton className="px-8 shadow-[0_0_30px_rgba(34,211,238,0.4)] hover:shadow-[0_0_40px_rgba(34,211,238,0.6)]">
                                 <span className="flex items-center gap-2 whitespace-nowrap">
                                     Quick Practice
                                     <Play className="fill-current" size={18} />
                                 </span>
                             </NeonButton>
                         </Link>
+
                         {session ? (
                             <Link href="/dashboard">
                                 <button className="px-8 py-4 rounded-xl font-bold border border-foreground/10 hover:bg-foreground/5 transition-all text-foreground flex items-center gap-2">
@@ -80,11 +103,44 @@ export function HomeView({ session }: HomeViewProps) {
                                     <ArrowRight size={18} />
                                 </button>
                             </Link>
-                        ) : (
-                            <Link href="/auth/login">
-                                <button className="px-8 py-4 rounded-xl font-bold border border-foreground/10 hover:bg-foreground/5 transition-all text-foreground flex items-center gap-2">
-                                    Sign In
+                        ) : maintenanceMode ? (
+                            /* Auth disabled during maintenance */
+                            <div className="relative group">
+                                <button
+                                    disabled
+                                    className="px-8 py-4 rounded-xl font-bold border border-foreground/10 bg-foreground/5 text-muted-foreground/50 flex items-center gap-2 cursor-not-allowed"
+                                >
+                                    Sign Up
                                     <ArrowRight size={18} />
+                                </button>
+                                <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 bg-black/90 text-yellow-400 text-xs px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap border border-yellow-500/30">
+                                    <AlertTriangle size={12} className="inline mr-1" />
+                                    Registration disabled during maintenance
+                                </div>
+                            </div>
+                        ) : (
+                            /* Sign Up button with shimmer */
+                            <Link href="/auth/register">
+                                <button className="px-8 py-4 rounded-xl font-black uppercase tracking-widest border border-primary/30 hover:border-primary/50 bg-gradient-to-r from-primary/10 to-accent/10 transition-all flex items-center gap-2">
+                                    <motion.span
+                                        animate={{
+                                            backgroundPosition: ["200% center", "-200% center"],
+                                        }}
+                                        transition={{
+                                            duration: 3,
+                                            repeat: Infinity,
+                                            ease: "linear"
+                                        }}
+                                        style={{
+                                            backgroundImage: "linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 25%, #ffffff 50%, var(--color-accent) 75%, var(--color-primary) 100%)",
+                                            backgroundSize: "200% auto",
+                                            WebkitBackgroundClip: "text",
+                                            WebkitTextFillColor: "transparent",
+                                        }}
+                                    >
+                                        Sign Up
+                                    </motion.span>
+                                    <ArrowRight size={18} className="text-primary" />
                                 </button>
                             </Link>
                         )}

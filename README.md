@@ -30,6 +30,38 @@ FlashMath is a futuristic, high-velocity arithmetic training platform designed t
 - **Trend Analysis**: Visualize your improvement over time with dynamic charts.
 - **Weakest Link**: Automatically identifies operations that need more practice.
 
+## 🎯 Scoring System
+
+FlashMath uses a dynamic scoring system that rewards speed, accuracy, and consistency.
+
+### Points Breakdown
+
+| Action | Points |
+|--------|--------|
+| Correct answer | **+5** (base) |
+| Speed bonus (if correct) | **+7** (0-1s), **+6** (1-2s), **+5** (2-3s), **+4** (3-4s), **+3** (4-5s) |
+| Incorrect answer | **-3** |
+| Unanswered/timeout | **-3** |
+| First team to finish round | **+50** (team modes only) |
+
+### Team Streak Milestones
+
+Build consecutive correct answers as a team to unlock one-time bonus points:
+
+| Streak | Bonus |
+|--------|-------|
+| 10 consecutive | **+10** |
+| 25 consecutive | **+25** |
+| 50 consecutive | **+50** |
+| 75 consecutive | **+75** |
+
+### Scoring Rules
+
+- **Score Floor**: Scores cannot go below 0
+- **Team Streak**: Resets when ANY teammate answers incorrectly or times out
+- **Speed Matters**: Answer within 1 second for maximum speed bonus (+7)
+- **Applies To**: 1v1 duels, 2v2, and 5v5 team matches
+
 ## 🛠️ Tech Stack
 
 Built with a modern, performance-first stack:

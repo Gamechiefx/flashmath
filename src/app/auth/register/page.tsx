@@ -4,16 +4,61 @@ import { motion } from "framer-motion";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 import { PasswordStrength } from "@/components/ui/password-strength";
-import { Zap, Mail, Lock, User, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { Zap, Mail, Lock, User, ArrowLeft, Eye, EyeOff, Calendar } from "lucide-react";
 import Link from "next/link";
 import { registerUser, signInWithGoogle } from "@/lib/actions/auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 export default function RegisterPage() {
+    const { data: session, status } = useSession();
+    const router = useRouter();
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+
+    // Redirect authenticated users to dashboard
+    useEffect(() => {
+        if (status === 'authenticated' && session?.user) {
+            router.replace('/dashboard');
+        }
+    }, [status, session, router]);
+
+    // Show loading state while checking session (theme-aware)
+    if (status === 'loading') {
+        return (
+            <main className="min-h-screen flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <div 
+                        className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--primary)', borderTopColor: 'transparent' }}
+                    />
+                    <span className="text-muted-foreground text-sm font-medium animate-pulse">
+                        Checking authentication...
+                    </span>
+                </div>
+            </main>
+        );
+    }
+
+    // If authenticated, show redirect message (theme-aware)
+    if (status === 'authenticated') {
+        return (
+            <main className="min-h-screen flex items-center justify-center bg-background">
+                <div className="flex flex-col items-center gap-4">
+                    <div 
+                        className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
+                        style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+                    />
+                    <span style={{ color: 'var(--primary)' }} className="text-sm font-medium animate-pulse">
+                        Redirecting to dashboard...
+                    </span>
+                </div>
+            </main>
+        );
+    }
 
     async function handleSubmit(formData: FormData) {
         setLoading(true);
@@ -60,7 +105,7 @@ export default function RegisterPage() {
                         )}
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Pilot Name</label>
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Username</label>
                             <div className="relative">
                                 <User className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                                 <input
@@ -83,6 +128,20 @@ export default function RegisterPage() {
                                     placeholder="nexus@mastery.com"
                                     required
                                     className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground ml-1">Date of Birth</label>
+                            <div className="relative">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+                                <input
+                                    type="date"
+                                    name="dob"
+                                    required
+                                    max={new Date().toISOString().split('T')[0]}
+                                    className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all [color-scheme:dark] text-muted-foreground focus:text-foreground"
                                 />
                             </div>
                         </div>
