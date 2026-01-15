@@ -1930,6 +1930,7 @@ export async function createAITeamMatch(params: {
     partyId: string;
     difficulty?: BotDifficulty;
     mode?: TeamMatchMode;  // '5v5' or '2v2', defaults to '5v5'
+    deferAnchorToAI?: boolean;  // If true, assign anchor role to an AI teammate
 }): Promise<{ success: boolean; matchId?: string; error?: string }> {
     const session = await auth();
     if (!session?.user?.id) {
@@ -1942,6 +1943,7 @@ export async function createAITeamMatch(params: {
     console.log('[TeamMatchmaking] createAITeamMatch called with:');
     console.log('[TeamMatchmaking]   - params.mode:', params.mode);
     console.log('[TeamMatchmaking]   - resolved mode:', mode);
+    console.log('[TeamMatchmaking]   - deferAnchorToAI:', params.deferAnchorToAI);
     console.log('[TeamMatchmaking]   - requiredTeamSize:', requiredTeamSize);
     console.log('[TeamMatchmaking]   - partyId:', params.partyId);
 
@@ -2052,10 +2054,18 @@ export async function createAITeamMatch(params: {
 
         // If no IGL assigned and we have AI teammates, pick the leader as IGL
         // If no Anchor assigned, pick first non-IGL human, or first AI teammate
-        let iglId = party.igl_id || party.leader_id;
+        const iglId = party.igl_id || party.leader_id;
         let anchorId = party.anchor_id;
         
-        if (!anchorId) {
+        // If user wants to defer anchor to AI, find an AI teammate
+        const aiTeammates = queueMembers.filter(m => m.isAITeammate);
+        
+        if (params.deferAnchorToAI && aiTeammates.length > 0) {
+            // User explicitly requested AI anchor - use first available AI teammate
+            anchorId = aiTeammates[0].odUserId;
+            console.log('[TeamMatchmaking] Deferring anchor to AI teammate:', anchorId);
+        } else if (!anchorId) {
+            // No anchor assigned yet - auto-assign based on party composition
             // Find first human that isn't the IGL
             const nonIglHuman = humanMembers.find(m => m.odUserId !== iglId);
             if (nonIglHuman) {

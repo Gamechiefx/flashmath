@@ -125,6 +125,27 @@ services:
       - flashmath-network
 
   # ============================================
+  # ADMIN INIT - One-time admin setup
+  # ============================================
+  # Run manually when needed: docker-compose -f docker-compose.prod.yml run --rm admin-init
+  admin-init:
+    image: alpine:latest
+    container_name: flashmath-admin-init
+    volumes:
+      - ./data:/app/data
+    command: >
+      sh -c "
+        apk add --no-cache sqlite &&
+        sqlite3 /app/data/flashmath.db \"UPDATE users SET is_admin = 1, role = 'super_admin' WHERE email = 'admin@flashmath.io';\" &&
+        echo 'Admin permissions set for admin@flashmath.io' &&
+        sqlite3 /app/data/flashmath.db \"SELECT id, email, is_admin, role FROM users WHERE email = 'admin@flashmath.io';\"
+      "
+    profiles:
+      - admin-tools
+    networks:
+      - flashmath-network
+
+  # ============================================
   # POSTGRESQL - Arena Match Data
   # ============================================
   postgres:

@@ -4930,7 +4930,16 @@ app.prepare().then(async () => {
      */
     function startBotBehavior(match, ns) {
         const matchId = match.matchId;
+        
+        // IMPORTANT: Set botIntervals EARLY to prevent race conditions
+        // If two players reconnect simultaneously, both could pass the !botIntervals.has() check
+        // before intervals are registered. Setting early with empty array prevents this.
+        if (botIntervals.has(matchId)) {
+            console.log(`[TeamMatch] Bot behavior already running for match ${matchId}, skipping`);
+            return;
+        }
         const intervals = [];
+        botIntervals.set(matchId, intervals); // Set early to claim the slot
         
         // Collect teams that have any AI players
         const teamsWithBots = [];
@@ -5013,15 +5022,15 @@ app.prepare().then(async () => {
             intervals.push(botLoop);
             console.log(`[TeamMatch] Bot loop started for ${type} team: ${team.teamName}`);
         }
-        
-        botIntervals.set(matchId, intervals);
+        // Note: intervals array is already registered via botIntervals.set(matchId, intervals) at function start
     }
     
     /**
      * Process a bot's answer (uses same scoring system as humans)
      */
     function processBotAnswer(match, team, player, answer, isCorrect, ns) {
-
+        console.log(`[TeamMatch] processBotAnswer called for ${player.odName}, question: ${player.currentQuestion?.question}, isCorrect: ${isCorrect}`);
+        
         const answerTimeMs = Date.now() - player.questionStartTime;
 
         player.total++;
@@ -5088,10 +5097,12 @@ app.prepare().then(async () => {
         
         // Advance questions (per-team)
         team.questionsInSlot++;
+        console.log(`[TeamMatch] Bot ${player.odName} answered. questionsInSlot now: ${team.questionsInSlot}, currentSlot: ${team.currentSlot}`);
         
         // Use mode-specific config for questions per slot
         const matchConfig = getMatchConfig(match.mode || '5v5');
         if (team.questionsInSlot >= matchConfig.QUESTIONS_PER_SLOT) {
+            console.log(`[TeamMatch] Bot completed slot (${team.questionsInSlot} >= ${matchConfig.QUESTIONS_PER_SLOT}), advancing to next slot`);
             advanceTeamToNextSlot(match, team, ns);
         } else {
             // Generate next question for bot
@@ -5099,6 +5110,18 @@ app.prepare().then(async () => {
             player.currentQuestion = generateTeamQuestion(slotOp);
             player.questionStartTime = Date.now();
             player.currentInput = '';
+            
+            // Emit question_update so teammates can see the AI's new question
+            // This prevents the UI from showing stale/duplicate questions
+            console.log(`[TeamMatch] Emitting question_update for bot ${player.odName}: ${player.currentQuestion.question} to room team:${match.matchId}:${team.teamId}`);
+            ns.to(`team:${match.matchId}:${team.teamId}`).emit('question_update', {
+                questionId: Date.now().toString(),
+                questionText: player.currentQuestion.question,
+                operation: slotOp,
+                activePlayerId: player.odUserId,
+                slotNumber: team.currentSlot,
+                questionInSlot: team.questionsInSlot + 1,
+            });
         }
     }
     
@@ -5284,21 +5307,13 @@ app.prepare().then(async () => {
                 
                 console.log(`[TeamMatch] Team ${team.teamName} finished round ${match.round} first! +${firstFinishBonus} bonus`);
                 
-                // Notify the team about the bonus
-                ns.to(`team:${match.matchId}:${team.teamId}`).emit('first_to_finish_bonus', {
+                // Notify ALL players in the match about the first-to-finish bonus
+                // Both teams should see the banner so they know who finished first
+                ns.to(match.matchId).emit('first_to_finish_bonus', {
                     teamId: team.teamId,
                     teamName: team.teamName,
                     bonus: firstFinishBonus,
                     newTeamScore: team.score,
-                    round: match.round,
-                });
-                
-                // Notify all players in match about who finished first
-                ns.to(match.matchId).emit('team_finished_round', {
-                    teamId: team.teamId,
-                    teamName: team.teamName,
-                    isFirst: true,
-                    bonus: firstFinishBonus,
                     round: match.round,
                 });
                 

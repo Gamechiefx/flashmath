@@ -22,7 +22,6 @@ export default async function TeamMatchPage({
             <TeamMatchClient
                 matchId={matchId}
                 currentUserId="demo-user-001"
-                currentUserName="Demo Player"
                 partyId={partyId}
             />
         );
@@ -44,7 +43,6 @@ export default async function TeamMatchPage({
         <TeamMatchClient
             matchId={matchId}
             currentUserId={session.user.id as string}
-            currentUserName={session.user.name || 'Player'}
             partyId={partyId}
         />
     );

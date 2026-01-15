@@ -71,9 +71,25 @@ export function TeamSetupClient({
     const [step, setStep] = useState<'party' | 'roles' | 'ready'>('party');
     const [isFullscreen, setIsFullscreen] = useState(false);
     
+    // Prevent hydration mismatch - only show animations after mount
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+    
     // Track if we should suppress the queue banner (when user just canceled)
     // This starts as true if fromQueue is true, preventing the banner from flashing
     const [suppressQueueBanner, setSuppressQueueBanner] = useState(fromQueue);
+    
+    // Match type and AI options - declared early because hasAnchor depends on deferAnchorToAI
+    type MatchType = 'ranked' | 'casual' | 'vs_ai';
+    const [matchType, setMatchType] = useState<MatchType>('ranked');
+    const [aiDifficulty, setAIDifficulty] = useState<BotDifficulty>('medium');
+    const [showAIOptions, setShowAIOptions] = useState(false);
+    // Option to defer anchor role to an AI teammate (for solo/partial party AI matches)
+    const [deferAnchorToAI, setDeferAnchorToAI] = useState(false);
+    // State for showing role selection before AI match (for partial parties with 2+ humans)
+    const [showRolesForAI, setShowRolesForAI] = useState(false);
 
     // Track fullscreen state changes
     useEffect(() => {
@@ -133,8 +149,9 @@ export function TeamSetupClient({
     const hasPartialParty = partySize >= 1 && partySize < requiredSize;
     const needsTeammates = requiredSize - partySize;
     const hasIgl = !!party?.iglId;
-    const hasAnchor = !!party?.anchorId;
-    
+    // Anchor is assigned if a human is set OR if deferring to AI (for AI matches)
+    const hasAnchor = !!party?.anchorId || deferAnchorToAI;
+
     const readyCount = party?.members.filter(m => m.isReady || m.isLeader).length || 0;
     const allReady = readyCount >= (party?.members.length || 0);
     
@@ -532,6 +549,8 @@ export function TeamSetupClient({
     const handleSetAnchor = async (userId: string) => {
         if (!isLeader) return;
         setLoading(true);
+        // Clear AI anchor preference when selecting a human
+        setDeferAnchorToAI(false);
         const result = await setPartyAnchor(userId);
         if (result.success) {
             const partyResult = await getPartyData();
@@ -606,15 +625,8 @@ export function TeamSetupClient({
     };
     
     // ==========================================================================
-    // MATCH TYPE SELECTION
+    // AI MATCH HANDLERS
     // ==========================================================================
-    type MatchType = 'ranked' | 'casual' | 'vs_ai';
-    const [matchType, setMatchType] = useState<MatchType>('ranked');
-    const [aiDifficulty, setAIDifficulty] = useState<BotDifficulty>('medium');
-    const [showAIOptions, setShowAIOptions] = useState(false);
-    
-    // State for showing role selection before AI match (for partial parties with 2+ humans)
-    const [showRolesForAI, setShowRolesForAI] = useState(false);
     
     // For AI matches from the Ready step (full party with roles assigned)
     const handleStartAIMatch = async () => {
@@ -661,11 +673,12 @@ export function TeamSetupClient({
         setError(null);
         
         try {
-            console.log('[TeamSetup] Calling createAITeamMatch with mode:', mode);
+            console.log('[TeamSetup] Calling createAITeamMatch with mode:', mode, 'deferAnchorToAI:', deferAnchorToAI);
             const result = await createAITeamMatch({
                 partyId: party.id,
                 difficulty: aiDifficulty,
                 mode: mode as '5v5' | '2v2',  // Pass the mode from URL params
+                deferAnchorToAI,  // Let AI teammate be the anchor
             });
             
             if (!result.success || !result.matchId) {
@@ -867,9 +880,9 @@ export function TeamSetupClient({
         <VSScreenBackground variant="strategy" className="h-screen overflow-hidden no-scrollbar text-foreground">
             {/* Header with entrance animation */}
             <motion.div
-                initial={{ y: -50, opacity: 0 }}
+                initial={mounted ? { y: -50, opacity: 0 } : false}
                 animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.5, ease: 'easeOut' }}
+                transition={{ duration: mounted ? 0.5 : 0, ease: 'easeOut' }}
                 className="border-b border-[var(--glass-border)] bg-black/40 backdrop-blur-xl sticky top-0 z-40"
             >
                 <div className="max-w-4xl mx-auto px-4 py-2">
@@ -883,9 +896,9 @@ export function TeamSetupClient({
                         </Link>
 
                         <motion.div
-                            initial={{ scale: 0.8, opacity: 0 }}
+                            initial={mounted ? { scale: 0.8, opacity: 0 } : false}
                             animate={{ scale: 1, opacity: 1 }}
-                            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+                            transition={{ delay: mounted ? 0.2 : 0, type: 'spring', stiffness: 200 }}
                             className="flex items-center gap-2"
                         >
                             <span className="px-3 py-1.5 rounded-full bg-primary/20 border border-primary/30 text-primary text-sm font-bold animate-pulse">
@@ -904,9 +917,9 @@ export function TeamSetupClient({
             </motion.div>
 
             <motion.div
-                initial={{ opacity: 0 }}
+                initial={mounted ? { opacity: 0 } : false}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 0.3, duration: 0.5 }}
+                transition={{ delay: mounted ? 0.3 : 0, duration: mounted ? 0.5 : 0 }}
                 className="max-w-4xl mx-auto px-4 py-3"
             >
                 {/* Progress Steps with staggered entrance */}
@@ -918,9 +931,9 @@ export function TeamSetupClient({
                         return (
                             <motion.div
                                 key={s}
-                                initial={{ opacity: 0, y: 20 }}
+                                initial={mounted ? { opacity: 0, y: 20 } : false}
                                 animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.4 + i * 0.1, type: 'spring', stiffness: 200 }}
+                                transition={{ delay: mounted ? 0.4 + i * 0.1 : 0, type: 'spring', stiffness: 200 }}
                                 className="flex items-center"
                             >
                                 <motion.div
@@ -947,9 +960,9 @@ export function TeamSetupClient({
                                 </span>
                                 {i < 2 && (
                                     <motion.div
-                                        initial={{ scaleX: 0 }}
+                                        initial={mounted ? { scaleX: 0 } : false}
                                         animate={{ scaleX: 1 }}
-                                        transition={{ delay: 0.6 + i * 0.1, duration: 0.3 }}
+                                        transition={{ delay: mounted ? 0.6 + i * 0.1 : 0, duration: mounted ? 0.3 : 0 }}
                                         className={cn(
                                             "w-8 h-0.5 mx-3 origin-left",
                                             isComplete ? "bg-primary" : "bg-[var(--glass-border)]"
@@ -1014,10 +1027,9 @@ export function TeamSetupClient({
 
                 {/* Main Content Card with dramatic entrance */}
                 <motion.div
-                    layout
-                    initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                    initial={mounted ? { opacity: 0, y: 30, scale: 0.95 } : false}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{ delay: 0.6, duration: 0.5, type: 'spring', stiffness: 150 }}
+                    transition={{ delay: mounted ? 0.6 : 0, duration: mounted ? 0.5 : 0, ease: 'easeOut' }}
                     className="glass rounded-2xl overflow-hidden shadow-2xl"
                 >
                     {/* Step 1: Party Formation */}
@@ -1248,6 +1260,40 @@ export function TeamSetupClient({
                                                                     <Sparkles className="w-3 h-3" />
                                                                     {needsTeammates} AI teammate{needsTeammates > 1 ? 's' : ''} will join your team
                                                                 </p>
+                                                                
+                                                                {/* Defer Anchor to AI option */}
+                                                                {needsTeammates > 0 && (
+                                                                    <div className="mt-3 pt-3 border-t border-white/10">
+                                                                        <button
+                                                                            onClick={() => setDeferAnchorToAI(!deferAnchorToAI)}
+                                                                            className={cn(
+                                                                                "w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all",
+                                                                                deferAnchorToAI
+                                                                                    ? "bg-purple-500/20 border border-purple-500/50"
+                                                                                    : "bg-white/5 border border-white/10 hover:bg-white/10"
+                                                                            )}
+                                                                        >
+                                                                            <div className="flex items-center gap-2">
+                                                                                <Anchor className="w-3.5 h-3.5 text-purple-400" />
+                                                                                <span className="text-[10px] font-medium text-white/80">
+                                                                                    Assign Anchor to AI
+                                                                                </span>
+                                                                            </div>
+                                                                            <div className={cn(
+                                                                                "w-8 h-4 rounded-full transition-all relative",
+                                                                                deferAnchorToAI ? "bg-purple-500" : "bg-white/20"
+                                                                            )}>
+                                                                                <div className={cn(
+                                                                                    "absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all",
+                                                                                    deferAnchorToAI ? "left-4" : "left-0.5"
+                                                                                )} />
+                                                                            </div>
+                                                                        </button>
+                                                                        <p className="mt-1 text-[9px] text-white/40">
+                                                                            Let an AI teammate be the Anchor (last slot player)
+                                                                        </p>
+                                                                    </div>
+                                                                )}
                                                             </motion.div>
                                                         )}
                                                     </AnimatePresence>
@@ -1376,36 +1422,82 @@ export function TeamSetupClient({
                                 </div>
 
                                 {/* Anchor Selection */}
-                                <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
+                                <div className={cn(
+                                    "p-3 rounded-xl border",
+                                    deferAnchorToAI 
+                                        ? "bg-purple-500/10 border-purple-500/30" 
+                                        : "bg-primary/5 border-primary/20"
+                                )}>
                                     <div className="flex items-center gap-2 mb-2">
-                                        <Anchor className="w-4 h-4 text-primary" />
+                                        <Anchor className={cn("w-4 h-4", deferAnchorToAI ? "text-purple-400" : "text-primary")} />
                                         <h3 className="font-bold text-sm text-card-foreground">Anchor</h3>
+                                        {deferAnchorToAI && (
+                                            <span className="ml-auto text-[9px] font-medium px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400">
+                                                AI ASSIGNED
+                                            </span>
+                                        )}
                                     </div>
                                     <p className="text-[10px] text-muted-foreground mb-3">
                                         Can use Double Call-In and Final Round Solo abilities
                                     </p>
                                     
-                                    <div className="space-y-2">
-                                        {party.members.map((member) => (
+                                    {deferAnchorToAI ? (
+                                        // Show AI anchor indicator when deferring to AI
+                                        <div className="space-y-2">
+                                            <div className="w-full p-3 rounded-lg flex items-center justify-between text-sm bg-purple-500/20 border border-purple-500/50 text-purple-400">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-lg">🤖</span>
+                                                    <span className="font-medium">AI Teammate</span>
+                                                </div>
+                                                <Anchor className="w-4 h-4" />
+                                            </div>
                                             <button
-                                                key={member.odUserId}
-                                                data-testid={`anchor-select-${member.odUserId}`}
-                                                onClick={() => handleSetAnchor(member.odUserId)}
-                                                disabled={!isLeader || loading}
-                                                className={cn(
-                                                    "w-full p-3 rounded-lg flex items-center justify-between text-sm",
-                                                    "border transition-all",
-                                                    member.isAnchor
-                                                        ? "bg-primary/20 border-primary/50 text-primary"
-                                                        : "bg-card/50 border-[var(--glass-border)] text-card-foreground hover:border-primary/30",
-                                                    !isLeader && "opacity-50 cursor-not-allowed"
-                                                )}
+                                                onClick={() => setDeferAnchorToAI(false)}
+                                                className="w-full text-[10px] text-muted-foreground hover:text-white/80 transition-colors py-1"
                                             >
-                                                <span className="font-medium">{member.odName}</span>
-                                                {member.isAnchor && <Anchor className="w-4 h-4" />}
+                                                Click to assign a human instead
                                             </button>
-                                        ))}
-                                    </div>
+                                        </div>
+                                    ) : (
+                                        // Show human member selection
+                                        <div className="space-y-2">
+                                            {party.members.map((member) => (
+                                                <button
+                                                    key={member.odUserId}
+                                                    data-testid={`anchor-select-${member.odUserId}`}
+                                                    onClick={() => handleSetAnchor(member.odUserId)}
+                                                    disabled={!isLeader || loading}
+                                                    className={cn(
+                                                        "w-full p-3 rounded-lg flex items-center justify-between text-sm",
+                                                        "border transition-all",
+                                                        member.isAnchor
+                                                            ? "bg-primary/20 border-primary/50 text-primary"
+                                                            : "bg-card/50 border-[var(--glass-border)] text-card-foreground hover:border-primary/30",
+                                                        !isLeader && "opacity-50 cursor-not-allowed"
+                                                    )}
+                                                >
+                                                    <span className="font-medium">{member.odName}</span>
+                                                    {member.isAnchor && <Anchor className="w-4 h-4" />}
+                                                </button>
+                                            ))}
+                                            {/* Option to defer to AI if playing vs AI with AI teammates */}
+                                            {matchType === 'vs_ai' && needsTeammates > 0 && (
+                                                <button
+                                                    onClick={() => setDeferAnchorToAI(true)}
+                                                    className={cn(
+                                                        "w-full p-3 rounded-lg flex items-center justify-between text-sm",
+                                                        "border transition-all",
+                                                        "bg-purple-500/10 border-purple-500/30 text-purple-400 hover:bg-purple-500/20"
+                                                    )}
+                                                >
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-base">🤖</span>
+                                                        <span className="font-medium">Assign to AI Teammate</span>
+                                                    </div>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1572,6 +1664,40 @@ export function TeamSetupClient({
                                                         <Sparkles className="w-3 h-3" />
                                                         {requiredSize - partySize} AI teammate{requiredSize - partySize > 1 ? 's' : ''} will join your team
                                                     </p>
+                                                )}
+                                                
+                                                {/* Defer Anchor to AI option */}
+                                                {partySize < requiredSize && (
+                                                    <div className="mt-3 pt-3 border-t border-white/10">
+                                                        <button
+                                                            onClick={() => setDeferAnchorToAI(!deferAnchorToAI)}
+                                                            className={cn(
+                                                                "w-full flex items-center justify-between px-3 py-2 rounded-lg transition-all",
+                                                                deferAnchorToAI
+                                                                    ? "bg-purple-500/20 border border-purple-500/50"
+                                                                    : "bg-white/5 border border-white/10 hover:bg-white/10"
+                                                            )}
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <Anchor className="w-4 h-4 text-purple-400" />
+                                                                <span className="text-xs font-medium text-white/80">
+                                                                    Assign Anchor to AI
+                                                                </span>
+                                                            </div>
+                                                            <div className={cn(
+                                                                "w-9 h-5 rounded-full transition-all relative",
+                                                                deferAnchorToAI ? "bg-purple-500" : "bg-white/20"
+                                                            )}>
+                                                                <div className={cn(
+                                                                    "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all",
+                                                                    deferAnchorToAI ? "left-4" : "left-0.5"
+                                                                )} />
+                                                            </div>
+                                                        </button>
+                                                        <p className="mt-1 text-[10px] text-white/40">
+                                                            Let an AI teammate be the Anchor (last slot player)
+                                                        </p>
+                                                    </div>
                                                 )}
                                             </motion.div>
                                         )}

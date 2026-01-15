@@ -6,55 +6,42 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { MockMatchSimulator, type MatchPhase } from '@/lib/arena/mock-match-state';
+import { MockMatchSimulator } from '@/lib/arena/mock-match-state';
 import {
     Clock, Crown, Anchor, Zap, Check, X, Hash,
-    Pause, Play, AlertCircle, Trophy, LogOut, ArrowLeft, Target,
-    Maximize, Minimize, ChevronLeft, ChevronRight, Star, Home
+    AlertCircle, Trophy, LogOut, ArrowLeft, Target,
+    Maximize, Minimize, ChevronLeft, ChevronRight, Star, Home,
+    Volume2, VolumeX
 } from 'lucide-react';
-import Link from 'next/link';
 import {
     TeammateSpectatorView,
     OpponentStatusPanel,
-    LiveTypingIndicator,
-    AnswerResultToast,
-    AnchorAbilities,
     IGLFAB,
-    PlayerStatsCards,
     TeamPlayerCard,
-    TeamPlayerGrid,
     VSScreenBackground,
-    AnimatedVSText,
-    TeamBannerHeader,
     BANNER_STYLES
 } from '@/components/arena/teams';
 import {
-    RelayProgressBar,
     HalftimePanel,
     TacticalBreakPanel,
     QuestionAnswerCard,
-    QuestionCardSpectator,
     RoundStartCountdown,
-    RelayHandoff,
     AnchorSoloDecisionModal,
     PointsFeedFAB,
     FirstToFinishBanner,
     createPointsEventFromResult,
     createTimeoutEvent,
     createFirstToFinishEvent,
-    type SlotProgress,
     type PlayerHalftimeStats,
     type RoundMVP,
     type RoundInsight,
     type PointsEvent,
 } from '@/components/arena/teams/match';
 import { soundEngine } from '@/lib/sound-engine';
-import { UserAvatar } from '@/components/user-avatar';
 
 interface TeamMatchClientProps {
     matchId: string;
     currentUserId: string;
-    currentUserName: string;
     partyId?: string;  // Required for PvP matches - used to look up match data in Redis
 }
 
@@ -99,7 +86,7 @@ interface TeamState {
 
 interface MatchState {
     matchId: string;
-    phase: 'pre_match' | 'strategy' | 'active' | 'break' | 'halftime' | 'anchor_decision' | 'post_match';
+    phase: 'pre_match' | 'strategy' | 'round_countdown' | 'active' | 'break' | 'halftime' | 'anchor_decision' | 'post_match';
     round: number;
     half: number;
     gameClockMs: number;
@@ -150,6 +137,17 @@ const DEFAULT_SLOT_LABELS = ['Addition', 'Subtraction', 'Multiplication', 'Divis
 const operations = DEFAULT_OPERATIONS;
 const SLOT_LABELS = DEFAULT_SLOT_LABELS;
 
+// Questions per slot based on mode (must match server.js config)
+const QUESTIONS_PER_SLOT: Record<string, number> = {
+    '5v5': 5,
+    '2v2': 6,
+};
+
+// Helper to get questions per slot for a given mode
+function getQuestionsPerSlot(mode?: string): number {
+    return QUESTIONS_PER_SLOT[mode || '5v5'] || 5;
+}
+
 // Map operation names to display labels
 const OPERATION_TO_LABEL: Record<string, string> = {
     'addition': 'Addition',
@@ -171,6 +169,33 @@ function getSlotLabels(slotOperations?: string[]): string[] {
 }
 
 /**
+ * Get the sort index for an operation in the match operations order
+ * Handles case-insensitive matching and returns a high index for unknown operations
+ * This ensures consistent ordering even if operation names have different casing
+ */
+function getSlotSortIndex(operation: string, operationsOrder: string[]): number {
+    const normalizedOp = operation.toLowerCase();
+    const index = operationsOrder.findIndex(op => op.toLowerCase() === normalizedOp);
+    // Return a high index for unknown operations so they sort to the end
+    return index === -1 ? 999 : index;
+}
+
+/**
+ * Sort slot assignments by the match operations order
+ * Returns entries sorted by operation order, handling case insensitivity
+ */
+function sortSlotAssignments(
+    slotAssignments: Record<string, string> | undefined,
+    operationsOrder: string[]
+): [string, string][] {
+    if (!slotAssignments) return [];
+    return Object.entries(slotAssignments)
+        .sort(([opA], [opB]) => 
+            getSlotSortIndex(opA, operationsOrder) - getSlotSortIndex(opB, operationsOrder)
+        );
+}
+
+/**
  * Resolve banner ID to style key for BANNER_STYLES lookup
  */
 function resolveBannerStyle(bannerId: string | null | undefined): string {
@@ -188,42 +213,6 @@ function resolveBannerStyle(bannerId: string | null | undefined): string {
     return 'default';
 }
 
-// Halftime countdown timer component
-function HalftimeCountdown({ durationMs, onComplete }: { durationMs: number; onComplete?: () => void }) {
-    const [remainingMs, setRemainingMs] = useState(durationMs);
-    const startTimeRef = useRef(Date.now());
-    
-    useEffect(() => {
-        startTimeRef.current = Date.now();
-        setRemainingMs(durationMs);
-        
-        const interval = setInterval(() => {
-            const elapsed = Date.now() - startTimeRef.current;
-            const remaining = Math.max(0, durationMs - elapsed);
-            setRemainingMs(remaining);
-            
-            if (remaining <= 0) {
-                clearInterval(interval);
-                onComplete?.();
-            }
-        }, 100);
-        
-        return () => clearInterval(interval);
-    }, [durationMs, onComplete]);
-    
-    const mins = Math.floor(remainingMs / 60000);
-    const secs = Math.floor((remainingMs % 60000) / 1000);
-    
-    return (
-        <div className="mb-6">
-            <div className="text-6xl font-mono font-black text-amber-400">
-                {mins}:{secs.toString().padStart(2, '0')}
-            </div>
-            <p className="text-sm text-amber-400/70 mt-2">2nd Half starts in...</p>
-        </div>
-    );
-}
-
 // Post-match result player card - matching TeamPlayerCard "Match Starts In" style
 interface ResultPlayerCardProps {
     player: PlayerState;
@@ -236,7 +225,8 @@ interface ResultPlayerCardProps {
 function ResultPlayerCard({ player, isWinner, index, currentUserId, onViewStats }: ResultPlayerCardProps) {
     const resolvedBanner = resolveBannerStyle(player.odEquippedBanner || 'default');
     const bannerStyle = BANNER_STYLES[resolvedBanner] || BANNER_STYLES.default;
-    const isCurrentUser = player.odUserId === currentUserId;
+    // Note: currentUserId available for future use (e.g., highlighting current user)
+    void currentUserId;
 
     // Determine avatar ring color based on role/result
     const getAvatarRingColor = () => {
@@ -410,7 +400,6 @@ function AwardCard({ icon: Icon, title, player, value, color }: AwardCardProps) 
 export function TeamMatchClient({
     matchId,
     currentUserId,
-    currentUserName,
     partyId,
 }: TeamMatchClientProps) {
     const router = useRouter();
@@ -422,24 +411,31 @@ export function TeamMatchClient({
     const mockSimulatorRef = useRef<MockMatchSimulator | null>(null);
     const myTeamIdRef = useRef<string | null>(null); // To avoid stale closures in socket handlers
     const finalMatchStateRef = useRef<MatchState | null>(null); // Preserve state after match ends
-
-    // Try to restore final state from sessionStorage on mount (handles page refreshes during post_match)
-    useEffect(() => {
-        if (typeof window !== 'undefined' && !finalMatchStateRef.current) {
+    
+    // State mirror of finalMatchStateRef for render access (refs can't be read during render)
+    // Use lazy initializer to restore from sessionStorage on mount
+    const [finalMatchState, setFinalMatchState] = useState<MatchState | null>(() => {
+        if (typeof window !== 'undefined') {
             const stored = sessionStorage.getItem(`match_results_${matchId}`);
             if (stored) {
                 try {
                     const parsed = JSON.parse(stored);
                     if (parsed.phase === 'post_match') {
                         console.log('[TeamMatch] Restored final state from sessionStorage');
-                        finalMatchStateRef.current = parsed;
+                        return parsed;
                     }
-                } catch (e) {
+                } catch {
                     console.error('[TeamMatch] Failed to parse stored match state');
                 }
             }
         }
-    }, [matchId]);
+        return null;
+    });
+    
+    // Keep ref in sync with state (for use in event handlers)
+    useEffect(() => {
+        finalMatchStateRef.current = finalMatchState;
+    }, [finalMatchState]);
     
     // Check if this is demo mode (supports both ?demo=true and ?demoMode=true)
     const isDemoMode = (searchParams.get('demo') === 'true' || searchParams.get('demoMode') === 'true') && 
@@ -451,7 +447,8 @@ export function TeamMatchClient({
     const [lastAnswerResult, setLastAnswerResult] = useState<{
         isCorrect: boolean;
         pointsEarned: number;
-        answerTimeMs: number;
+        answerTimeMs?: number;
+        correctAnswer?: string;
     } | null>(null);
     // Track teammate's last answer result for real-time visibility
     const [teammateLastAnswerResult, setTeammateLastAnswerResult] = useState<{
@@ -510,10 +507,18 @@ export function TeamMatchClient({
     const [breakCountdownMs, setBreakCountdownMs] = useState(0); // Countdown for tactical breaks
     
     // Double Anchor slot indicator - tracks which slot has been targeted for Double Anchor
+    // For MY team
     const [doubleAnchorSlot, setDoubleAnchorSlot] = useState<string | null>(null); // Slot operation name
     const [doubleAnchorForRound, setDoubleAnchorForRound] = useState<number | null>(null); // Which round it applies to
     const [doubleAnchorBenchedPlayer, setDoubleAnchorBenchedPlayer] = useState<string | null>(null); // Who is benched
     const [doubleAnchorPlayerName, setDoubleAnchorPlayerName] = useState<string | null>(null); // Anchor player name
+    const [doubleAnchorTeamId, setDoubleAnchorTeamId] = useState<string | null>(null); // Which team has it active
+    
+    // For OPPONENT team - so we can show their Double Anchor status
+    const [opponentDoubleAnchorSlot, setOpponentDoubleAnchorSlot] = useState<string | null>(null);
+    const [opponentDoubleAnchorForRound, setOpponentDoubleAnchorForRound] = useState<number | null>(null);
+    const [opponentDoubleAnchorPlayerName, setOpponentDoubleAnchorPlayerName] = useState<string | null>(null);
+    const [opponentDoubleAnchorBenchedPlayer, setOpponentDoubleAnchorBenchedPlayer] = useState<string | null>(null);
     const [phaseInitialDuration, setPhaseInitialDuration] = useState(0); // Initial duration when phase starts
     const lastPhaseRef = useRef<string | null>(null);
     
@@ -533,13 +538,7 @@ export function TeamMatchClient({
     // Pre-match (versus screen) countdown state
     const [preMatchCountdownMs, setPreMatchCountdownMs] = useState<number | null>(null);
     
-    // Relay handoff state (between teammates)
-    const [relayHandoff, setRelayHandoff] = useState<{
-        isVisible: boolean;
-        outgoingPlayer: { name: string; operation: string; questionsAnswered: number; correctAnswers: number; slotScore: number } | null;
-        incomingPlayer: { name: string; operation: string; isCurrentUser: boolean } | null;
-        slotNumber: number;
-    }>({ isVisible: false, outgoingPlayer: null, incomingPlayer: null, slotNumber: 0 });
+    // Track previous slot for handoff detection
     const previousSlotRef = useRef<number | null>(null);
 
     // "Your turn starting" indicator for slot 1 players (no previous handoff)
@@ -549,8 +548,13 @@ export function TeamMatchClient({
     const [strategyPhase, setStrategyPhase] = useState<StrategyPhaseState | null>(null);
     const [selectedSlotPlayer, setSelectedSlotPlayer] = useState<string | null>(null);
 
-    // Fullscreen state
-    const [isFullscreen, setIsFullscreen] = useState(false);
+    // Fullscreen state - use lazy initializer to read initial state
+    const [isFullscreen, setIsFullscreen] = useState(() => 
+        typeof document !== 'undefined' ? !!document.fullscreenElement : false
+    );
+    
+    // Sound enabled state - syncs with soundEngine
+    const [isSoundEnabled, setIsSoundEnabled] = useState(() => soundEngine.isEnabled());
 
     // Track fullscreen state changes
     useEffect(() => {
@@ -559,12 +563,18 @@ export function TeamMatchClient({
         };
         document.addEventListener('fullscreenchange', handleFullscreenChange);
         document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-        setIsFullscreen(!!document.fullscreenElement);
         return () => {
             document.removeEventListener('fullscreenchange', handleFullscreenChange);
             document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
         };
     }, []);
+    
+    // Toggle sound on/off
+    const toggleSound = useCallback(() => {
+        const newState = !isSoundEnabled;
+        soundEngine.setEnabled(newState);
+        setIsSoundEnabled(newState);
+    }, [isSoundEnabled]);
 
     // Toggle fullscreen
     const toggleFullscreen = useCallback(async () => {
@@ -575,7 +585,9 @@ export function TeamMatchClient({
                 const elem = document.documentElement;
                 if (elem.requestFullscreen) {
                     await elem.requestFullscreen();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } else if ((elem as any).webkitRequestFullscreen) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     await (elem as any).webkitRequestFullscreen();
                 }
             }
@@ -660,7 +672,7 @@ export function TeamMatchClient({
         } else {
             setUsedDoubleCallinHalf2(true);
         }
-    }, [matchId, currentUserId, matchState?.half, usedDoubleCallinHalf1, usedDoubleCallinHalf2]);
+    }, [isDemoMode, matchState, matchId, currentUserId, usedDoubleCallinHalf1, usedDoubleCallinHalf2]);
 
     // Handle Anchor Solo (final round ability)
     const handleAnchorSolo = useCallback(() => {
@@ -712,14 +724,12 @@ export function TeamMatchClient({
         : [];
     const isSoloHumanWithAI = humanTeammates.length === 1 && humanTeammates[0] === currentUserId;
     
-    // Check if current user is the IGL or Anchor
+    // Check if current user is the IGL
     const isIGL = myPlayer?.isIgl || false;
-    const isAnchor = myPlayer?.isAnchor || false;
     
     // Get anchor player info (needed for IGL controls)
     const anchorPlayer = myTeam ? Object.values(myTeam.players).find(p => p.isAnchor) : null;
     const anchorName = anchorPlayer?.odName || 'Anchor';
-    const anchorSlot = anchorPlayer?.slot || 'unknown';
     
     // Get available slots for Double Call-In (slots the anchor is NOT assigned to)
     // IGL controls this - anchor can play their assigned slot + one additional
@@ -761,9 +771,13 @@ export function TeamMatchClient({
                 const elem = document.documentElement;
                 if (elem.requestFullscreen && !document.fullscreenElement) {
                     await elem.requestFullscreen();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } else if ((elem as any).webkitRequestFullscreen && !(document as any).webkitFullscreenElement) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     await (elem as any).webkitRequestFullscreen();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 } else if ((elem as any).msRequestFullscreen && !(document as any).msFullscreenElement) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     await (elem as any).msRequestFullscreen();
                 }
             } catch (err) {
@@ -789,10 +803,12 @@ export function TeamMatchClient({
             // Demo Mode: Use MockMatchSimulator instead of Socket.io
             console.log('[TeamMatch] Demo mode enabled - using MockMatchSimulator');
             mockSimulatorRef.current = new MockMatchSimulator();
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: initializing demo mode state
             setConnected(true);
             
             // Convert mock state to match state format
             // MockMatchSimulator returns team1/team2 objects directly, so we just pass them through
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const convertMockToMatchState = (mockState: any): MatchState => {
                 return {
                     matchId: mockState.matchId,
@@ -970,18 +986,20 @@ export function TeamMatchClient({
                 const newMySlots: Record<string, SlotAssignment> = {};
                 
                 for (const [operation, playerId] of Object.entries(data.slots)) {
+                    // Convert operation name to slot number (1-indexed)
+                    const slotNumber = DEFAULT_OPERATIONS.indexOf(operation.toLowerCase()) + 1;
                     const existingData = existingPlayerData[playerId];
                     if (existingData) {
                         // Preserve player data, update slot
                         newMySlots[playerId] = {
                             ...existingData,
-                            slot: operation,
+                            slot: slotNumber,
                         };
                     } else {
                         // Player not found in existing data - use defaults
                         // This shouldn't normally happen, but handle gracefully
                         newMySlots[playerId] = {
-                            slot: operation,
+                            slot: slotNumber,
                             name: 'Unknown',
                             level: 1,
                             isIgl: false,
@@ -1271,9 +1289,11 @@ export function TeamMatchClient({
                             (team.players[data.userId].totalAnswerTimeMs || 0) + data.answerTimeMs;
                     }
                     
-                    // If this was the 5th question (slot complete), clear the player's active state
+                    // If this was the last question in the slot, clear the player's active state
                     // This prevents showing the question input while waiting for slot transition
-                    if (data.questionsInSlot >= 5) {
+                    // Use mode-specific questions per slot (5 for 5v5, 6 for 2v2)
+                    const questionsPerSlot = getQuestionsPerSlot(prev.mode);
+                    if (data.questionsInSlot >= questionsPerSlot) {
                         team.players[data.userId].isActive = false;
                         team.players[data.userId].currentQuestion = null;
                         team.players[data.userId].isComplete = true;
@@ -1670,12 +1690,17 @@ export function TeamMatchClient({
                 const updateTeam = (team: typeof newState.team1) => {
                     team.currentSlot = data.currentSlot;
                     team.questionsInSlot = 0; // Reset questions for new slot
-                    // Reset isComplete and update isActive for all players on this team
+                    // Update isActive for all players on this team
                     for (const playerId of Object.keys(team.players)) {
-                        team.players[playerId].isComplete = false;
                         // Set isActive based on activePlayerId from server
                         const isActive = playerId === data.activePlayerId;
                         team.players[playerId].isActive = isActive;
+                        // Only reset isComplete for the player who is now active
+                        // Keep isComplete = true for players who already finished their slot
+                        // This prevents false "imAboutToBeUp" detection after final question
+                        if (isActive) {
+                            team.players[playerId].isComplete = false;
+                        }
                         
                         // If this is the active player AND we have a question, set it immediately
                         // This prevents the "Relay in progress..." flash when it's the human's turn
@@ -1801,6 +1826,12 @@ export function TeamMatchClient({
             setDoubleAnchorForRound(null);
             setDoubleAnchorBenchedPlayer(null);
             setDoubleAnchorPlayerName(null);
+            setDoubleAnchorTeamId(null);
+            // Also clear opponent's Double Anchor state
+            setOpponentDoubleAnchorSlot(null);
+            setOpponentDoubleAnchorForRound(null);
+            setOpponentDoubleAnchorPlayerName(null);
+            setOpponentDoubleAnchorBenchedPlayer(null);
             
             setMatchState(prev => {
                 if (!prev) return prev;
@@ -1883,23 +1914,46 @@ export function TeamMatchClient({
         });
 
         // Double Call-In activated by IGL
-        socket.on('double_callin_activated', (data) => {
+        socket.on('double_callin_activated', (data: {
+            teamId: string;
+            anchorId: string;
+            anchorName: string;
+            targetSlot: string;
+            benchedPlayerId: string;
+            benchedPlayerName: string;
+            half: number;
+            forRound: number;
+        }) => {
             console.log('[TeamMatch] Double Call-In Activated:', data);
             soundEngine.playDoubleCallin();
-
-            // Update the appropriate half's usage state
-            if (data.half === 1) {
-                setUsedDoubleCallinHalf1(true);
-            } else {
-                setUsedDoubleCallinHalf2(true);
-            }
+            
+            // Check if this is for my team or opponent team
+            const isMyTeamActivation = data.teamId === myTeamIdRef.current;
             
             // Store Double Anchor slot info for visual indicator on slot card
             const slotName = typeof data.targetSlot === 'string' ? data.targetSlot.toLowerCase() : '';
-            setDoubleAnchorSlot(slotName);
-            setDoubleAnchorForRound(data.forRound);
-            setDoubleAnchorBenchedPlayer(data.benchedPlayerName);
-            setDoubleAnchorPlayerName(data.anchorName);
+            
+            if (isMyTeamActivation) {
+                // My team activated Double Anchor
+                // Update the appropriate half's usage state
+                if (data.half === 1) {
+                    setUsedDoubleCallinHalf1(true);
+                } else {
+                    setUsedDoubleCallinHalf2(true);
+                }
+                
+                setDoubleAnchorSlot(slotName);
+                setDoubleAnchorForRound(data.forRound);
+                setDoubleAnchorBenchedPlayer(data.benchedPlayerName);
+                setDoubleAnchorPlayerName(data.anchorName);
+                setDoubleAnchorTeamId(data.teamId);
+            } else {
+                // Opponent team activated Double Anchor
+                setOpponentDoubleAnchorSlot(slotName);
+                setOpponentDoubleAnchorForRound(data.forRound);
+                setOpponentDoubleAnchorPlayerName(data.anchorName);
+                setOpponentDoubleAnchorBenchedPlayer(data.benchedPlayerName);
+            }
             
             // Map slot name to operation symbol for cleaner display
             const slotSymbols: Record<string, string> = {
@@ -1911,20 +1965,37 @@ export function TeamMatchClient({
             };
             const slotSymbol = slotSymbols[slotName] || data.targetSlot;
             
-            // Show a detailed toast notification with anchor icon
-            toast.success('⚓ Double Anchor Activated!', {
-                description: (
-                    <div className="space-y-1">
-                        <div className="font-bold text-primary">{data.anchorName}</div>
-                        <div>will play the <span className="font-bold text-white">{slotSymbol}</span> slot</div>
-                        <div className="text-sm opacity-80">
-                            (replacing {data.benchedPlayerName} in Round {data.forRound})
+            // Show different notifications for my team vs opponent
+            if (isMyTeamActivation) {
+                toast.success('⚓ Double Anchor Activated!', {
+                    description: (
+                        <div className="space-y-1">
+                            <div className="font-bold text-primary">{data.anchorName}</div>
+                            <div>will play the <span className="font-bold text-white">{slotSymbol}</span> slot</div>
+                            <div className="text-sm opacity-80">
+                                (replacing {data.benchedPlayerName} in Round {data.forRound})
+                            </div>
                         </div>
-                    </div>
-                ),
-                duration: 8000,
-                icon: <Anchor className="w-5 h-5 text-primary" />,
-            });
+                    ),
+                    duration: 8000,
+                    icon: <Anchor className="w-5 h-5 text-primary" />,
+                });
+            } else {
+                // Notify about opponent's Double Anchor
+                toast.info('⚓ Opponent Double Anchor!', {
+                    description: (
+                        <div className="space-y-1">
+                            <div className="font-bold text-rose-400">{data.anchorName}</div>
+                            <div>will play their <span className="font-bold text-white">{slotSymbol}</span> slot</div>
+                            <div className="text-sm opacity-80">
+                                in Round {data.forRound}
+                            </div>
+                        </div>
+                    ),
+                    duration: 6000,
+                    icon: <Anchor className="w-5 h-5 text-rose-400" />,
+                });
+            }
         });
         
         socket.on('double_callin_success', (data) => {
@@ -2068,13 +2139,14 @@ export function TeamMatchClient({
                     newState.team2.players[playerId].isActive = false;
                 }
                 const finalState = { ...newState, phase: 'post_match' as const };
-                // Save final state to ref so it's preserved even if server cleans up
+                // Save final state to ref and state so it's preserved even if server cleans up
                 finalMatchStateRef.current = finalState;
+                setFinalMatchState(finalState);
                 // Also save to sessionStorage for extra persistence
                 try {
                     sessionStorage.setItem(`match_results_${matchId}`, JSON.stringify(finalState));
                     console.log('[TeamMatch] Saved final state to sessionStorage');
-                } catch (e) {
+                } catch {
                     console.error('[TeamMatch] Failed to save to sessionStorage');
                 }
                 return finalState;
@@ -2139,12 +2211,13 @@ export function TeamMatchClient({
             setMatchState(prev => {
                 if (!prev) return prev;
                 const finalState = { ...prev, phase: 'post_match' as const, forfeitedBy: data.forfeitingTeamId };
-                // Save final state to ref and sessionStorage
+                // Save final state to ref, state, and sessionStorage
                 finalMatchStateRef.current = finalState;
+                setFinalMatchState(finalState);
                 try {
                     sessionStorage.setItem(`match_results_${matchId}`, JSON.stringify(finalState));
                     console.log('[TeamMatch] Saved forfeit state to sessionStorage');
-                } catch (e) {
+                } catch {
                     console.error('[TeamMatch] Failed to save forfeit state to sessionStorage');
                 }
                 return finalState;
@@ -2206,6 +2279,7 @@ export function TeamMatchClient({
             if (matchState.phase === 'break' || matchState.phase === 'halftime' || 
                 matchState.phase === 'strategy' || matchState.phase === 'pre_match' ||
                 matchState.phase === 'round_countdown') {
+                // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: syncing with server state
                 setPhaseInitialDuration(matchState.relayClockMs || 0);
             }
             
@@ -2239,10 +2313,6 @@ export function TeamMatchClient({
             const outgoingSlotOp = operations[previousSlotRef.current - 1];
             const outgoingPlayerData = players.find(p => p.slot?.toLowerCase() === outgoingSlotOp);
 
-            // Use the slot position to determine the operation label
-            const outgoingSlotLabel = SLOT_LABELS[previousSlotRef.current - 1] || 'Unknown';
-            const incomingSlotLabel = SLOT_LABELS[currentSlot - 1] || 'Unknown';
-
             // Check if the current user is the incoming player (their slot matches the new current slot)
             const isIncomingCurrentUser = incomingPlayerData?.odUserId === currentUserId;
 
@@ -2250,6 +2320,7 @@ export function TeamMatchClient({
             // This is non-blocking - the QuestionAnswerCard shows immediately
             if (isIncomingCurrentUser) {
                 soundEngine.playYourTurn();
+                // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: responding to slot change
                 setYourTurnStarting(true);
                 // Short notification duration - doesn't block input
                 setTimeout(() => setYourTurnStarting(false), 1500);
@@ -2291,7 +2362,6 @@ export function TeamMatchClient({
             setLastAnswerResult({
                 isCorrect: result.correct,
                 pointsEarned: result.points,
-                correctAnswer: undefined,
             });
             // Clear result after delay
             setTimeout(() => setLastAnswerResult(null), 600);
@@ -2325,13 +2395,6 @@ export function TeamMatchClient({
         }
     }, [matchId, currentUserId, isMyTurn]);
 
-    // Handle key press
-    const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            handleSubmit();
-        }
-    }, [handleSubmit]);
-
     // Focus input when it's my turn
     useEffect(() => {
         if (isMyTurn && inputRef.current) {
@@ -2341,24 +2404,26 @@ export function TeamMatchClient({
 
     // Use the effective match state - prefer stored final state if we're in post_match
     // This ensures results screen stays visible even after server cleanup
-    const effectiveMatchState = matchState || finalMatchStateRef.current;
+    const effectiveMatchState = matchState || finalMatchState;
 
-    // Debug logging for post-match state preservation
-    if (typeof window !== 'undefined' && (matchState?.phase === 'post_match' || finalMatchStateRef.current?.phase === 'post_match')) {
-        console.log('[TeamMatch] Post-match state check:', {
-            connected,
-            hasMatchState: !!matchState,
-            matchPhase: matchState?.phase,
-            hasFinalRef: !!finalMatchStateRef.current,
-            finalRefPhase: finalMatchStateRef.current?.phase,
-            hasEffective: !!effectiveMatchState,
-        });
-    }
+    // Debug logging for post-match state preservation (wrapped in useEffect to avoid render-time side effects)
+    useEffect(() => {
+        if (matchState?.phase === 'post_match' || finalMatchState?.phase === 'post_match') {
+            console.log('[TeamMatch] Post-match state check:', {
+                connected,
+                hasMatchState: !!matchState,
+                matchPhase: matchState?.phase,
+                hasFinalState: !!finalMatchState,
+                finalStatePhase: finalMatchState?.phase,
+                hasEffective: !!effectiveMatchState,
+            });
+        }
+    }, [connected, matchState, finalMatchState, effectiveMatchState]);
 
     // Loading state - but not if we have final results stored
-    if ((!connected || !effectiveMatchState) && !finalMatchStateRef.current) {
+    if ((!connected || !effectiveMatchState) && !finalMatchState) {
         console.log('[TeamMatch] Showing loading screen - no final state stored');
-        console.log('[TeamMatch] State:', { connected, effectiveMatchState: !!effectiveMatchState, finalRef: !!finalMatchStateRef.current });
+        console.log('[TeamMatch] State:', { connected, effectiveMatchState: !!effectiveMatchState, finalState: !!finalMatchState });
         return (
             <div className="h-screen overflow-hidden no-scrollbar bg-slate-900 flex items-center justify-center">
                 <div className="text-center">
@@ -2400,27 +2465,13 @@ export function TeamMatchClient({
     const isPostMatch = displayMatchState.phase === 'post_match';
     const canLeaveDirectly = isSoloHumanWithAI || isPostMatch;
 
-    // Derive team states from displayMatchState for consistent rendering
-    const renderedMyTeam = displayMatchState.team1.players[currentUserId]
-        ? displayMatchState.team1
-        : displayMatchState.team2.players[currentUserId]
-            ? displayMatchState.team2
-            : null;
-    const renderedOpponentTeam = renderedMyTeam === displayMatchState.team1
-        ? displayMatchState.team2
-        : displayMatchState.team1;
-
     // Pre-match waiting state
     if (displayMatchState.phase === 'pre_match') {
-        // Count connected players
-        const team1Connected = Object.values(displayMatchState.team1.players).filter(p => p.odUserId).length;
-        const team2Connected = Object.values(displayMatchState.team2.players).filter(p => p.odUserId).length;
         const isAIMatch = displayMatchState.team2.teamId?.startsWith('ai_team_') || displayMatchState.team2.teamId?.startsWith('ai_party_');
         
         // Convert players to TeamPlayerCard format
         // Sort by operation order (respects random pick for 2v2)
-        const myTeamPlayers = myTeam ? Object.entries(myTeam.slotAssignments || {})
-            .sort(([opA], [opB]) => matchOperationsOrder.indexOf(opA) - matchOperationsOrder.indexOf(opB))
+        const myTeamPlayers = myTeam ? sortSlotAssignments(myTeam.slotAssignments, matchOperationsOrder)
             .map(([op, userId]) => {
             const player = myTeam.players[userId];
             return {
@@ -2439,8 +2490,7 @@ export function TeamMatchClient({
         }) : [];
         
         // Sort opponent players by operation order as well (respects random pick for 2v2)
-        const opponentPlayers = opponentTeam ? Object.entries(opponentTeam.slotAssignments || {})
-            .sort(([opA], [opB]) => matchOperationsOrder.indexOf(opA) - matchOperationsOrder.indexOf(opB))
+        const opponentPlayers = opponentTeam ? sortSlotAssignments(opponentTeam.slotAssignments, matchOperationsOrder)
             .map(([op, userId]) => {
             const player = opponentTeam.players[userId];
             return {
@@ -2470,6 +2520,37 @@ export function TeamMatchClient({
                         <ArrowLeft className="w-3 h-3" />
                         Leave Match
                     </button>
+                    
+                    {/* Control Buttons - Top Right Corner */}
+                    <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+                        {/* Sound Toggle */}
+                        <motion.button
+                            onClick={toggleSound}
+                            className={cn(
+                                "p-2.5 rounded-xl border backdrop-blur-sm transition-all",
+                                isSoundEnabled
+                                    ? "bg-primary/20 border-primary/40 text-primary hover:bg-primary/30"
+                                    : "bg-white/5 border-white/20 text-white/40 hover:text-white/60 hover:bg-white/10"
+                            )}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            title={isSoundEnabled ? "Mute Sound" : "Unmute Sound"}
+                        >
+                            {isSoundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                        </motion.button>
+                        
+                        {/* Fullscreen Toggle */}
+                        <motion.button
+                            onClick={toggleFullscreen}
+                            className="p-2.5 rounded-xl bg-white/5 border border-white/20 backdrop-blur-sm
+                                       text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                        >
+                            {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                        </motion.button>
+                    </div>
 
                     {/* Header - MATCH STARTS IN countdown */}
                     <motion.div
@@ -2707,8 +2788,12 @@ export function TeamMatchClient({
         
         // Derive available operations from the strategy phase data
         // For 2v2, only 2 random operations are available - extract them from current slot assignments
+        // Slot numbers are 1-indexed, convert to operation names
         const assignedSlots = Object.values(strategyPhase.mySlots)
-            .map(assignment => assignment.slot)
+            .map(assignment => {
+                const slotNum = typeof assignment.slot === 'number' ? assignment.slot : parseInt(String(assignment.slot), 10);
+                return DEFAULT_OPERATIONS[slotNum - 1] || '';
+            })
             .filter((slot): slot is string => typeof slot === 'string' && slot.length > 0);
         const uniqueSlots = [...new Set(assignedSlots)];
         
@@ -2741,6 +2826,37 @@ export function TeamMatchClient({
         
         return (
             <VSScreenBackground variant="strategy">
+                {/* Control Buttons - Top Right Corner */}
+                <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+                    {/* Sound Toggle */}
+                    <motion.button
+                        onClick={toggleSound}
+                        className={cn(
+                            "p-2.5 rounded-xl border backdrop-blur-sm transition-all",
+                            isSoundEnabled
+                                ? "bg-primary/20 border-primary/40 text-primary hover:bg-primary/30"
+                                : "bg-white/5 border-white/20 text-white/40 hover:text-white/60 hover:bg-white/10"
+                        )}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        title={isSoundEnabled ? "Mute Sound" : "Unmute Sound"}
+                    >
+                        {isSoundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                    </motion.button>
+                    
+                    {/* Fullscreen Toggle */}
+                    <motion.button
+                        onClick={toggleFullscreen}
+                        className="p-2.5 rounded-xl bg-white/5 border border-white/20 backdrop-blur-sm
+                                   text-white/60 hover:text-white hover:bg-white/10 transition-all"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                    >
+                        {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
+                    </motion.button>
+                </div>
+                
                 <div className="h-screen overflow-hidden no-scrollbar flex flex-col items-center justify-center p-2 md:p-3">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -2826,9 +2942,14 @@ export function TeamMatchClient({
                     )}>
                         {matchSlotOps.map((slotOp, idx) => {
                             const op = operationLabels[idx];
-                            // Server stores slot as operation name, not number
+                            // Slot is stored as number (1-indexed), convert to operation name for comparison
+                            const slotOpLower = typeof slotOp === 'string' ? slotOp.toLowerCase() : slotOp;
                             const playerInSlot = Object.entries(strategyPhase.mySlots).find(
-                                ([, assignment]) => assignment.slot === slotOp
+                                ([, assignment]) => {
+                                    // Convert slot number to operation name
+                                    const assignmentOpName = DEFAULT_OPERATIONS[assignment.slot - 1] || '';
+                                    return assignmentOpName.toLowerCase() === slotOpLower;
+                                }
                             );
                             const [playerId, playerData] = playerInSlot || [null, null];
 
@@ -3110,6 +3231,22 @@ export function TeamMatchClient({
                                 {displayMatchState.phase === 'post_match' && 'FINISHED'}
                             </motion.div>
 
+                            {/* Sound Toggle Button */}
+                            <motion.button
+                                onClick={toggleSound}
+                                className={cn(
+                                    "p-2.5 rounded-xl border transition-all",
+                                    isSoundEnabled
+                                        ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+                                        : "bg-white/5 border-white/10 text-white/40 hover:text-white/60 hover:bg-white/10"
+                                )}
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                title={isSoundEnabled ? "Mute Sound" : "Unmute Sound"}
+                            >
+                                {isSoundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                            </motion.button>
+                            
                             {/* Fullscreen Button */}
                             <motion.button
                                 onClick={toggleFullscreen}
@@ -3220,7 +3357,7 @@ export function TeamMatchClient({
                                                     animate={{ scale: [0.5, 1.5, 1] }}
                                                     className="text-4xl font-black text-red-500"
                                                 >
-                                                    TIME'S UP!
+                                                    TIME&apos;S UP!
                                                 </motion.span>
                                             </motion.div>
                                         )}
@@ -3229,21 +3366,21 @@ export function TeamMatchClient({
                                         key={myPlayerQuestion.question} // Force remount when question changes (e.g., after timeout)
                                         question={myPlayerQuestion.question}
                                         operation={myPlayerQuestion.operation || 'mixed'}
-                                        questionNumber={Math.min((myTeam?.questionsInSlot || 0) + 1, 5)}
-                                        totalQuestions={5}
+                                        questionNumber={Math.min((myTeam?.questionsInSlot || 0) + 1, getQuestionsPerSlot(displayMatchState.mode))}
+                                        totalQuestions={getQuestionsPerSlot(displayMatchState.mode)}
                                         slotLabel={SLOT_LABELS[(myTeam?.currentSlot || 1) - 1] || 'Mixed'}
-                                        streak={myPlayer.streak || 0}
-                                        slotScore={myPlayer.score || 0}
-                                        isIgl={myPlayer.isIgl}
-                                        isAnchor={myPlayer.isAnchor}
-                                        playerName={myPlayer.odName}
+                                        streak={myPlayer?.streak || 0}
+                                        slotScore={myPlayer?.score || 0}
+                                        isIgl={myPlayer?.isIgl || false}
+                                        isAnchor={myPlayer?.isAnchor || false}
+                                        playerName={myPlayer?.odName || 'Player'}
                                         onSubmit={handleSubmit}
                                         onInputChange={handleInputChange}
                                         lastResult={lastAnswerResult ? {
                                             isCorrect: lastAnswerResult.isCorrect,
                                             pointsEarned: lastAnswerResult.pointsEarned,
                                             correctAnswer: lastAnswerResult.correctAnswer,
-                                            newStreak: myPlayer.streak || 0,
+                                            newStreak: myPlayer?.streak || 0,
                                         } : null}
                                     />
                                     {/* Teammate answer indicator - shows when teammate answers during your turn */}
@@ -3300,8 +3437,25 @@ export function TeamMatchClient({
                                         </div>
                                     </div>
                                 )
+                            ) : activeTeammateId && activeTeammateId !== myPlayerId && myTeam?.players[activeTeammateId] ? (
+                                /* Teammate Spectator View - show when watching a DIFFERENT teammate (including AI bots) */
+                                /* This check comes BEFORE slot complete so we can spectate bots after our slot ends */
+                                <TeammateSpectatorView
+                                    activePlayer={myTeam.players[activeTeammateId]}
+                                    currentQuestion={myTeam.players[activeTeammateId].currentQuestion 
+                                        ? { questionText: myTeam.players[activeTeammateId].currentQuestion.question, operation: myTeam.players[activeTeammateId].currentQuestion.operation }
+                                        : null}
+                                    currentInput={teammateTyping?.odUserId === activeTeammateId 
+                                        ? teammateTyping.currentInput 
+                                        : ''}
+                                    slotNumber={myTeam.currentSlot || 1}
+                                    questionInSlot={myTeam.questionsInSlot || 0}
+                                    totalQuestionsPerSlot={getQuestionsPerSlot(displayMatchState.mode)}
+                                    lastAnswerResult={teammateLastAnswerResult}
+                                    isCurrentUser={false}
+                                />
                             ) : myPlayer?.isComplete ? (
-                                /* Player completed their slot - waiting for next teammate */
+                                /* Player completed their slot AND no teammate is active - waiting for next round/break */
                                 <motion.div
                                     initial={{ opacity: 0, scale: 0.95 }}
                                     animate={{ opacity: 1, scale: 1 }}
@@ -3324,22 +3478,6 @@ export function TeamMatchClient({
                                         <span className="font-bold text-primary">+{myPlayer.score}</span>
                                     </div>
                                 </motion.div>
-                            ) : activeTeammateId && activeTeammateId !== myPlayerId && myTeam?.players[activeTeammateId] ? (
-                                /* Teammate Spectator View - only show when watching a DIFFERENT teammate */
-                                /* The activeTeammateId !== myPlayerId check prevents showing spectator view for ourselves */
-                                /* during the brief transition when isMyTurn is true but myPlayerQuestion is null */
-                                <TeammateSpectatorView
-                                    activePlayer={myTeam.players[activeTeammateId]}
-                                    currentQuestion={myTeam.players[activeTeammateId].currentQuestion || null}
-                                    currentInput={teammateTyping?.odUserId === activeTeammateId 
-                                        ? teammateTyping.currentInput 
-                                        : ''}
-                                    slotNumber={myTeam.currentSlot || 1}
-                                    questionInSlot={myTeam.questionsInSlot || 0}
-                                    totalQuestionsPerSlot={5}
-                                    lastAnswerResult={teammateLastAnswerResult}
-                                    isCurrentUser={false}
-                                />
                             ) : (
                                 /* Brief transition state - minimal/invisible during instant transitions */
                                 /* This should rarely be visible with 0ms handoff delay */
@@ -3358,10 +3496,10 @@ export function TeamMatchClient({
                                     activePlayer={activeOpponent || null}
                                     slotNumber={opponentTeam.currentSlot || 1}
                                     questionInSlot={opponentTeam.questionsInSlot || 0}
-                                    totalQuestionsPerSlot={5}
+                                    totalQuestionsPerSlot={getQuestionsPerSlot(displayMatchState.mode)}
                                     lastAnswerResult={opponentLastResult}
                                     players={Object.values(opponentTeam.players).sort((a, b) =>
-                                        matchOperationsOrder.indexOf(a.slot) - matchOperationsOrder.indexOf(b.slot)
+                                        getSlotSortIndex(a.slot || '', matchOperationsOrder) - getSlotSortIndex(b.slot || '', matchOperationsOrder)
                                     )}
                                 />
                             )}
@@ -3396,6 +3534,36 @@ export function TeamMatchClient({
                                 animate={{ x: ['0%', '100vw'] }}
                                 transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
                             />
+                            
+                            {/* Double Anchor Team Notification - Persistent banner for teammates */}
+                            {doubleAnchorSlot && doubleAnchorForRound && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="absolute top-0 left-1/2 -translate-x-1/2 z-30"
+                                >
+                                    <motion.div
+                                        animate={{ scale: [1, 1.02, 1] }}
+                                        transition={{ duration: 2, repeat: Infinity }}
+                                        className="px-4 py-1.5 rounded-b-xl bg-gradient-to-r from-primary/90 via-purple-600/90 to-primary/90
+                                                   border-b-2 border-x-2 border-primary/50 shadow-lg shadow-primary/30 backdrop-blur-sm"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <Anchor className="w-4 h-4 text-white" />
+                                            <span className="text-xs font-bold text-white">
+                                                DOUBLE ANCHOR: <span className="text-primary-foreground">{doubleAnchorPlayerName}</span> → 
+                                                <span className="ml-1 text-white/90">{operationSymbols[doubleAnchorSlot] || doubleAnchorSlot}</span>
+                                                <span className="ml-1.5 text-white/70">Round {doubleAnchorForRound}</span>
+                                            </span>
+                                            {doubleAnchorBenchedPlayer && (
+                                                <span className="text-[10px] text-white/60 border-l border-white/20 pl-2">
+                                                    {doubleAnchorBenchedPlayer} benched
+                                                </span>
+                                            )}
+                                        </div>
+                                    </motion.div>
+                                </motion.div>
+                            )}
 
                             <div className="relative flex items-center gap-5">
                                 {/* Team Info */}
@@ -3425,15 +3593,14 @@ export function TeamMatchClient({
 
                                 {/* Relay Track with Full Banner Cards */}
                                 <div className="flex-1 flex items-stretch gap-3">
-                                    {Object.entries(myTeam.slotAssignments || {})
-                                        .sort(([opA], [opB]) => matchOperationsOrder.indexOf(opA) - matchOperationsOrder.indexOf(opB))
+                                    {sortSlotAssignments(myTeam.slotAssignments, matchOperationsOrder)
                                         .map(([op, odUserId], idx) => {
                                         const player = myTeam.players[odUserId];
                                         if (!player) return <div key={idx} className="flex-1" />;
                                         const bannerStyle = BANNER_STYLES[resolveBannerStyle(player.odEquippedBanner)] || BANNER_STYLES.default;
 
                                         // Determine slot position (1-N) based on match operation order
-                                        const slotPosition = matchOperationsOrder.indexOf(op) + 1;
+                                        const slotPosition = getSlotSortIndex(op, matchOperationsOrder) + 1;
                                         const currentSlot = myTeam.currentSlot || 1;
                                         const hasPlayed = slotPosition < currentSlot;
                                         const isCurrentlyPlaying = player.isActive;
@@ -3733,6 +3900,31 @@ export function TeamMatchClient({
                                 animate={{ x: ['0%', '-100vw'] }}
                                 transition={{ duration: 10, repeat: Infinity, ease: 'linear', delay: 5 }}
                             />
+                            
+                            {/* Opponent Double Anchor Notification - Shows when opponent has Double Anchor active */}
+                            {opponentDoubleAnchorSlot && opponentDoubleAnchorForRound && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="absolute top-0 left-1/2 -translate-x-1/2 z-30"
+                                >
+                                    <motion.div
+                                        animate={{ scale: [1, 1.02, 1] }}
+                                        transition={{ duration: 2, repeat: Infinity }}
+                                        className="px-4 py-1.5 rounded-b-xl bg-gradient-to-r from-rose-600/90 via-rose-700/90 to-rose-600/90
+                                                   border-b-2 border-x-2 border-rose-400/50 shadow-lg shadow-rose-500/30 backdrop-blur-sm"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <Anchor className="w-4 h-4 text-white" />
+                                            <span className="text-xs font-bold text-white">
+                                                DOUBLE ANCHOR: <span className="text-rose-100">{opponentDoubleAnchorPlayerName}</span> → 
+                                                <span className="ml-1 text-white/90">{operationSymbols[opponentDoubleAnchorSlot] || opponentDoubleAnchorSlot}</span>
+                                                <span className="ml-1.5 text-white/70">Round {opponentDoubleAnchorForRound}</span>
+                                            </span>
+                                        </div>
+                                    </motion.div>
+                                </motion.div>
+                            )}
 
                             <div className="relative flex items-center gap-5">
                                 {/* Team Info */}
@@ -3762,8 +3954,7 @@ export function TeamMatchClient({
 
                                 {/* Relay Track with Full Banner Cards */}
                                 <div className="flex-1 flex items-stretch gap-3">
-                                    {Object.entries(opponentTeam.slotAssignments || {})
-                                        .sort(([opA], [opB]) => matchOperationsOrder.indexOf(opA) - matchOperationsOrder.indexOf(opB))
+                                    {sortSlotAssignments(opponentTeam.slotAssignments, matchOperationsOrder)
                                         .map(([op, odUserId], idx) => {
                                         const player = opponentTeam.players[odUserId];
                                         if (!player) return <div key={idx} className="flex-1" />;
@@ -3888,6 +4079,39 @@ export function TeamMatchClient({
                                                         animate={{ opacity: [0.4, 1, 0.4] }}
                                                         transition={{ duration: 0.8, repeat: Infinity }}
                                                     />
+                                                )}
+                                                
+                                                {/* Opponent Double Anchor Indicator - Shows when this slot is targeted */}
+                                                {opponentDoubleAnchorSlot === op && opponentDoubleAnchorForRound && (
+                                                    <motion.div
+                                                        initial={{ scale: 0, opacity: 0 }}
+                                                        animate={{ scale: 1, opacity: 1 }}
+                                                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
+                                                    >
+                                                        <motion.div
+                                                            animate={{
+                                                                scale: [1, 1.05, 1],
+                                                                boxShadow: ['0 0 15px #f43f5e', '0 0 30px #f43f5e', '0 0 15px #f43f5e']
+                                                            }}
+                                                            transition={{ duration: 1.2, repeat: Infinity }}
+                                                            className="px-3 py-2 rounded-xl bg-gradient-to-br from-rose-600 to-rose-800
+                                                                       border-2 border-rose-400 shadow-2xl backdrop-blur-sm"
+                                                        >
+                                                            <div className="flex flex-col items-center gap-0.5">
+                                                                <div className="flex items-center gap-2">
+                                                                    <Anchor className="w-5 h-5 text-rose-200" />
+                                                                    <span className="text-sm font-black text-white whitespace-nowrap">
+                                                                        DOUBLE ANCHOR
+                                                                    </span>
+                                                                </div>
+                                                                {opponentDoubleAnchorPlayerName && (
+                                                                    <span className="text-xs font-bold text-rose-200 whitespace-nowrap">
+                                                                        {opponentDoubleAnchorPlayerName} • R{opponentDoubleAnchorForRound}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </motion.div>
+                                                    </motion.div>
                                                 )}
                                             </motion.div>
                                         );
@@ -4309,6 +4533,7 @@ export function TeamMatchClient({
                                         // Clear stored match state before navigating
                                         sessionStorage.removeItem(`match_results_${matchId}`);
                                         finalMatchStateRef.current = null;
+                                        setFinalMatchState(null);
                                         router.push('/arena/modes');
                                     }}
                                     className="w-full max-w-xs py-4 rounded-xl bg-primary hover:bg-primary/80
@@ -4322,6 +4547,7 @@ export function TeamMatchClient({
                                         // Clear stored match state before navigating
                                         sessionStorage.removeItem(`match_results_${matchId}`);
                                         finalMatchStateRef.current = null;
+                                        setFinalMatchState(null);
                                         // Use mode from match state or search params
                                         const mode = matchState?.mode || searchParams.get('mode') || '5v5';
                                         router.push(`/arena/teams/setup?mode=${mode}`);
@@ -4639,7 +4865,7 @@ export function TeamMatchClient({
             />
 
             {/* Points Feed FAB - Real-time scoring events */}
-            {displayMatchState.phase !== 'post_match' && displayMatchState.phase !== 'pre_match' && (
+            {displayMatchState.phase !== 'post_match' && (
                 <PointsFeedFAB
                     team1Name={displayMatchState.team1.teamName || 'Team 1'}
                     team2Name={displayMatchState.team2.teamName || 'Team 2'}
