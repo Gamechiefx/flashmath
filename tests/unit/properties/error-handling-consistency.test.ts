@@ -112,7 +112,7 @@ function handleError(error: SystemError, systemState: SystemState): ErrorHandlin
                 userMessage = 'Please check your input and try again.';
                 break;
             case 'network':
-                userMessage = 'Connection issue detected. Please check your internet connection.';
+                userMessage = 'Connection issue detected. Please check your internet connection and try again.';
                 break;
             case 'database':
                 userMessage = 'We\'re experiencing technical difficulties. Please try again later.';
@@ -124,7 +124,8 @@ function handleError(error: SystemError, systemState: SystemState): ErrorHandlin
                 userMessage = 'You don\'t have permission to perform this action.';
                 break;
             case 'business_logic':
-                userMessage = error.message || 'This action cannot be completed.';
+                // Don't expose raw error messages - use safe default
+                userMessage = 'This action cannot be completed.';
                 break;
             case 'external_service':
                 userMessage = 'Service temporarily unavailable. Please try again later.';
@@ -310,30 +311,36 @@ describe('Property 18: Error Handling Consistency', () => {
         for (let iteration = 0; iteration < PROPERTY_TEST_ITERATIONS; iteration++) {
             const systemState = generateSystemState();
             const errorCount = Math.floor(Math.random() * 10) + 1;
-            
+
             let criticalErrorOccurred = false;
-            
+            let dataCorruptionOccurred = false;
+
             for (let i = 0; i < errorCount; i++) {
                 const error = generateRandomError();
                 if (error.severity === 'critical') {
                     criticalErrorOccurred = true;
                 }
-                
+
                 const result = handleError(error, systemState);
-                
+
+                // Track if any error caused corruption
+                if (result.dataCorrupted) {
+                    dataCorruptionOccurred = true;
+                }
+
                 // System should remain stable unless critical error occurred
                 if (!criticalErrorOccurred) {
                     expect(systemState.isStable).toBe(true);
                 }
-                
-                // Data integrity should be preserved unless corruption occurred
-                if (!result.dataCorrupted) {
+
+                // Data integrity should be preserved unless corruption occurred (in this or previous errors)
+                if (!dataCorruptionOccurred) {
                     expect(systemState.dataIntegrity).toBe(true);
                 }
-                
+
                 // Error count should increment
                 expect(systemState.errorCount).toBe(i + 1);
-                
+
                 // Last error should be tracked
                 expect(systemState.lastError).toBe(error);
             }
