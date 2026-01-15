@@ -199,14 +199,14 @@ function updateCompetitionStats(
         averageSpeed: (existingStats.averageSpeed * existingStats.matchesPlayed + userResult.avgSpeed) / (existingStats.matchesPlayed + 1),
         coinsEarned: existingStats.coinsEarned + (match.rewards.find(r => r.userId === userId && r.type === 'coins')?.amount || 0),
         xpEarned: existingStats.xpEarned + (match.rewards.find(r => r.userId === userId && r.type === 'xp')?.amount || 0),
-        titlesUnlocked: [
+        titlesUnlocked: [...new Set([
             ...existingStats.titlesUnlocked,
             ...match.rewards.filter(r => r.userId === userId && r.type === 'title').map(r => r.item || '')
-        ],
-        cosmeticsUnlocked: [
+        ])],
+        cosmeticsUnlocked: [...new Set([
             ...existingStats.cosmeticsUnlocked,
             ...match.rewards.filter(r => r.userId === userId && r.type === 'cosmetic').map(r => r.item || '')
-        ]
+        ])]
     };
 }
 
@@ -312,8 +312,9 @@ describe('Property 17: Competition Tracking and Rewards', () => {
                 expect(rewardCalc.leagueMultiplier).toBe(expectedMultiplier);
                 
                 // Higher league should mean higher rewards (for same performance)
+                // Note: finalReward is floored to integer, so allow for rounding
                 if (rewardCalc.baseReward > 0) {
-                    expect(rewardCalc.finalReward).toBeGreaterThanOrEqual(rewardCalc.baseReward);
+                    expect(rewardCalc.finalReward).toBeGreaterThanOrEqual(Math.floor(rewardCalc.baseReward));
                 }
                 
                 // Performance bonus should correlate with accuracy/speed
