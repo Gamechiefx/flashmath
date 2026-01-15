@@ -312,8 +312,9 @@ describe('Property 17: Competition Tracking and Rewards', () => {
                 expect(rewardCalc.leagueMultiplier).toBe(expectedMultiplier);
                 
                 // Higher league should mean higher rewards (for same performance)
+                // Note: finalReward is floored to integer, so allow for rounding
                 if (rewardCalc.baseReward > 0) {
-                    expect(rewardCalc.finalReward).toBeGreaterThanOrEqual(rewardCalc.baseReward);
+                    expect(rewardCalc.finalReward).toBeGreaterThanOrEqual(Math.floor(rewardCalc.baseReward));
                 }
                 
                 // Performance bonus should correlate with accuracy/speed
