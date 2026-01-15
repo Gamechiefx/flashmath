@@ -334,6 +334,10 @@ describe('Property 8: Queue Search Expansion', () => {
     
     it('should find matches when opponents enter expanded ELO range', () => {
         for (let iteration = 0; iteration < 50; iteration++) {
+            // Clear queue between iterations to prevent leftover teams from affecting results
+            Object.keys(mockRedisQueue).forEach(key => delete mockRedisQueue[key]);
+            Object.keys(mockRedisEntries).forEach(key => delete mockRedisEntries[key]);
+            
             const matchType: MatchType = Math.random() > 0.5 ? 'ranked' : 'casual';
             const baseElo = 500;
             
