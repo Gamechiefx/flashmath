@@ -9,17 +9,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Clean workspace
-        run: |
-          # Remove any leftover files from previous runs
-          rm -rf $GITHUB_WORKSPACE/* || true
-          rm -rf $GITHUB_WORKSPACE/.* || true
-
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
-          clean: true
+          fetch-depth: 1  # Shallow clone (faster)
 
       - name: Ensure directories and SSL certificates
         run: |
@@ -33,32 +26,23 @@ jobs:
             exit 1
           fi
           
-          # Create nginx subdirectories (NOT the config file!)
+          # Create nginx subdirectories
           mkdir -p ./nginx/ssl
           mkdir -p ./nginx/logs
           
           # Fix permissions for nextjs user (UID 1001)
           sudo chown -R 1001:1001 ./data 2>/dev/null || chown -R 1001:1001 ./data 2>/dev/null || true
-          
-          # Fix permissions for nginx logs (nginx user in container)
           chmod 755 ./nginx/logs
           
           # Generate self-signed SSL certificate if it doesn't exist
           if [ ! -f ./nginx/ssl/flashmath.crt ] || [ ! -f ./nginx/ssl/flashmath.key ]; then
-            echo "🔐 Generating self-signed SSL certificate for flashmath.io..."
+            echo "🔐 Generating self-signed SSL certificate..."
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
               -keyout ./nginx/ssl/flashmath.key \
               -out ./nginx/ssl/flashmath.crt \
               -subj "/C=US/ST=State/L=City/O=FlashMath/OU=Production/CN=flashmath.io" \
               -addext "subjectAltName=DNS:flashmath.io,DNS:www.flashmath.io,IP:127.0.0.1"
-            echo "✅ SSL certificate generated"
-          else
-            echo "✅ SSL certificate already exists"
           fi
-          
-          # Create PostgreSQL and Redis volumes if they don't exist
-          docker volume create flashmath_postgres_data 2>/dev/null || true
-          docker volume create flashmath_redis_data 2>/dev/null || true
 
       - name: Build and Start Containers
         env:
@@ -66,14 +50,19 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          EMAIL_FROM: "FlashMath <auth-mailer@flashmath.io>"
+          # Enable BuildKit for faster builds with better caching
+          DOCKER_BUILDKIT: 1
+          COMPOSE_DOCKER_CLI_BUILD: 1
         run: |
           # Stop existing containers gracefully
           docker compose down || true
           
-          # Build fresh image with new code
-          docker compose build --no-cache
+          # Build with cache (remove --no-cache for speed)
+          # BuildKit will cache npm install layer if package.json unchanged
+          docker compose build
           
-          # Start all containers (flashmath, postgres, redis)
+          # Start all containers
           docker compose up -d
           
           # Wait for services to be healthy
@@ -83,15 +72,13 @@ jobs:
           # Check container status
           docker compose ps
           
-          # Cleanup old images
-          docker image prune -f
+          # Cleanup old/dangling images (keep cache)
+          docker image prune -f --filter "dangling=true"
 
       - name: Verify deployment
         run: |
-          # Wait for health check to pass using docker exec (not compose)
           echo "Verifying deployment..."
           for i in {1..30}; do
-            # Use curl directly in container or check container health
             if docker exec flashmath node -e "require('http').get('http://127.0.0.1:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1))" 2>/dev/null; then
               echo "✅ FlashMath is healthy!"
               exit 0
