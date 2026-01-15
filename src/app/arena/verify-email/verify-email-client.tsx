@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Mail, Shield, ArrowLeft, RefreshCw, CheckCircle } from 'lucide-react';
+import { Mail, Shield, ArrowLeft, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { verifyEmailCode, resendVerificationEmail } from '@/lib/actions/auth';
 
 interface VerifyEmailClientProps {
     email: string;
@@ -12,17 +14,103 @@ interface VerifyEmailClientProps {
 }
 
 export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
+    const router = useRouter();
+    const [code, setCode] = useState(['', '', '', '', '', '']);
+    const [isVerifying, setIsVerifying] = useState(false);
     const [isResending, setIsResending] = useState(false);
-    const [resent, setResent] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState(false);
+    const [resendCooldown, setResendCooldown] = useState(0);
+
+    // Handle input changes
+    const handleChange = (index: number, value: string) => {
+        if (!/^\d*$/.test(value)) return; // Only allow digits
+
+        const newCode = [...code];
+        newCode[index] = value.slice(-1); // Only keep last digit
+        setCode(newCode);
+
+        // Auto-focus next input
+        if (value && index < 5) {
+            const nextInput = document.getElementById(`arena-code-${index + 1}`);
+            nextInput?.focus();
+        }
+    };
+
+    // Handle paste
+    const handlePaste = (e: React.ClipboardEvent) => {
+        e.preventDefault();
+        const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+        const newCode = [...code];
+        for (let i = 0; i < pastedData.length; i++) {
+            newCode[i] = pastedData[i];
+        }
+        setCode(newCode);
+    };
+
+    // Handle backspace
+    const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+        if (e.key === 'Backspace' && !code[index] && index > 0) {
+            const prevInput = document.getElementById(`arena-code-${index - 1}`);
+            prevInput?.focus();
+        }
+    };
+
+    // Auto-submit when code is complete
+    useEffect(() => {
+        if (code.every(d => d) && !isVerifying) {
+            handleVerify();
+        }
+    }, [code]);
+
+    // Resend cooldown timer
+    useEffect(() => {
+        if (resendCooldown > 0) {
+            const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [resendCooldown]);
+
+    const handleVerify = async () => {
+        const fullCode = code.join('');
+        if (fullCode.length !== 6) return;
+
+        setIsVerifying(true);
+        setError(null);
+
+        try {
+            const result = await verifyEmailCode(email, fullCode);
+
+            if (result.success) {
+                setSuccess(true);
+                toast.success('Email verified!', {
+                    description: 'Redirecting to Arena...',
+                });
+                setTimeout(() => router.push('/arena/modes'), 2000);
+            } else {
+                setError(result.error || 'Invalid code');
+                setCode(['', '', '', '', '', '']);
+                document.getElementById('arena-code-0')?.focus();
+            }
+        } catch (err) {
+            setError('Failed to verify code');
+            setCode(['', '', '', '', '', '']);
+        }
+
+        setIsVerifying(false);
+    };
 
     const handleResendEmail = async () => {
+        if (resendCooldown > 0) return;
+        
         setIsResending(true);
+        setError(null);
+        
         try {
-            const { resendVerificationEmail } = await import('@/lib/actions/auth');
             const result = await resendVerificationEmail();
             
             if (result.success) {
-                setResent(true);
+                setResendCooldown(60);
                 toast.success('Verification email sent!', {
                     description: 'Check your inbox and spam folder.',
                 });
@@ -66,140 +154,126 @@ export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
 
                 {/* Main Card */}
                 <div className="glass rounded-2xl p-8 text-center">
-                    {/* Icon */}
-                    <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ delay: 0.2, type: 'spring' }}
-                        className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6"
-                        style={{ 
-                            backgroundColor: 'color-mix(in srgb, var(--accent) 20%, transparent)',
-                        }}
-                    >
-                        <Shield size={40} style={{ color: 'var(--accent)' }} />
-                    </motion.div>
-
-                    {/* Title */}
-                    <h1 className="text-3xl font-black mb-2" style={{ color: 'var(--foreground)' }}>
-                        Email Verification Required
-                    </h1>
-                    
-                    <p className="text-muted-foreground mb-6">
-                        Hey {userName}! To compete in the Arena, you need to verify your email address first.
-                    </p>
-
-                    {/* Email Display */}
-                    <div 
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-8"
-                        style={{ 
-                            backgroundColor: 'color-mix(in srgb, var(--primary) 10%, transparent)',
-                            border: '1px solid color-mix(in srgb, var(--primary) 30%, transparent)'
-                        }}
-                    >
-                        <Mail size={16} style={{ color: 'var(--primary)' }} />
-                        <span className="text-sm font-medium">{email}</span>
-                    </div>
-
-                    {/* Instructions */}
-                    <div className="space-y-4 text-left mb-8">
-                        <div className="flex gap-3">
-                            <div 
-                                className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                    {success ? (
+                        <motion.div
+                            initial={{ scale: 0.8, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                        >
+                            <CheckCircle size={64} className="mx-auto mb-4 text-green-500" />
+                            <h1 className="text-2xl font-bold text-white mb-2">Email Verified!</h1>
+                            <p className="text-muted-foreground">Redirecting to Arena...</p>
+                        </motion.div>
+                    ) : (
+                        <>
+                            {/* Icon */}
+                            <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                transition={{ delay: 0.2, type: 'spring' }}
+                                className="inline-flex items-center justify-center w-20 h-20 rounded-full mb-6"
                                 style={{ 
-                                    backgroundColor: 'var(--primary)',
-                                    color: 'var(--primary-foreground)'
+                                    backgroundColor: 'color-mix(in srgb, var(--accent) 20%, transparent)',
                                 }}
                             >
-                                1
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                Check your inbox for a verification email from FlashMath
-                            </p>
-                        </div>
-                        <div className="flex gap-3">
-                            <div 
-                                className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                style={{ 
-                                    backgroundColor: 'var(--primary)',
-                                    color: 'var(--primary-foreground)'
-                                }}
-                            >
-                                2
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                Click the verification link in the email
-                            </p>
-                        </div>
-                        <div className="flex gap-3">
-                            <div 
-                                className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
-                                style={{ 
-                                    backgroundColor: 'var(--primary)',
-                                    color: 'var(--primary-foreground)'
-                                }}
-                            >
-                                3
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                                Return here and refresh to access the Arena
-                            </p>
-                        </div>
-                    </div>
+                                <Shield size={40} style={{ color: 'var(--accent)' }} />
+                            </motion.div>
 
-                    {/* Actions */}
-                    <div className="space-y-3">
-                        {resent ? (
+                            {/* Title */}
+                            <h1 className="text-3xl font-black mb-2" style={{ color: 'var(--foreground)' }}>
+                                Verify Your Email
+                            </h1>
+                            
+                            <p className="text-muted-foreground mb-2">
+                                Hey {userName}! Enter the 6-digit code sent to
+                            </p>
+                            
+                            {/* Email Display */}
                             <div 
-                                className="flex items-center justify-center gap-2 py-3 rounded-xl"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-full mb-6"
                                 style={{ 
                                     backgroundColor: 'color-mix(in srgb, var(--primary) 10%, transparent)',
-                                    color: 'var(--primary)'
+                                    border: '1px solid color-mix(in srgb, var(--primary) 30%, transparent)'
                                 }}
                             >
-                                <CheckCircle size={20} />
-                                <span className="font-medium">Email sent! Check your inbox</span>
+                                <Mail size={16} style={{ color: 'var(--primary)' }} />
+                                <span className="text-sm font-medium">{email}</span>
                             </div>
-                        ) : (
+
+                            {/* Code Input */}
+                            <div className="flex justify-center gap-2 mb-6" onPaste={handlePaste}>
+                                {code.map((digit, index) => (
+                                    <input
+                                        key={index}
+                                        id={`arena-code-${index}`}
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={1}
+                                        value={digit}
+                                        onChange={(e) => handleChange(index, e.target.value)}
+                                        onKeyDown={(e) => handleKeyDown(index, e)}
+                                        className="w-12 h-14 text-center text-2xl font-bold bg-white/5 border border-white/10 rounded-lg text-white focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                                        disabled={isVerifying}
+                                        autoFocus={index === 0}
+                                    />
+                                ))}
+                            </div>
+
+                            {/* Error Message */}
+                            {error && (
+                                <div className="flex items-center gap-2 text-red-400 text-sm mb-4 justify-center">
+                                    <AlertCircle className="w-4 h-4" />
+                                    {error}
+                                </div>
+                            )}
+
+                            {/* Verify Button */}
                             <button
-                                onClick={handleResendEmail}
-                                disabled={isResending}
-                                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all disabled:opacity-50"
+                                onClick={handleVerify}
+                                disabled={isVerifying || code.some(d => !d)}
+                                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all disabled:opacity-50 mb-4"
                                 style={{ 
-                                    backgroundColor: 'var(--accent)',
+                                    backgroundColor: 'var(--primary)',
                                     color: 'var(--primary-foreground)'
                                 }}
                             >
-                                {isResending ? (
+                                {isVerifying ? (
                                     <>
                                         <RefreshCw size={18} className="animate-spin" />
-                                        Sending...
+                                        Verifying...
                                     </>
                                 ) : (
                                     <>
-                                        <Mail size={18} />
-                                        Resend Verification Email
+                                        <CheckCircle size={18} />
+                                        Verify Email
                                     </>
                                 )}
                             </button>
-                        )}
 
-                        <button
-                            onClick={() => window.location.reload()}
-                            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold border transition-all hover:bg-white/5"
-                            style={{ borderColor: 'var(--glass-border)' }}
-                        >
-                            <RefreshCw size={18} />
-                            I've Verified - Refresh
-                        </button>
-                    </div>
+                            {/* Resend Button */}
+                            <button
+                                onClick={handleResendEmail}
+                                disabled={isResending || resendCooldown > 0}
+                                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold border transition-all hover:bg-white/5 disabled:opacity-50"
+                                style={{ borderColor: 'var(--glass-border)' }}
+                            >
+                                <RefreshCw size={18} className={isResending ? 'animate-spin' : ''} />
+                                {resendCooldown > 0
+                                    ? `Resend in ${resendCooldown}s`
+                                    : isResending
+                                    ? 'Sending...'
+                                    : 'Resend Code'
+                                }
+                            </button>
 
-                    {/* Help Text */}
-                    <p className="text-xs text-muted-foreground mt-6">
-                        Can't find the email? Check your spam folder or{' '}
-                        <Link href="/settings" className="underline hover:text-foreground">
-                            update your email address
-                        </Link>
-                    </p>
+                            {/* Help Text */}
+                            <p className="text-xs text-muted-foreground mt-6">
+                                Can't find the email? Check your spam folder or{' '}
+                                <Link href="/settings" className="underline hover:text-foreground">
+                                    update your email address
+                                </Link>
+                            </p>
+                        </>
+                    )}
                 </div>
 
                 {/* Why Verification */}
@@ -213,4 +287,3 @@ export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
         </main>
     );
 }
-
