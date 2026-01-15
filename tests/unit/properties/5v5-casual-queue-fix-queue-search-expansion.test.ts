@@ -562,6 +562,10 @@ describe('Property 8: Queue Search Expansion', () => {
         ];
         
         edgeCases.forEach(testCase => {
+            // Clear queue between edge cases to prevent leftover teams from matching
+            Object.keys(mockRedisQueue).forEach(key => delete mockRedisQueue[key]);
+            Object.keys(mockRedisEntries).forEach(key => delete mockRedisEntries[key]);
+            
             const matchType: MatchType = 'casual';
             const baseElo = 500;
             
