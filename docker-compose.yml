@@ -98,7 +98,7 @@ services:
       - SMTP_USER=${SMTP_USER:-auth-mailer@flashmath.io}
       - SMTP_PASS=${SMTP_PASS}
       - SMTP_SECURE=${SMTP_SECURE:-false}
-      - EMAIL_FROM=${EMAIL_FROM:-Flash Math <noreply@flashmath.io>}
+      - EMAIL_FROM=${EMAIL_FROM:-FlashMath <auth-mailer@flashmath.io>}
       - EMAIL_REPLY_TO=${EMAIL_REPLY_TO:-support@flashmath.io}
       
       # Dev Tools - DISABLED in production
