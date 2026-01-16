@@ -9,45 +9,16 @@ on:
       - main
 
 jobs:
-  unit-tests:
-    name: Unit Tests
+  # Fast quality checks - lint and typecheck together
+  quality:
+    name: Lint & TypeCheck
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run unit tests
-        run: npm run test:unit
-        env:
-          CI: true
-
-      - name: Run unit tests with coverage
-        run: npm run test:unit:coverage
-        env:
-          CI: true
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -58,17 +29,19 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
-  typecheck:
-    name: TypeScript Check
+      - name: Run TypeScript check
+        run: npm run typecheck
+
+  # Unit tests with coverage
+  unit-tests:
+    name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -76,20 +49,43 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run TypeScript check
-        run: npm run typecheck
+      - name: Run unit tests with coverage
+        run: npm run test:unit:coverage
+        env:
+          CI: true
 
-  build:
-    name: Build Check
+  # Security audit for vulnerable dependencies
+  security:
+    name: Security Audit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true  # Don't fail on moderate issues
+
+  # Build only after quality checks pass
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+    needs: [quality]  # Wait for lint/typecheck to pass
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -100,31 +96,39 @@ jobs:
       - name: Build application
         run: npm run build
         env:
-          # Skip type checking during build for speed
           NEXT_TELEMETRY_DISABLED: 1
 
-  # Optional: E2E tests (slower, can be enabled for PRs to main)
-  # e2e-tests:
-  #   name: E2E Tests
-  #   runs-on: ubuntu-latest
-  #   needs: [unit-tests, build]
-  #   steps:
-  #     - name: Checkout code
-  #       uses: actions/checkout@v3
-  #
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v3
-  #       with:
-  #         node-version: '20'
-  #         cache: 'npm'
-  #
-  #     - name: Install dependencies
-  #       run: npm ci
-  #
-  #     - name: Install Playwright
-  #       run: npx playwright install --with-deps chromium
-  #
-  #     - name: Run E2E tests
-  #       run: npm run test:e2e
-  #       env:
-  #         CI: true
+  # E2E tests only on PRs to main (slower, but important for merges)
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload E2E report on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: tests/e2e/playwright-report/
+          retention-days: 7
