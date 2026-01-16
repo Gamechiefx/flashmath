@@ -14,12 +14,16 @@
 import {
     EchoDirective,
     EchoQueueEntry,
-    LearnerModel,
-    SessionTelemetry,
     ContentItem,
     AIEngineConfig,
     DEFAULT_AI_CONFIG,
+     
+    LearnerModel,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
+    SessionTelemetry,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     RepresentationType,
+     
     AnswerSubmittedEvent,
 } from '../types';
 import {
@@ -28,13 +32,17 @@ import {
     tickEchoQueue,
     resolveEchoQueueEntry,
     failEchoQueueEntry,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     updateSkillMastery,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     addErrorSignature,
 } from '../state';
 import {
+     
     selectNextRepresentation,
     generateVariant,
 } from '../content-variants';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
 import { generateId } from '@/lib/db';
 
 // =============================================================================
@@ -71,7 +79,7 @@ export function processAnswer(
     directive: EchoDirective;
     masteryUpdates: { skillId: string; delta: number }[];
 } {
-    const { item, isCorrect, latencyMs } = event;
+    const { item, isCorrect, latencyMs: _latencyMs } = event;
     const skillId = item.skillId;
 
     const updatedQueue = [...state.echoQueue];
@@ -205,7 +213,7 @@ export function processAnswer(
 export function tickQueue(
     state: EchoAgentState,
     tiltRisk: number,
-    config: AIEngineConfig = DEFAULT_AI_CONFIG
+    _config: AIEngineConfig = DEFAULT_AI_CONFIG
 ): {
     updatedState: EchoAgentState;
     dueItems: EchoQueueEntry[];

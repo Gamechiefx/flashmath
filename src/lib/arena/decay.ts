@@ -16,7 +16,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
 
-import { getDatabase, type UserRow } from '@/lib/db';
+import { getDatabase } from '@/lib/db';
 import { DECAY, PLACEMENT } from './constants.js';
 
 // =============================================================================

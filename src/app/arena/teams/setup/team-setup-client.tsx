@@ -1206,10 +1206,7 @@ export function TeamSetupClient({
                                                             <span>Casual</span>
                                                         </button>
                                                         <button
-                                                            onClick={() => {
-                                                                setMatchType('vs_ai');
-                                                                setShowAIOptions(true);
-                                                            }}
+                                                            onClick={() => setMatchType('vs_ai')}
                                                             className={cn(
                                                                 "flex-1 p-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-1",
                                                                 matchType === 'vs_ai'
@@ -1608,10 +1605,7 @@ export function TeamSetupClient({
 
                                         {/* VS AI */}
                                         <button
-                                            onClick={() => {
-                                                setMatchType('vs_ai');
-                                                setShowAIOptions(true);
-                                            }}
+                                            onClick={() => setMatchType('vs_ai')}
                                             className={cn(
                                                 "p-3 rounded-xl border-2 transition-all text-center",
                                                 matchType === 'vs_ai'

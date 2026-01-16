@@ -216,7 +216,7 @@ async function initSchema() {
         for (const col of columnsToAdd) {
             try {
                 await client.query(`ALTER TABLE arena_players ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`);
-            } catch (e) {
+            } catch (_e) {
                 // Column might already exist, ignore error
             }
         }

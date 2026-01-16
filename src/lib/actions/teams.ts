@@ -877,7 +877,8 @@ export async function updateTeamElo(
 /**
  * Calculate average ELO for a set of values
  */
-function calculateAverageElo(elos: Record<string, number>): number {
+ 
+function _calculateAverageElo(elos: Record<string, number>): number {
     const values = Object.values(elos).filter(v => v > 0);
     if (values.length === 0) return 300;
     return Math.round(values.reduce((a, b) => a + b, 0) / values.length);

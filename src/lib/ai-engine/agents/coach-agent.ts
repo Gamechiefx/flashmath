@@ -13,8 +13,6 @@
 
 import {
     CoachDirective,
-    LearnerModel,
-    SessionTelemetry,
     ContentItem,
     HintPayload,
     HintRequest,
@@ -22,6 +20,11 @@ import {
     AIEngineConfig,
     DEFAULT_AI_CONFIG,
     ErrorSignature,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
+    LearnerModel,
+     
+    SessionTelemetry,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     AnswerSubmittedEvent,
 } from '../types';
 import { getLatencyTrendRatio } from '../state';
@@ -262,8 +265,8 @@ export function generateRulesBasedHint(
 
 function getOperationSpecificHint(
     question: ContentItem,
-    userAnswer: number,
-    correctAnswer: number
+    _userAnswer: number,
+    _correctAnswer: number
 ): string {
     const { operation, operand1, operand2 } = question;
 
@@ -308,7 +311,7 @@ export async function generateLLMHint(
     request: HintRequest,
     config: AIEngineConfig = DEFAULT_AI_CONFIG
 ): Promise<HintPayload> {
-    const { question, userAnswer, correctAnswer, errorContext, policy } = request;
+    const { question, userAnswer: _userAnswer, correctAnswer: _correctAnswer, errorContext, policy: _policy } = request;
 
     // Build prompt for Claude
     const systemPrompt = `You are a patient, encouraging math tutor for children ages 6-12.

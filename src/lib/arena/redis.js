@@ -149,7 +149,7 @@ async function getQueueEntries() {
     for (const [key, value] of Object.entries(entries)) {
         try {
             map.set(key, JSON.parse(value));
-        } catch (e) {
+        } catch (_e) {
             // Skip malformed entries
         }
     }

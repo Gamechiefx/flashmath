@@ -107,7 +107,7 @@ class SoundEngine {
             try {
                 await this.ctx.resume();
                 return true;
-            } catch (e) {
+            } catch (_e) {
                 console.error('[SoundEngine] Failed to resume AudioContext:', e);
                 return false;
             }
@@ -239,7 +239,7 @@ class SoundEngine {
 
                 this.audioCache.set(path, audioBuffer);
                 return audioBuffer;
-            } catch (e) {
+            } catch (_e) {
                 console.warn(`[SoundEngine] Failed to load sound: ${path}`, e);
                 return null;
             } finally {
@@ -1349,7 +1349,7 @@ class SoundEngine {
                     this.strategyGain = null;
                 }
             };
-        } catch (e) {
+        } catch (_e) {
             console.error('[SoundEngine] Failed to play strategy music:', e);
             this.strategyLoading = false;
         }
@@ -1383,7 +1383,7 @@ class SoundEngine {
             setTimeout(() => {
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1480,7 +1480,7 @@ class SoundEngine {
                     this.matchGain = null;
                 }
             };
-        } catch (e) {
+        } catch (_e) {
             console.error('[SoundEngine] Failed to play match music:', e);
             this.matchLoading = false;
         }
@@ -1512,7 +1512,7 @@ class SoundEngine {
             setTimeout(() => {
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1596,7 +1596,7 @@ class SoundEngine {
                     this.halftimeGain = null;
                 }
             };
-        } catch (e) {
+        } catch (_e) {
             console.error('[SoundEngine] Failed to play halftime music:', e);
             this.halftimeLoading = false;
         }
@@ -1624,7 +1624,7 @@ class SoundEngine {
             setTimeout(() => {
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1715,7 +1715,7 @@ class SoundEngine {
                     this.queueGain = null;
                 }
             };
-        } catch (e) {
+        } catch (_e) {
             console.error('[SoundEngine] Failed to play queue music:', e);
             this.queueLoading = false;
         }
@@ -1743,7 +1743,7 @@ class SoundEngine {
             setTimeout(() => {
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1870,7 +1870,7 @@ class SoundEngine {
             };
 
             return analyser;
-        } catch (e) {
+        } catch (_e) {
             console.error('[SoundEngine] Failed to play arena entrance music:', e);
             this.arenaEntranceLoading = false;
             return null;
@@ -1930,7 +1930,7 @@ class SoundEngine {
                 this.arenaEntranceFadingOut = false;
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1972,7 +1972,7 @@ class SoundEngine {
 
             this.bgmSource = source;
             this.bgmGain = gain;
-        } catch (e) {
+        } catch (_e) {
             console.error('Failed to play BGM:', e);
         }
     }

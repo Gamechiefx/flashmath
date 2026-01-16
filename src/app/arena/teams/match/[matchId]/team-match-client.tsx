@@ -3594,7 +3594,7 @@ export function TeamMatchClient({
                                 </div>
 
                                 {/* Relay Track with Full Banner Cards */}
-                                <div className="flex-1 flex items-stretch gap-3">
+                                <div className="flex-1 flex items-stretch gap-5">
                                     {sortSlotAssignments(myTeam.slotAssignments, matchOperationsOrder)
                                         .map(([op, odUserId], idx) => {
                                         const player = myTeam.players[odUserId];
@@ -3955,7 +3955,7 @@ export function TeamMatchClient({
                                 </div>
 
                                 {/* Relay Track with Full Banner Cards */}
-                                <div className="flex-1 flex items-stretch gap-3">
+                                <div className="flex-1 flex items-stretch gap-5">
                                     {sortSlotAssignments(opponentTeam.slotAssignments, matchOperationsOrder)
                                         .map(([op, odUserId], idx) => {
                                         const player = opponentTeam.players[odUserId];

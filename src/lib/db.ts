@@ -344,7 +344,7 @@ export const execute = (text: string, params: any[] = []): { changes: number } =
     try {
         const result = database.prepare(text).run(...params);
         return { changes: result.changes };
-    } catch (e) {
+    } catch (_e) {
         console.error('[DB] Direct execution failed:', e);
         return { changes: 0 };
     }

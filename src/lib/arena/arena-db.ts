@@ -29,7 +29,7 @@ let arenaRedis: {
 try {
      
     arenaRedis = require('../../../server-redis.js');
-} catch (e) {
+} catch (_e) {
     // Redis not available (e.g., during build), will use direct DB
     console.log('[arena-db] Redis caching not available, using direct DB queries');
 }
@@ -335,7 +335,7 @@ export async function getDuelLeaderboard(
             if (cached && cached.length >= limit) {
                 return cached.slice(0, limit);
             }
-        } catch (e) {
+        } catch (_e) {
             // Cache miss or error, continue to DB
         }
     }
@@ -407,7 +407,7 @@ export async function getArenaDisplayStats(userId: string): Promise<ArenaDisplay
             if (cached) {
                 return cached as ArenaDisplayStats;
             }
-        } catch (e) {
+        } catch (_e) {
             // Cache miss, continue to DB
         }
     }
@@ -495,7 +495,7 @@ export async function getArenaDisplayStatsBatch(
                 }
             }
             uncachedIds = userIds.filter(id => !cachedStats[id]);
-        } catch (e) {
+        } catch (_e) {
             // Cache failed, fetch all from DB
             uncachedIds = [...userIds];
         }

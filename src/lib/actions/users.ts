@@ -31,7 +31,7 @@ export async function deleteUser(userId: string) {
         saveData();
         revalidatePath("/admin");
         return { success: true };
-    } catch (e) {
+    } catch (_e) {
         console.error("Delete user failed", e);
         return { error: "Failed" };
     }
@@ -67,7 +67,7 @@ export async function banUser(userId: string, durationHours: number | null) {
             return { success: true, banned_until: bannedUntil };
         }
         return { error: "User not found" };
-    } catch (e) {
+    } catch (_e) {
         console.error("Ban user failed", e);
         return { error: "Failed" };
     }
@@ -82,7 +82,7 @@ export async function unbanUser(userId: string) {
         execute("UPDATE users SET banned_until = ? WHERE id = ?", [null, userId]);
         revalidatePath("/admin");
         return { success: true };
-    } catch (e) {
+    } catch (_e) {
         console.error("Unban user failed", e);
         return { error: "Failed" };
     }

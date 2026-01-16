@@ -106,7 +106,7 @@ export function updateSkillMastery(
     skillId: string,
     isCorrect: boolean,
     latencyMs: number,
-    config: AIEngineConfig = DEFAULT_AI_CONFIG
+    _config: AIEngineConfig = DEFAULT_AI_CONFIG
 ): void {
     const skill = getSkillMastery(model, skillId);
 
@@ -220,7 +220,7 @@ export function persistLearnerModel(model: LearnerModel): void {
 export function createSessionTelemetry(
     sessionId: string,
     userId: string,
-    config: AIEngineConfig = DEFAULT_AI_CONFIG
+    _config: AIEngineConfig = DEFAULT_AI_CONFIG
 ): SessionTelemetry {
     return {
         sessionId,

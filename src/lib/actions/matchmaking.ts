@@ -1996,7 +1996,7 @@ export async function getMatchHistory(limit: number = 10): Promise<{
                     matchReasoning = typeof match.match_reasoning === 'string' 
                         ? JSON.parse(match.match_reasoning) 
                         : match.match_reasoning;
-                } catch (e) {
+                } catch (_e) {
                     console.warn('[MatchHistory] Failed to parse match_reasoning:', e);
                 }
             }

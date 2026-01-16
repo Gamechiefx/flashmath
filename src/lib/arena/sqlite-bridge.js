@@ -301,7 +301,7 @@ function getArenaMatchmakingData(userId) {
     let mathTiers = {};
     try {
         mathTiers = JSON.parse(user.math_tiers || '{}');
-    } catch (e) {
+    } catch (_e) {
         mathTiers = {};
     }
 
