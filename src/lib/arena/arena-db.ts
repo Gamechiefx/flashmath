@@ -512,11 +512,11 @@ export async function getArenaDisplayStatsBatch(
         // #endregion
         // Fetch uncached players in one query
         const players = await arenaPostgres.getPlayersBatch(uncachedIds);
-        const playerMap = new Map(players.map((p: ArenaPlayer) => [p.user_id, p]));
+        const playerMap = new Map<string, ArenaPlayer>(players.map((p: ArenaPlayer) => [p.user_id, p]));
         
         // Build result with defaults for missing players
         for (const userId of uncachedIds) {
-            const player = playerMap.get(userId);
+            const player = playerMap.get(userId) as ArenaPlayer | undefined;
             
             if (player) {
                 const duelRank = getRankFromElo(player.elo);

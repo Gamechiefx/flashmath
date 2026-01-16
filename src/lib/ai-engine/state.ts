@@ -35,7 +35,9 @@ export function initializeLearnerModel(
     interface SkillMasteryRow {
         skill_id: string;
         mastery_prob?: number;
-        [key: string]: unknown;
+        uncertainty?: number;
+        error_signatures?: string;
+        last_seen_at?: string;
     }
     const skillRows = db.prepare(`
     SELECT * FROM skill_mastery WHERE user_id = ?
@@ -318,7 +320,11 @@ export function loadEchoQueue(userId: string): EchoQueueEntry[] {
         concept_id?: string;
         priority?: number;
         due_after_n?: number;
-        [key: string]: unknown;
+        max_attempts?: number;
+        attempts?: number;
+        variant_policy?: string;
+        created_at: string;
+        status: 'scheduled' | 'due';
     }
     const rows = db.prepare(`
     SELECT * FROM echo_queue 
@@ -329,15 +335,15 @@ export function loadEchoQueue(userId: string): EchoQueueEntry[] {
     return rows.map(row => ({
         id: row.id,
         skillId: row.skill_id,
-        conceptId: row.concept_id,
-        priority: row.priority,
-        insertAfterN: row.due_after_n,
-        questionsUntilDue: row.due_after_n,  // Will be updated
-        maxAttempts: row.max_attempts,
-        attempts: row.attempts,
-        usedRepresentations: row.variant_policy ? [row.variant_policy] : ['direct'],
-        nextRepresentation: row.variant_policy || 'direct',
-        status: row.status,
+        conceptId: row.concept_id || row.skill_id,
+        priority: row.priority || 1,
+        insertAfterN: row.due_after_n || 0,
+        questionsUntilDue: row.due_after_n || 0,  // Will be updated
+        maxAttempts: row.max_attempts || 3,
+        attempts: row.attempts || 0,
+        usedRepresentations: row.variant_policy ? [row.variant_policy as 'direct'] : ['direct'],
+        nextRepresentation: (row.variant_policy || 'direct') as 'direct',
+        status: row.status as 'scheduled' | 'due',
         createdAt: new Date(row.created_at).getTime(),
         lastAttemptAt: undefined,
     }));

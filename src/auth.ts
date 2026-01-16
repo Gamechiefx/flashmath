@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
-import { queryOne, loadData, getDatabase } from "./lib/db";
+import { queryOne, loadData, getDatabase, type UserRow } from "./lib/db";
 import { authConfig } from "./auth.config";
 import { v4 as uuidv4 } from "uuid";
 
@@ -42,7 +42,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     }
                 }
 
-                const isPasswordValid = await bcrypt.compare(credentials.password as string, user.password_hash);
+                const isPasswordValid = user.password_hash 
+                    ? await bcrypt.compare(credentials.password as string, user.password_hash)
+                    : false;
                 console.log("[AUTH] Password valid:", isPasswordValid);
 
                 if (isPasswordValid) {
@@ -165,14 +167,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         db.prepare("UPDATE users SET last_active = ? WHERE id = ?").run(now(), user.id);
 
                         // Lookup equipped title name from database
-                        const titleId = user.equipped_items?.title;
+                        let equippedItemsParsed: { title?: string } = {};
+                        try {
+                            equippedItemsParsed = user.equipped_items 
+                                ? (typeof user.equipped_items === 'string' 
+                                    ? JSON.parse(user.equipped_items) 
+                                    : user.equipped_items)
+                                : {};
+                        } catch {
+                            equippedItemsParsed = {};
+                        }
+                        const titleId = equippedItemsParsed?.title;
                         if (titleId && titleId !== 'default') {
-                            const db = loadData();
+                            const shopDb = loadData();
                             interface ShopItem {
                                 id: string;
                                 name?: string;
                             }
-                            const titleItem = db.shop_items.find((i: ShopItem) => i.id === titleId);
+                            const titleItem = shopDb.shop_items.find((i: ShopItem) => i.id === titleId);
                             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                             (session.user as any).equippedTitleName = titleItem?.name || null;
                         } else {

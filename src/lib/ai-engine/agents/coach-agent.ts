@@ -311,7 +311,7 @@ export async function generateLLMHint(
     request: HintRequest,
     config: AIEngineConfig = DEFAULT_AI_CONFIG
 ): Promise<HintPayload> {
-    const { question, userAnswer: _userAnswer, correctAnswer: _correctAnswer, errorContext, policy: _policy } = request;
+    const { question, userAnswer, correctAnswer, errorContext, policy: _policy } = request;
 
     // Build prompt for Claude
     const systemPrompt = `You are a patient, encouraging math tutor for children ages 6-12.

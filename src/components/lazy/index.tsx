@@ -53,7 +53,7 @@ const LoadingTable = () => (
  * Arena Leaderboard - Heavy component with animations and data tables
  */
 export const LazyArenaLeaderboard = dynamic(
-    () => import('@/components/arena/arena-leaderboard').then(mod => mod.ArenaLeaderboard || mod.default),
+    () => import('@/components/arena/arena-leaderboard').then(mod => mod.ArenaLeaderboard),
     {
         loading: () => <LoadingTable />,
         ssr: false,
@@ -64,7 +64,7 @@ export const LazyArenaLeaderboard = dynamic(
  * Real-time Match Interface - Socket.IO, animations, timers
  */
 export const LazyRealTimeMatch = dynamic(
-    () => import('@/components/arena/real-time-match'),
+    () => import('@/components/arena/real-time-match').then(mod => mod.RealTimeMatch),
     {
         loading: () => <LoadingSpinner />,
         ssr: false,
@@ -75,7 +75,7 @@ export const LazyRealTimeMatch = dynamic(
  * Match Lobby - Pre-match waiting room with animations
  */
 export const LazyMatchLobby = dynamic(
-    () => import('@/components/arena/match-lobby'),
+    () => import('@/components/arena/match-lobby').then(mod => mod.MatchLobby),
     {
         loading: () => <LoadingSpinner />,
         ssr: false,
@@ -86,7 +86,7 @@ export const LazyMatchLobby = dynamic(
  * Matchmaking Queue - Queue UI with timers
  */
 export const LazyMatchmakingQueue = dynamic(
-    () => import('@/components/arena/matchmaking-queue'),
+    () => import('@/components/arena/matchmaking-queue').then(mod => mod.MatchmakingQueue),
     {
         loading: () => <LoadingSpinner />,
         ssr: false,
@@ -101,7 +101,7 @@ export const LazyMatchmakingQueue = dynamic(
  * Particle Effects - Canvas-based particle system
  */
 export const LazyParticleEffects = dynamic(
-    () => import('@/components/effects/particle-effects'),
+    () => import('@/components/effects/particle-effects').then(mod => mod.ParticleEffects),
     {
         loading: () => null, // No loading indicator for effects
         ssr: false,
@@ -112,7 +112,7 @@ export const LazyParticleEffects = dynamic(
  * Starfield Background - Animated canvas background
  */
 export const LazyStarfield = dynamic(
-    () => import('@/components/effects/starfield'),
+    () => import('@/components/effects/starfield').then(mod => mod.Starfield),
     {
         loading: () => null,
         ssr: false,
@@ -123,7 +123,7 @@ export const LazyStarfield = dynamic(
  * BGM Player - Audio player component
  */
 export const LazyBgmPlayer = dynamic(
-    () => import('@/components/effects/bgm-player'),
+    () => import('@/components/effects/bgm-player').then(mod => mod.BGMPlayer),
     {
         loading: () => null,
         ssr: false,
@@ -138,7 +138,7 @@ export const LazyBgmPlayer = dynamic(
  * Social Panel - Friends, parties, presence
  */
 export const LazySocialPanel = dynamic(
-    () => import('@/components/social/social-panel'),
+    () => import('@/components/social/social-panel').then(mod => mod.SocialPanel),
     {
         loading: () => <LoadingCard />,
         ssr: false,
@@ -153,7 +153,7 @@ export const LazySocialPanel = dynamic(
  * Career Stats View - Charts and statistics
  */
 export const LazyCareerStatsView = dynamic(
-    () => import('@/components/career-stats-view'),
+    () => import('@/components/career-stats-view').then(mod => mod.CareerStatsView),
     {
         loading: () => <LoadingCard />,
         ssr: false,
@@ -164,7 +164,7 @@ export const LazyCareerStatsView = dynamic(
  * Operation Stats Modal - Detailed stats with charts
  */
 export const LazyOperationStatsModal = dynamic(
-    () => import('@/components/operation-stats-modal'),
+    () => import('@/components/operation-stats-modal').then(mod => mod.OperationStatsModal),
     {
         loading: () => <LoadingSpinner />,
         ssr: false,
@@ -175,7 +175,7 @@ export const LazyOperationStatsModal = dynamic(
  * Leaderboard View - Full leaderboard with sorting
  */
 export const LazyLeaderboardView = dynamic(
-    () => import('@/components/leaderboard-view'),
+    () => import('@/components/leaderboard-view').then(mod => mod.LeaderboardView),
     {
         loading: () => <LoadingTable />,
         ssr: false,
@@ -190,7 +190,7 @@ export const LazyLeaderboardView = dynamic(
  * Shop View - Item cards with preview
  */
 export const LazyShopView = dynamic(
-    () => import('@/components/shop-view'),
+    () => import('@/components/shop-view').then(mod => mod.ShopView),
     {
         loading: () => <LoadingCard />,
         ssr: false,
@@ -201,7 +201,7 @@ export const LazyShopView = dynamic(
  * Banner Editor - Canvas-based banner customization
  */
 export const LazyBannerEditor = dynamic(
-    () => import('@/components/locker/banner-editor-client'),
+    () => import('@/components/locker/banner-editor-client').then(mod => mod.BannerEditorClient),
     {
         loading: () => <LoadingCard />,
         ssr: false,
@@ -212,7 +212,7 @@ export const LazyBannerEditor = dynamic(
  * Compact Locker View - Inventory display
  */
 export const LazyCompactLockerView = dynamic(
-    () => import('@/components/locker/compact-locker-view'),
+    () => import('@/components/locker/compact-locker-view').then(mod => mod.CompactLockerView),
     {
         loading: () => <LoadingCard />,
         ssr: false,
@@ -227,7 +227,7 @@ export const LazyCompactLockerView = dynamic(
  * User Manager - Admin user management with data tables
  */
 export const LazyUserManager = dynamic(
-    () => import('@/components/admin/user-manager'),
+    () => import('@/components/admin/user-manager').then(mod => mod.UserManager),
     {
         loading: () => <LoadingTable />,
         ssr: false,
@@ -238,7 +238,7 @@ export const LazyUserManager = dynamic(
  * Auditor Panel - Match auditing tools
  */
 export const LazyAuditorPanel = dynamic(
-    () => import('@/components/auditor/auditor-panel'),
+    () => import('@/components/auditor/auditor-panel').then(mod => mod.AuditorPanel),
     {
         loading: () => <LoadingCard />,
         ssr: false,
@@ -253,7 +253,7 @@ export const LazyAuditorPanel = dynamic(
  * Practice View - Main practice interface
  */
 export const LazyPracticeView = dynamic(
-    () => import('@/components/practice-view'),
+    () => import('@/components/practice-view').then(mod => mod.PracticeView),
     {
         loading: () => <LoadingSpinner />,
         ssr: false,
@@ -264,7 +264,7 @@ export const LazyPracticeView = dynamic(
  * Placement Test - Initial skill assessment
  */
 export const LazyPlacementTest = dynamic(
-    () => import('@/components/placement-test'),
+    () => import('@/components/placement-test').then(mod => mod.PlacementTest),
     {
         loading: () => <LoadingSpinner />,
         ssr: false,
@@ -275,7 +275,7 @@ export const LazyPlacementTest = dynamic(
  * Mastery Test - Tier advancement test
  */
 export const LazyMasteryTest = dynamic(
-    () => import('@/components/mastery-test'),
+    () => import('@/components/mastery-test').then(mod => mod.MasteryTest),
     {
         loading: () => <LoadingSpinner />,
         ssr: false,
@@ -292,10 +292,9 @@ export const LazyMasteryTest = dynamic(
  * Usage:
  *   onMouseEnter={() => preloadComponent(LazyArenaLeaderboard)}
  */
-export const preloadComponent = (component: ReturnType<typeof dynamic>) => {
-    // @ts-expect-error - accessing internal preload method
-    if (component.preload) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Accessing internal Next.js dynamic preload method
+export const preloadComponent = (component: any) => {
+    if (component?.preload) {
         component.preload();
     }
 };
-

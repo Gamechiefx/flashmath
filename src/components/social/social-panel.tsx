@@ -454,10 +454,7 @@ export function SocialPanel() {
         const result = await transferPartyLeadership(newLeaderId);
         if (result.success) {
             toast.success(`${result.newLeaderName || 'Player'} is now the party leader!`);
-            // Notify all party members via socket for real-time update
-            if (result.partyMemberIds) {
-                notifyPartySettingsUpdated(result.partyMemberIds);
-            }
+            // Refresh party data to show new leadership
             loadData();
         } else if (result.error) {
             toast.error(result.error);

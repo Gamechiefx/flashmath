@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { auth, signOut } from "@/auth";
 import { getDatabase, now } from "@/lib/db";
 
@@ -121,14 +122,17 @@ export async function resetUserData() {
             `).run(now(), userId);
         }
 
-        // Clear user from Redis queue  if any
+        // Clear user from Redis queue if any
         try {
-            const { getRedis } = await import("@/lib/redis");
-            const redis = getRedis();
-            if (redis) {
-                await redis.del(`arena:queue:${userId}`);
-            }
-        } catch (_e) {
+            const Redis = (await import('ioredis')).default;
+            const redis = new Redis({
+                host: process.env.REDIS_HOST || 'localhost',
+                port: parseInt(process.env.REDIS_PORT || '6379'),
+                maxRetriesPerRequest: 1,
+            });
+            await redis.del(`arena:queue:${userId}`);
+            await redis.quit();
+        } catch {
             // Redis may not be available
         }
 

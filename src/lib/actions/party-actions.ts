@@ -12,7 +12,7 @@
 import { auth } from "@/auth";
 import { getDatabase } from "@/lib/db/sqlite";
 import * as partyRedis from "@/lib/party/party-redis";
-import type { FullPartyData, PartyQueueState } from "@/lib/party/party-redis";
+import type { FullPartyData, PartyQueueState, PartyState, PartyMember } from "@/lib/party/party-redis";
 
 // Re-export types
 export type { FullPartyData, PartyState, PartyMember, PartyQueueState };
@@ -501,10 +501,10 @@ export async function linkPartyToTeam(teamId: string | null): Promise<{
         }
         
         teamName = team.name;
-        teamTag = team.tag;
+        teamTag = team.tag ?? undefined;
     }
 
-    return await partyRedis.linkToTeam(partyId, userId, teamId, teamName, teamTag);
+    return await partyRedis.linkToTeam(partyId, userId, teamId, teamName, teamTag ?? null);
 }
 
 /**

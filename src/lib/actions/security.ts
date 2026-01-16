@@ -97,7 +97,7 @@ export async function getLinkedAccounts(): Promise<Array<{
     const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
-    return db.prepare(`
+    const accounts = db.prepare(`
         SELECT provider, provider_account_id, created_at 
         FROM oauth_accounts 
         WHERE user_id = ?
@@ -105,8 +105,13 @@ export async function getLinkedAccounts(): Promise<Array<{
         provider: string;
         provider_account_id: string;
         created_at?: string;
-        [key: string]: unknown;
     }>;
+    
+    return accounts.map(acc => ({
+        provider: acc.provider,
+        provider_account_id: acc.provider_account_id,
+        created_at: acc.created_at || new Date().toISOString()
+    }));
 }
 
 /**
@@ -125,7 +130,7 @@ export async function unlinkAccount(provider: string): Promise<{ success: boolea
     const user = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userId) as { password_hash?: string | null } | undefined;
     const linkedAccounts = db.prepare("SELECT COUNT(*) as count FROM oauth_accounts WHERE user_id = ?").get(userId) as { count: number } | undefined;
 
-    if (!user.password_hash && linkedAccounts.count <= 1) {
+    if (!user?.password_hash && (linkedAccounts?.count ?? 0) <= 1) {
         return { success: false, error: "Cannot unlink your only login method. Set a password first." };
     }
 

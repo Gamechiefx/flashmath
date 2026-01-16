@@ -37,8 +37,8 @@ export async function forceSeedShop() {
         revalidatePath("/shop");
         revalidatePath("/admin");
         return { success: true, count: ITEMS.length };
-    } catch (_e) {
-        console.error("[SEED] Failed:", e);
+    } catch (seedError) {
+        console.error("[SEED] Failed:", seedError);
         return { error: "Failed to seed shop items" };
     }
 }

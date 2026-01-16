@@ -48,7 +48,7 @@ export default async function BannerEditorPage() {
         }
         const titleItem = (data.shop_items as ShopItem[])?.find((i: ShopItem) => i.id === equippedTitleId);
         if (titleItem) {
-            titleDisplay = titleItem.asset_value || titleItem.name;
+            titleDisplay = titleItem.asset_value || titleItem.name || 'FlashMath Competitor';
         }
     }
 

@@ -80,6 +80,14 @@ export function EnhancedRealTimeMatch({
     // eslint-disable-next-line @typescript-eslint/no-unused-vars -- resultData is set but not currently displayed
     const [resultData, setResultData] = useState<MatchResultData | null>(null);
     const savingRef = useRef(false);
+    
+    // Match result state
+    const [eloChange, setEloChange] = useState<number>(0);
+    const [coinsEarned, setCoinsEarned] = useState<number>(0);
+    const [lastCorrectAnswer, setLastCorrectAnswer] = useState<number | null>(null);
+    
+    // These states are used in the results display
+    void eloChange; void coinsEarned;
 
     // Enhanced connection state
     const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'disconnected'>('connecting');
@@ -304,9 +312,8 @@ export function EnhancedRealTimeMatch({
                     winnerPerformance,
                     loserPerformance,
                     matchIntegrity: matchIntegrity || 'GREEN',
-                    isDraw,
-                    syncVersion: syncState.version,
-                    connectionQuality: myConnectionState.state
+                    isDraw
+                    // Note: syncVersion and connectionQuality are tracked for debugging but not stored
                 });
 
                 if (result.success) {
@@ -535,6 +542,7 @@ export function EnhancedRealTimeMatch({
         const yourScore = finalStats?.yourScore ?? you?.odScore ?? 0;
         const oppScore = finalStats?.opponentScore ?? opponent?.odScore ?? 0;
         const isWinner = wonByForfeit || yourScore > oppScore;
+        const isTie = !wonByForfeit && yourScore === oppScore;
 
         return (
             <motion.div

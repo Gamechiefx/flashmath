@@ -10,7 +10,7 @@ const authMiddleware = NextAuth(authConfig).auth;
 export default async function middleware(request: NextRequest) {
     // Run NextAuth middleware first
      
-    const authResponse = await (authMiddleware as (req: NextRequest) => Promise<NextResponse | undefined>)(request);
+    const authResponse = await (authMiddleware as unknown as (req: NextRequest) => Promise<NextResponse | undefined>)(request);
     
     // Get or create response
     const response = authResponse || NextResponse.next();

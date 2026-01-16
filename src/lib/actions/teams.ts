@@ -233,8 +233,9 @@ export async function getTeam(
     `).get(teamId) as {
         id: string;
         name: string;
-        tag?: string | null;
+        tag: string | null;
         created_by: string;
+        created_at: string;
         team_wins?: number;
         team_losses?: number;
         team_win_streak?: number;
@@ -244,7 +245,6 @@ export async function getTeam(
         elo_5v5_subtraction?: number;
         elo_5v5_multiplication?: number;
         elo_5v5_division?: number;
-        [key: string]: unknown;
     } | undefined;
 
     if (!team) {
@@ -278,7 +278,6 @@ export async function getTeam(
         arena_elo_5v5_subtraction?: number;
         arena_elo_5v5_multiplication?: number;
         arena_elo_5v5_division?: number;
-        [key: string]: unknown;
     }>;
 
     const memberList: TeamMember[] = members.map(m => {
@@ -287,12 +286,12 @@ export async function getTeam(
             id: m.id,
             odUserId: m.user_id,
             odName: m.name,
-            odLevel: m.level,
+            odLevel: m.level || 1,
             odEquippedFrame: equipped.frame || null,
             odEquippedTitle: equipped.title || null,
-            role: m.role,
-            primaryOperation: m.primary_operation,
-            joinedAt: m.joined_at,
+            role: (m.role || 'member') as 'captain' | 'igl' | 'member',
+            primaryOperation: m.primary_operation ?? null,
+            joinedAt: m.joined_at || new Date().toISOString(),
             odElo5v5: m.arena_elo_5v5 || 300,
             odElo5v5Addition: m.arena_elo_5v5_addition || 300,
             odElo5v5Subtraction: m.arena_elo_5v5_subtraction || 300,
@@ -357,9 +356,18 @@ export async function getUserTeams(
     `).all(targetUserId) as Array<{
         id: string;
         name: string;
+        tag: string | null;
+        created_by: string;
+        created_at: string;
         team_wins?: number;
         team_losses?: number;
-        [key: string]: unknown;
+        team_win_streak?: number;
+        team_best_win_streak?: number;
+        elo_5v5?: number;
+        elo_5v5_addition?: number;
+        elo_5v5_subtraction?: number;
+        elo_5v5_multiplication?: number;
+        elo_5v5_division?: number;
     }>;
 
     return teams.map(t => ({
@@ -475,9 +483,8 @@ export async function acceptTeamInvite(
         id: string;
         team_id: string;
         invitee_id: string;
-        expires_at?: string | null;
-        status?: string;
-        [key: string]: unknown;
+        expires_at: string;
+        status: string;
     } | undefined;
 
     if (!invite) {
@@ -582,10 +589,12 @@ export async function getTeamInvites(): Promise<TeamInvite[]> {
         id: string;
         team_id: string;
         inviter_id: string;
-        created_at?: string;
-        team_name?: string;
-        inviter_name?: string;
-        [key: string]: unknown;
+        created_at: string;
+        expires_at: string;
+        status: string;
+        team_name: string;
+        team_tag: string | null;
+        inviter_name: string;
     }>;
 
     return invites.map(i => ({
@@ -595,7 +604,7 @@ export async function getTeamInvites(): Promise<TeamInvite[]> {
         teamTag: i.team_tag,
         inviterName: i.inviter_name,
         inviterId: i.inviter_id,
-        status: i.status,
+        status: i.status as 'pending' | 'accepted' | 'declined' | 'expired',
         createdAt: i.created_at,
         expiresAt: i.expires_at,
     }));
@@ -1182,11 +1191,18 @@ export async function searchTeams(
     `).all(searchQuery, searchQuery, limit) as Array<{
         id: string;
         name: string;
-        tag?: string | null;
+        tag: string | null;
+        created_by: string;
+        created_at: string;
         team_wins?: number;
         team_losses?: number;
+        team_win_streak?: number;
+        team_best_win_streak?: number;
         elo_5v5?: number;
-        [key: string]: unknown;
+        elo_5v5_addition?: number;
+        elo_5v5_subtraction?: number;
+        elo_5v5_multiplication?: number;
+        elo_5v5_division?: number;
     }>;
 
     return teams.map(t => ({

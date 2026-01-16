@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 };
 
 import { auth } from "@/auth";
-import { loadData, queryOne } from "@/lib/db";
+import { loadData, queryOne, type UserRow } from "@/lib/db";
 import { ITEMS } from "@/lib/items";
 import { GlobalThemeManager } from "@/components/global-theme-manager";
 import { AuthProvider } from "@/components/auth-provider";

@@ -66,8 +66,8 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
             setTimeout(() => {
                 setItemsLoading(true);
                 getAllShopItems().then((result) => {
-                    if (!result.error) {
-                        setShopItems(result.items);
+                    if (!result.error && result.items) {
+                        setShopItems(result.items as ShopItem[]);
                     }
                     setItemsLoading(false);
                 });

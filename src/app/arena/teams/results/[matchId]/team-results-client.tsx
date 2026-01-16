@@ -550,12 +550,12 @@ export function TeamResultsClient({
                                                     color="cyan"
                                                 />
                                             )}
-                                            {winnerAwards.bestStreak && winnerAwards.bestStreak.best_streak > 0 && (
+                                            {winnerAwards.bestStreak && (winnerAwards.bestStreak.best_streak ?? 0) > 0 && (
                                                 <AwardCard
                                                     icon={Zap}
                                                     title="Best Streak"
                                                     playerName={winnerAwards.bestStreak.player_name}
-                                                    value={`${winnerAwards.bestStreak.best_streak}x`}
+                                                    value={`${winnerAwards.bestStreak.best_streak ?? 0}x`}
                                                     color="orange"
                                                 />
                                             )}
@@ -636,12 +636,12 @@ export function TeamResultsClient({
                                                     color="cyan"
                                                 />
                                             )}
-                                            {loserAwards.bestStreak && loserAwards.bestStreak.best_streak > 0 && (
+                                            {loserAwards.bestStreak && (loserAwards.bestStreak.best_streak ?? 0) > 0 && (
                                                 <AwardCard
                                                     icon={Zap}
                                                     title="Best Streak"
                                                     playerName={loserAwards.bestStreak.player_name}
-                                                    value={`${loserAwards.bestStreak.best_streak}x`}
+                                                    value={`${loserAwards.bestStreak.best_streak ?? 0}x`}
                                                     color="orange"
                                                 />
                                             )}

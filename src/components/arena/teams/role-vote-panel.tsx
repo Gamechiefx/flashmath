@@ -221,9 +221,12 @@ export function RoleVotePanel({
                                     {/* Avatar */}
                                     <div className="relative">
                                         <UserAvatar
-                                            name={member.odName}
-                                            odEquippedAvatar={member.odEquippedAvatar}
-                                            odEquippedFrame={member.odEquippedFrame}
+                                            user={{
+                                                name: member.odName,
+                                                equipped_items: {
+                                                    frame: member.odEquippedFrame
+                                                }
+                                            }}
                                             size="md"
                                         />
                                         {isMyVote && (

@@ -34,7 +34,7 @@ export default async function LockerPage() {
         inventory.some((inv: InventoryRow) => inv.item_id === item.id)
     );
 
-    const equipped = user.equipped_items || {};
+    const equipped = user?.equipped_items || {};
 
     // Count total owned
     const totalOwned = ownedItems.length;

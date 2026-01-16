@@ -124,7 +124,7 @@ export async function getUsersWithRoles(): Promise<Array<{
         email: user.email,
         role: parseRole(user.role, !!user.is_admin),
         is_banned: !!user.is_banned,
-        created_at: user.created_at
+        created_at: user.created_at || new Date().toISOString()
     }));
 }
 

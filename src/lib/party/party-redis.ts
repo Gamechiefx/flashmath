@@ -83,6 +83,7 @@ export interface PartyMember {
     odLevel: number;
     odEquippedFrame: string | null;
     odEquippedTitle: string | null;
+    odEquippedBanner?: string | null;
     isReady: boolean;
     preferredOperation: string | null;
     joinedAt: number;
@@ -317,13 +318,13 @@ export async function getParty(partyId: string): Promise<FullPartyData | null> {
             updatedAt: parseInt(partyData.updatedAt) || Date.now(),
         };
 
-        const members: PartyMember[] = Object.values(membersData).map((m: string) => JSON.parse(m));
+        const members: PartyMember[] = Object.values(membersData).map((m) => JSON.parse(m as string));
 
         const queueState: PartyQueueState = queueData 
             ? JSON.parse(queueData) 
             : { status: 'idle', startedAt: null, matchType: null, matchId: null };
 
-        const invites: PartyInvite[] = Object.values(invitesData).map((i: string) => JSON.parse(i));
+        const invites: PartyInvite[] = Object.values(invitesData).map((i) => JSON.parse(i as string));
 
         return { party, members, queueState, invites };
 
@@ -910,7 +911,7 @@ export async function updateQueueState(
     partyId: string,
     leaderId: string,
     status: 'idle' | 'finding_teammates' | 'finding_opponents',
-    matchType?: 'ranked' | 'casual'
+    matchType?: 'ranked' | 'casual' | 'vs_ai'
 ): Promise<{ success: boolean; error?: string }> {
     // #region agent log - HA: Track queue state updates at Redis level
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- Debug logging
@@ -945,7 +946,7 @@ export async function updateQueueState(
         const queueState: PartyQueueState = {
             status,
             startedAt: status !== 'idle' ? Date.now() : null,
-            matchType: matchType || null,
+            matchType: matchType === 'vs_ai' ? 'casual' : (matchType || null),
             matchId: null,
         };
 
@@ -1259,8 +1260,8 @@ export async function linkToTeam(
     partyId: string,
     leaderId: string,
     teamId: string | null,
-    teamName?: string,
-    teamTag?: string
+    teamName?: string | null,
+    teamTag?: string | null
 ): Promise<{ success: boolean; error?: string }> {
     const redis = await getRedis();
     if (!redis) {

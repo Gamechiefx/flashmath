@@ -217,7 +217,7 @@ export async function getDecayStatus(userId: string): Promise<DecayStatus> {
         placementMatchesRequired: user.placement_matches_required || 0,
         placementMatchesCompleted: user.placement_matches_completed || 0,
         totalEloDecayed: user.total_elo_decayed || 0,
-        lastDecayApplied: user.last_decay_applied,
+        lastDecayApplied: user.last_decay_applied ?? null,
     };
 }
 
@@ -470,14 +470,16 @@ export async function getPlacementProgress(userId: string): Promise<{
         };
     }
     
-    const inPlacement = user.placement_matches_completed < user.placement_matches_required;
+    const placementCompleted = user.placement_matches_completed || 0;
+    const placementRequired = user.placement_matches_required || 0;
+    const inPlacement = placementCompleted < placementRequired;
     
     return {
         isReturningPlayer: true,
         inPlacementMode: inPlacement,
-        matchesRequired: user.placement_matches_required,
-        matchesCompleted: user.placement_matches_completed,
-        matchesRemaining: Math.max(0, user.placement_matches_required - user.placement_matches_completed),
+        matchesRequired: placementRequired,
+        matchesCompleted: placementCompleted,
+        matchesRemaining: Math.max(0, placementRequired - placementCompleted),
         eloMultiplier: inPlacement ? PLACEMENT.ELO_MULTIPLIER : 1.0
     };
 }
@@ -511,7 +513,8 @@ export async function recordPlacementMatch(userId: string): Promise<{
     }
     
     const newCompleted = (user.placement_matches_completed || 0) + 1;
-    const isComplete = newCompleted >= user.placement_matches_required;
+    const placementRequired = user.placement_matches_required || 0;
+    const isComplete = newCompleted >= placementRequired;
     
     if (isComplete) {
         // Exit returning player mode
@@ -532,7 +535,7 @@ export async function recordPlacementMatch(userId: string): Promise<{
     
     return {
         placementComplete: isComplete,
-        matchesRemaining: Math.max(0, user.placement_matches_required - newCompleted)
+        matchesRemaining: Math.max(0, placementRequired - newCompleted)
     };
 }
 

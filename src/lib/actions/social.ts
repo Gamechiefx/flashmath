@@ -282,18 +282,13 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
             WHERE f.user_id = ?
             ORDER BY u.last_active DESC NULLS LAST
         `).all(userId) as Array<{
-            id: string;
-            sender_id: string;
-            receiver_id: string;
-            status?: string;
-            created_at?: string;
-            sender_name?: string;
-            sender_level?: number;
-            sender_equipped?: string | null;
-            receiver_name?: string;
-            receiver_level?: number;
-            receiver_equipped?: string | null;
-            [key: string]: unknown;
+            friendship_id: string;
+            friends_since: string;
+            user_id: string;
+            name: string;
+            level: number;
+            equipped_items: string | null;
+            last_active: string | null;
         }>;
 
         // Batch fetch ELO data from PostgreSQL (source of truth)
@@ -301,12 +296,12 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
         const arenaStats = await getArenaDisplayStatsBatch(friendIds);
 
         const result: Friend[] = friends.map(f => {
-            let equipped: any = {};
+            let equipped: Record<string, string> = {};
             try {
                 equipped = typeof f.equipped_items === 'string' 
                     ? JSON.parse(f.equipped_items) 
-                    : f.equipped_items || {};
-            } catch { }
+                    : {};
+            } catch { /* ignore */ }
 
             // Get arena stats from PostgreSQL (source of truth)
             const stats = arenaStats.get(f.user_id);
@@ -458,7 +453,7 @@ export async function repairAllOneWayFriendships(): Promise<{
     const db = getDatabase();
     const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string | null } | undefined;
     
-    if (!user || !['admin', 'super_admin'].includes(user.role)) {
+    if (!user || !['admin', 'super_admin'].includes(user.role ?? '')) {
         return { success: false, repaired: 0, error: 'Admin access required' };
     }
 
@@ -676,15 +671,14 @@ export async function getPendingRequests(): Promise<{
             id: string;
             sender_id: string;
             receiver_id: string;
-            status?: string;
-            created_at?: string;
+            status: 'pending' | 'accepted' | 'declined';
+            created_at: string;
             sender_name?: string;
             sender_level?: number;
             sender_equipped?: string | null;
             receiver_name?: string;
             receiver_level?: number;
             receiver_equipped?: string | null;
-            [key: string]: unknown;
         }>;
 
         // Outgoing requests
@@ -706,28 +700,28 @@ export async function getPendingRequests(): Promise<{
             id: string;
             sender_id: string;
             receiver_id: string;
-            status?: string;
-            created_at?: string;
+            status: 'pending' | 'accepted' | 'declined';
+            created_at: string;
             sender_name?: string;
             sender_level?: number;
             sender_equipped?: string | null;
             receiver_name?: string;
             receiver_level?: number;
             receiver_equipped?: string | null;
-            [key: string]: unknown;
         }>;
 
         interface FriendRequestRow {
             id: string;
             sender_id: string;
             receiver_id: string;
+            status: 'pending' | 'accepted' | 'declined';
+            created_at: string;
             sender_name?: string;
             sender_level?: number;
             sender_equipped?: string | null;
             receiver_name?: string;
             receiver_level?: number;
             receiver_equipped?: string | null;
-            [key: string]: unknown;
         }
         const mapRequest = (r: FriendRequestRow, _isIncoming: boolean): FriendRequest => {
             let senderEquipped: Record<string, string> = {};
@@ -735,7 +729,7 @@ export async function getPendingRequests(): Promise<{
             try {
                 if (r.sender_equipped) senderEquipped = JSON.parse(r.sender_equipped);
                 if (r.receiver_equipped) receiverEquipped = JSON.parse(r.receiver_equipped);
-            } catch { }
+            } catch { /* ignore */ }
 
             return {
                 id: r.id,
@@ -1525,21 +1519,14 @@ export async function getSocialStats(): Promise<SocialStats> {
             JOIN users u ON f.friend_id = u.id
             WHERE f.user_id = ?
         `).all(userId) as Array<{
-            id: string;
-            sender_id: string;
-            receiver_id: string;
-            status?: string;
-            created_at?: string;
-            sender_name?: string;
-            sender_level?: number;
-            sender_equipped?: string | null;
-            receiver_name?: string;
-            receiver_level?: number;
-            receiver_equipped?: string | null;
-            [key: string]: unknown;
+            user_id: string;
+            name: string;
+            level: number;
+            equipped_items?: string | null;
+            last_active?: string | null;
         }>;
 
-        const friendsOnline = friends.filter(f => isUserOnline(f.last_active)).length;
+        const friendsOnline = friends.filter(f => isUserOnline(f.last_active ?? null)).length;
 
         // Count pending incoming requests
         const pendingCount = db.prepare(`
@@ -1563,7 +1550,7 @@ export async function getSocialStats(): Promise<SocialStats> {
         return {
             friendsOnline,
             friendsTotal: friends.length,
-            pendingRequests: pendingCount.count,
+            pendingRequests: pendingCount?.count ?? 0,
             partySize,
             partyMaxSize,
             inParty,

@@ -138,9 +138,11 @@ function generateBotPlayer(
         odUserId: generateBotId(matchId, botIndex),
         odUserName: name,
         odElo: botElo,
+        odTier: 50, // Default tier for bots
         odLevel: Math.floor(Math.random() * 50) + 50, // Level 50-99
         odEquippedFrame: BOT_FRAMES[Math.floor(Math.random() * BOT_FRAMES.length)],
         odEquippedTitle: BOT_TITLES[Math.floor(Math.random() * BOT_TITLES.length)],
+        odEquippedBanner: 'default',
         odPreferredOperation: preferredOperation,
         isBot: true,
         botConfig: BOT_DIFFICULTY_CONFIGS[difficulty],
@@ -180,7 +182,10 @@ export function generateAITeam(
         odTeamId: `ai_team_${matchId}`,
         odTeamName: teamIdentity.name,
         odTeamTag: teamIdentity.tag,
+        odLeaderId: iglBot.odUserId,
+        odLeaderName: iglBot.odUserName,
         odElo: targetElo,
+        odAvgTier: 50, // Default tier for AI team
         odMode: '5v5',
         odMatchType: 'casual', // AI matches are always casual for testing
         odIglId: iglBot.odUserId,

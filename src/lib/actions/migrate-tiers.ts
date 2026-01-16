@@ -67,8 +67,16 @@ export async function runTierMigration(): Promise<MigrationResult> {
     const session = await auth();
 
     // Only allow admins to run migration
+    if (!session?.user) {
+        return {
+            success: false,
+            usersProcessed: 0,
+            usersUpdated: 0,
+            errors: ['Unauthorized: Not authenticated'],
+        };
+    }
     const isAdmin = (session.user as { isAdmin?: boolean })?.isAdmin;
-    if (!session?.user || !isAdmin) {
+    if (!isAdmin) {
         return {
             success: false,
             usersProcessed: 0,
@@ -245,8 +253,16 @@ export async function migrateUserTiers(userId: string): Promise<{
 export async function rollbackTierMigration(): Promise<MigrationResult> {
     const session = await auth();
 
+    if (!session?.user) {
+        return {
+            success: false,
+            usersProcessed: 0,
+            usersUpdated: 0,
+            errors: ['Unauthorized: Not authenticated'],
+        };
+    }
     const isAdmin = (session.user as { isAdmin?: boolean })?.isAdmin;
-    if (!session?.user || !isAdmin) {
+    if (!isAdmin) {
         return {
             success: false,
             usersProcessed: 0,

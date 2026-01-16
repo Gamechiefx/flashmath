@@ -107,8 +107,8 @@ class SoundEngine {
             try {
                 await this.ctx.resume();
                 return true;
-            } catch (_e) {
-                console.error('[SoundEngine] Failed to resume AudioContext:', e);
+            } catch (resumeError) {
+                console.error('[SoundEngine] Failed to resume AudioContext:', resumeError);
                 return false;
             }
         }
@@ -239,8 +239,8 @@ class SoundEngine {
 
                 this.audioCache.set(path, audioBuffer);
                 return audioBuffer;
-            } catch (_e) {
-                console.warn(`[SoundEngine] Failed to load sound: ${path}`, e);
+            } catch (loadError) {
+                console.warn(`[SoundEngine] Failed to load sound: ${path}`, loadError);
                 return null;
             } finally {
                 this.loadingPromises.delete(path);
@@ -1349,8 +1349,8 @@ class SoundEngine {
                     this.strategyGain = null;
                 }
             };
-        } catch (_e) {
-            console.error('[SoundEngine] Failed to play strategy music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play strategy music:', playError);
             this.strategyLoading = false;
         }
     }
@@ -1480,8 +1480,8 @@ class SoundEngine {
                     this.matchGain = null;
                 }
             };
-        } catch (_e) {
-            console.error('[SoundEngine] Failed to play match music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play match music:', playError);
             this.matchLoading = false;
         }
     }
@@ -1596,8 +1596,8 @@ class SoundEngine {
                     this.halftimeGain = null;
                 }
             };
-        } catch (_e) {
-            console.error('[SoundEngine] Failed to play halftime music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play halftime music:', playError);
             this.halftimeLoading = false;
         }
     }
@@ -1715,8 +1715,8 @@ class SoundEngine {
                     this.queueGain = null;
                 }
             };
-        } catch (_e) {
-            console.error('[SoundEngine] Failed to play queue music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play queue music:', playError);
             this.queueLoading = false;
         }
     }
@@ -1870,8 +1870,8 @@ class SoundEngine {
             };
 
             return analyser;
-        } catch (_e) {
-            console.error('[SoundEngine] Failed to play arena entrance music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play arena entrance music:', playError);
             this.arenaEntranceLoading = false;
             return null;
         }
@@ -1972,8 +1972,8 @@ class SoundEngine {
 
             this.bgmSource = source;
             this.bgmGain = gain;
-        } catch (_e) {
-            console.error('Failed to play BGM:', e);
+        } catch (playError) {
+            console.error('Failed to play BGM:', playError);
         }
     }
 

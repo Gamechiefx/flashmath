@@ -37,6 +37,10 @@ export interface UserRow {
     created_at?: string;
     last_active?: string | null;
     dob?: string | null;
+    // 2FA fields
+    two_factor_enabled?: number;
+    two_factor_secret?: string | null;
+    two_factor_recovery_codes?: string | null;
     [key: string]: unknown; // Allow additional fields for schema evolution
 }
 
@@ -344,8 +348,8 @@ export const execute = (text: string, params: any[] = []): { changes: number } =
     try {
         const result = database.prepare(text).run(...params);
         return { changes: result.changes };
-    } catch (_e) {
-        console.error('[DB] Direct execution failed:', e);
+    } catch (dbError) {
+        console.error('[DB] Direct execution failed:', dbError);
         return { changes: 0 };
     }
 };

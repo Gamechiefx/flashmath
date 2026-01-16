@@ -158,7 +158,7 @@ interface TierProgressCardProps {
 }
 
 export function TierProgressCard({
-    operation: _operation,
+    operation,
     tier,
     skillPoints: _skillPoints = 0,
     className,
@@ -167,12 +167,13 @@ export function TierProgressCard({
     const tierInBand = getTierWithinBand(tier);
     const testAvailable = isMasteryTestAvailable(tier);
 
-    const operationDisplay = {
+    const operationLabels: Record<string, string> = {
         addition: 'Addition',
         subtraction: 'Subtraction',
         multiplication: 'Multiplication',
         division: 'Division',
-    }[operation.toLowerCase()] || operation;
+    };
+    const operationDisplay = operationLabels[operation.toLowerCase()] || operation;
 
     return (
         <div

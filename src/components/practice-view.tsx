@@ -398,18 +398,19 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                     }
                     const aiResult = await Promise.race([aiPromise, timeoutPromise]) as AIAnswerResult | { error: string };
 
-                    if (!('error' in aiResult)) {
-                        setTiltScore(aiResult.sessionStats.tiltScore);
-                        setEchoQueueSize(aiResult.sessionStats.echoQueueSize);
-                        setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved || 0);
+                    if (!('error' in aiResult) && aiResult.sessionStats && aiResult.nextQuestion) {
+                        setTiltScore(aiResult.sessionStats.tiltScore ?? 0);
+                        setEchoQueueSize(aiResult.sessionStats.echoQueueSize ?? 0);
+                        setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved ?? 0);
 
                         // Show feedback briefly, then update to next question
+                        const nextQ = aiResult.nextQuestion;
                         setTimeout(() => {
-                            setCurrentAIItem(aiResult.nextQuestion);
+                            setCurrentAIItem(nextQ as ContentItem);
                             setProblem({
-                                question: aiResult.nextQuestion.promptText,
-                                answer: aiResult.nextQuestion.correctAnswer,
-                                explanation: aiResult.nextQuestion.explanation,
+                                question: nextQ.promptText,
+                                answer: nextQ.correctAnswer,
+                                explanation: nextQ.explanation,
                             });
                             setInputValue("");
                             setProblemStartTime(Date.now());
@@ -494,19 +495,6 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         const savedKey = localStorage.getItem('continueKey');
         if (savedKey) setContinueKey(savedKey);
     }, []);
-
-    // Continue key handler
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.code === continueKey && isError) {
-                e.preventDefault();
-                handleHelpNext();
-            }
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isError, problemQueue, selectedOp, continueKey, handleHelpNext]);
-
 
     const getSymbol = () => {
         switch (selectedOp) {
@@ -657,17 +645,17 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                 }
                 const aiResult = await Promise.race([aiPromise, timeoutPromise]) as AIAnswerResult | { error: string };
 
-                if (!('error' in aiResult)) {
-                    setCurrentAIItem(aiResult.nextQuestion);
+                if (!('error' in aiResult) && aiResult.nextQuestion && aiResult.sessionStats) {
+                    setCurrentAIItem(aiResult.nextQuestion as ContentItem);
                     setProblem({
                         question: aiResult.nextQuestion.promptText,
                         answer: aiResult.nextQuestion.correctAnswer,
                         explanation: aiResult.nextQuestion.explanation,
                     });
                     setProblemStartTime(Date.now());
-                    setTiltScore(aiResult.sessionStats.tiltScore);
-                    setEchoQueueSize(aiResult.sessionStats.echoQueueSize);
-                    setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved || 0);
+                    setTiltScore(aiResult.sessionStats.tiltScore ?? 0);
+                    setEchoQueueSize(aiResult.sessionStats.echoQueueSize ?? 0);
+                    setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved ?? 0);
                     return;
                 }
             } catch (err: any) {
@@ -694,6 +682,18 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             setProblemStartTime(Date.now());
         }
     }, [aiSessionId, prefetchedQuestion, currentAIItem, problemStartTime, selectedOp, currentTier, problemQueue, fetchMoreProblems]);
+
+    // Continue key handler - must be after handleHelpNext is defined
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === continueKey && isError) {
+                e.preventDefault();
+                handleHelpNext();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isError, continueKey, handleHelpNext]);
 
     return (
         <main className="min-h-screen bg-background text-foreground flex flex-col items-center relative overflow-hidden">

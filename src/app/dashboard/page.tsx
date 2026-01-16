@@ -44,7 +44,7 @@ export default async function DashboardPage() {
                     <UnverifiedEmailBanner email={session.user.email} />
                 )}
 
-                <DashboardView stats={stats} userName={userName} />
+                <DashboardView stats={stats} userName={userName} initialEmailVerified={emailVerified} />
             </div>
         </main>
     );

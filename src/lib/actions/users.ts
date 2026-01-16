@@ -22,17 +22,14 @@ export async function deleteUser(userId: string) {
 
     try {
         console.log(`[ADMIN] Deleting user ${userId}`);
-        const db = loadData();
-        db.users = db.users.filter((u: any) => u.id !== userId);
+        // Use execute for database operations
+        execute("DELETE FROM users WHERE id = ?", [userId]);
+        execute("DELETE FROM league_participants WHERE user_id = ?", [userId]);
 
-        // Also cleanup league participants?
-        db.league_participants = db.league_participants.filter((p: any) => p.user_id !== userId);
-
-        saveData();
         revalidatePath("/admin");
         return { success: true };
-    } catch (_e) {
-        console.error("Delete user failed", e);
+    } catch (deleteError) {
+        console.error("Delete user failed", deleteError);
         return { error: "Failed" };
     }
 }
@@ -67,8 +64,8 @@ export async function banUser(userId: string, durationHours: number | null) {
             return { success: true, banned_until: bannedUntil };
         }
         return { error: "User not found" };
-    } catch (_e) {
-        console.error("Ban user failed", e);
+    } catch (banError) {
+        console.error("Ban user failed", banError);
         return { error: "Failed" };
     }
 }
@@ -82,8 +79,8 @@ export async function unbanUser(userId: string) {
         execute("UPDATE users SET banned_until = ? WHERE id = ?", [null, userId]);
         revalidatePath("/admin");
         return { success: true };
-    } catch (_e) {
-        console.error("Unban user failed", e);
+    } catch (unbanError) {
+        console.error("Unban user failed", unbanError);
         return { error: "Failed" };
     }
 }

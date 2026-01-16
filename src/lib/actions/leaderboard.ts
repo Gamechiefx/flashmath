@@ -7,6 +7,53 @@ import { auth } from '@/auth';
 import { getLeagueFromElo } from '@/lib/arena/leagues';
 
 // =============================================================================
+// TYPE DEFINITIONS FOR EXTERNAL IMPORTS
+// =============================================================================
+
+/** Return type from getLeagueFromElo */
+interface LeagueInfo {
+    league: string;
+    leagueId: string;
+    leagueName: string;
+    division: number;
+    divisionRoman: string;
+    displayName: string;
+    elo: number;
+    progress: number;
+    minElo: number;
+    maxElo: number;
+    divisionMinElo: number;
+    divisionMaxElo: number;
+}
+
+/** PostgreSQL arena player data */
+interface PgArenaPlayer {
+    user_id: string;
+    username?: string;
+    elo?: number;
+    peak_elo?: number;
+    matches_played?: number;
+    matches_won?: number;
+    matches_lost?: number;
+    current_streak?: number;
+    best_streak?: number;
+    practice_tier?: number;
+    win_rate?: string | number;
+    [key: string]: unknown;
+}
+
+/** User team data from database */
+interface UserTeamRow {
+    team_id?: string;
+    team_name?: string;
+    team_tag?: string;
+    team_wins?: number;
+    team_losses?: number;
+    team_elo?: number;
+    [key: string]: unknown;
+}
+
+// =============================================================================
 // APS CALCULATION HELPERS
 // =============================================================================
 
@@ -252,14 +299,7 @@ export async function getDuelLeaderboard(
         try {
             const { getDuelLeaderboard: getPgLeaderboard } = await import('@/lib/arena/arena-db');
             // Pass operation to filter by specific operation (addition, subtraction, multiplication, division, or overall)
-            interface LeaderboardRow {
-                user_id: string;
-                elo?: number;
-                matches_won?: number;
-                matches_lost?: number;
-                [key: string]: unknown;
-            }
-            const pgData = await getPgLeaderboard(limit, operation) as LeaderboardRow[];
+            const pgData = await getPgLeaderboard(limit, operation) as unknown as PgArenaPlayer[];
             
             // #region agent log
             console.log('[Leaderboard] PostgreSQL leaderboard data:', pgData?.length || 0, 'players');
@@ -269,11 +309,11 @@ export async function getDuelLeaderboard(
             totalPlayers = pgData?.length || 0;
             
             // Map PostgreSQL data to LeaderboardEntry format
-            entries = (pgData || []).map((row: any, index: number) => {
+            entries = (pgData || []).map((row: PgArenaPlayer, index: number) => {
                 // PostgreSQL fields: user_id, username, elo, peak_elo, matches_played, matches_won, matches_lost,
                 //                    current_streak, best_streak, practice_tier, win_rate
-                const league = getLeagueFromElo(row.elo || 300);
-                const winRate = parseFloat(row.win_rate) || 0;
+                const league = getLeagueFromElo(row.elo || 300) as LeagueInfo;
+                const winRate = typeof row.win_rate === 'string' ? parseFloat(row.win_rate) : (row.win_rate || 0);
                 const isCurrentUser = row.user_id === currentUserId;
                 
                 // Use PostgreSQL streak data
@@ -369,20 +409,24 @@ export async function getDuelLeaderboard(
                 ? [weekAgo, operation, weekAgo, operation, limit]
                 : [weekAgo, weekAgo, limit]
         ) as Array<{
-            user_id: string;
+            id: string;
             name: string;
+            level: number;
             elo: number;
             wins: number;
             losses: number;
+            streak?: number;
+            best_streak?: number;
+            equipped_items?: string | null;
             net_elo_change?: number;
             weekly_wins?: number;
-            [key: string]: unknown;
+            weekly_losses?: number;
         }>;
 
         totalPlayers = rows.length;
 
         // Get user IDs for fetching ELO from PostgreSQL
-        const userIds = rows.map((r: any) => r.id);
+        const userIds = rows.map(r => r.id);
         
         // Fetch ELO from PostgreSQL (source of truth)
         const { getArenaDisplayStatsBatch } = await import('@/lib/arena/arena-db');
@@ -430,22 +474,12 @@ export async function getDuelLeaderboard(
             }
         }
 
-        entries = rows.map((row: {
-            user_id: string;
-            name: string;
-            elo: number;
-            wins: number;
-            losses: number;
-            streak?: number;
-            best_streak?: number;
-            equipped_items?: string | null;
-            [key: string]: unknown;
-        }, index: number) => {
+        entries = rows.map((row, index: number) => {
             const equippedItems = row.equipped_items ? JSON.parse(row.equipped_items) : {};
             // Get ELO from PostgreSQL (source of truth), fallback to 300
             const playerPgStats = pgStats.get(row.id);
             const playerElo = playerPgStats?.odDuelElo || 300;
-            const league = getLeagueFromElo(playerElo);
+            const league = getLeagueFromElo(playerElo) as LeagueInfo;
             const winRate = row.wins + row.losses > 0 
                 ? Math.round((row.wins / (row.wins + row.losses)) * 100) 
                 : 0;
@@ -490,12 +524,12 @@ export async function getDuelLeaderboard(
                 rank: index + 1,
                 odUserId: row.id,
                 odName: row.name,
-                odLevel: row.level,
+                odLevel: row.level ?? 1,
                 odElo: playerElo,
-                odWins: playerPgStats?.odDuelWins || row.wins,
-                odLosses: playerPgStats?.odDuelLosses || row.losses,
+                odWins: playerPgStats?.odMatchesWon ?? row.wins,
+                odLosses: (playerPgStats ? (playerPgStats.odMatchesPlayed - playerPgStats.odMatchesWon) : row.losses),
                 odWinRate: winRate,
-                odStreak: row.streak,
+                odStreak: row.streak ?? 0,
                 odBestStreak: bestAnswerStreak,  // Use in-match answer streak
                 odLeague: league.league,
                 odDivision: league.divisionRoman,
@@ -503,14 +537,14 @@ export async function getDuelLeaderboard(
                 odEquippedTitle: equippedItems.title || null,
                 odEquippedBanner: equippedItems.banner || null,
                 odIsCurrentUser: isCurrentUser,
-                odEloChange: row.net_elo_change || 0,
-                odWeeklyWins: row.weekly_wins || 0,
+                odEloChange: row.net_elo_change ?? 0,
+                odWeeklyWins: row.weekly_wins ?? 0,
                 odAccuracy: Math.round(accuracy * 100),
                 odAvgSpeedMs: Math.round(avgSpeedMs),
                 odApsScore: apsScore,
-                odStrongestOperation: strongestOp || undefined,
+                odStrongestOperation: strongestOp ?? undefined,
                 ...extendedData,
-            };
+            } as LeaderboardEntry;
         });
     }
 
@@ -541,19 +575,21 @@ export async function getDuelLeaderboard(
             FROM users u
             WHERE u.id = ?
         `).get(currentUserId) as {
+            id: string;
+            name: string;
+            level: number;
             elo: number;
             wins: number;
             losses: number;
             streak: number;
             best_streak: number;
             equipped_items?: string | null;
-            rank?: number;
-            [key: string]: unknown;
+            rank: number;
         } | undefined;
 
         if (userRow && (userRow.wins > 0 || userRow.losses > 0)) {
             const equippedItems = userRow.equipped_items ? JSON.parse(userRow.equipped_items) : {};
-            const league = getLeagueFromElo(userRow.elo);
+            const league = getLeagueFromElo(userRow.elo) as LeagueInfo;
             const winRate = userRow.wins + userRow.losses > 0 
                 ? Math.round((userRow.wins / (userRow.wins + userRow.losses)) * 100) 
                 : 0;
@@ -685,49 +721,39 @@ export async function getTeamLeaderboard(
             ORDER BY u.${eloColumn} DESC
             LIMIT ?
         `).all(limit) as Array<{
-            user_id: string;
+            id: string;
             name: string;
+            level: number;
             elo: number;
             wins: number;
             losses: number;
             streak?: number;
             best_streak?: number;
             equipped_items?: string | null;
-            [key: string]: unknown;
         }>;
 
-        entries = rows.map((row: {
-            user_id: string;
-            name: string;
-            elo: number;
-            wins: number;
-            losses: number;
-            streak?: number;
-            best_streak?: number;
-            equipped_items?: string | null;
-            [key: string]: unknown;
-        }, index: number) => {
+        entries = rows.map((row, index: number) => {
             const equippedItems = row.equipped_items ? JSON.parse(row.equipped_items) : {};
-            const league = getLeagueFromElo(row.elo);
+            const league = getLeagueFromElo(row.elo) as LeagueInfo;
             const winRate = row.wins + row.losses > 0 
                 ? Math.round((row.wins / (row.wins + row.losses)) * 100) 
                 : 0;
             
             // Default APS metrics for team (less match data available)
-            const bestStreak = row.best_streak || 0;
+            const bestStreak = row.best_streak ?? 0;
             const apsScore = calculateApsScore(winRate, 3000, bestStreak); // Use win rate as proxy
 
             return {
                 rank: index + 1,
                 odUserId: row.id,
                 odName: row.name,
-                odLevel: row.level,
+                odLevel: row.level ?? 1,
                 odElo: row.elo,
                 odWins: row.wins,
                 odLosses: row.losses,
                 odWinRate: winRate,
-                odStreak: row.streak,
-                odBestStreak: row.best_streak,
+                odStreak: row.streak ?? 0,
+                odBestStreak: row.best_streak ?? 0,
                 odLeague: league.league,
                 odDivision: league.divisionRoman,
                 odEquippedFrame: equippedItems.frame || null,
@@ -737,7 +763,7 @@ export async function getTeamLeaderboard(
                 odAccuracy: winRate, // Use win rate as proxy for team
                 odAvgSpeedMs: 0,
                 odApsScore: apsScore,
-            };
+            } as LeaderboardEntry;
         });
     } else {
         // Weekly team leaderboard - similar logic to duel
@@ -798,61 +824,55 @@ export async function getTeamLeaderboard(
                 ? [weekAgo, operation, weekAgo, operation, limit]
                 : [weekAgo, weekAgo, limit]
         ) as Array<{
-            user_id: string;
+            id: string;
             name: string;
-            elo: number;
-            wins: number;
-            losses: number;
-            net_elo_change?: number;
-            weekly_wins?: number;
-            [key: string]: unknown;
-        }>;
-
-        totalPlayers = rows.length;
-
-        entries = rows.map((row: {
-            user_id: string;
-            name: string;
+            level: number;
             elo: number;
             wins: number;
             losses: number;
             streak?: number;
             best_streak?: number;
             equipped_items?: string | null;
-            [key: string]: unknown;
-        }, index: number) => {
+            net_elo_change?: number;
+            weekly_wins?: number;
+            weekly_losses?: number;
+        }>;
+
+        totalPlayers = rows.length;
+
+        entries = rows.map((row, index: number) => {
             const equippedItems = row.equipped_items ? JSON.parse(row.equipped_items) : {};
-            const league = getLeagueFromElo(row.elo);
+            const league = getLeagueFromElo(row.elo) as LeagueInfo;
             const winRate = row.wins + row.losses > 0 
                 ? Math.round((row.wins / (row.wins + row.losses)) * 100) 
                 : 0;
             
-            const bestStreak = row.best_streak || 0;
+            const bestStreak = row.best_streak ?? 0;
             const apsScore = calculateApsScore(winRate, 3000, bestStreak);
 
             return {
                 rank: index + 1,
                 odUserId: row.id,
                 odName: row.name,
-                odLevel: row.level,
+                odLevel: row.level ?? 1,
                 odElo: row.elo,
                 odWins: row.wins,
                 odLosses: row.losses,
                 odWinRate: winRate,
-                odStreak: row.streak,
-                odBestStreak: row.best_streak,
+                odStreak: row.streak ?? 0,
+                odBestStreak: row.best_streak ?? 0,
                 odLeague: league.league,
                 odDivision: league.divisionRoman,
                 odEquippedFrame: equippedItems.frame || null,
                 odEquippedTitle: equippedItems.title || null,
                 odEquippedBanner: equippedItems.banner || null,
                 odIsCurrentUser: row.id === currentUserId,
-                odEloChange: row.net_elo_change || 0,
-                odWeeklyWins: row.weekly_wins || 0,
+                odEloChange: row.net_elo_change ?? 0,
+                odWeeklyWins: row.weekly_wins ?? 0,
                 odAccuracy: winRate,
                 odAvgSpeedMs: 0,
                 odApsScore: apsScore,
-            };
+            } as LeaderboardEntry;
         });
     }
 
@@ -882,24 +902,26 @@ export async function getTeamLeaderboard(
             FROM users u
             WHERE u.id = ?
         `).get(currentUserId) as {
+            id: string;
+            name: string;
+            level: number;
             elo: number;
             wins: number;
             losses: number;
             streak: number;
             best_streak: number;
             equipped_items?: string | null;
-            rank?: number;
-            [key: string]: unknown;
+            rank: number;
         } | undefined;
 
         if (userRow && (userRow.wins > 0 || userRow.losses > 0)) {
             const equippedItems = userRow.equipped_items ? JSON.parse(userRow.equipped_items) : {};
-            const league = getLeagueFromElo(userRow.elo);
+            const league = getLeagueFromElo(userRow.elo) as LeagueInfo;
             const winRate = userRow.wins + userRow.losses > 0 
                 ? Math.round((userRow.wins / (userRow.wins + userRow.losses)) * 100) 
                 : 0;
             
-            const bestStreak = userRow.best_streak || 0;
+            const bestStreak = userRow.best_streak ?? 0;
             const apsScore = calculateApsScore(winRate, 3000, bestStreak);
 
             currentUserRank = userRow.rank;
@@ -907,13 +929,13 @@ export async function getTeamLeaderboard(
                 rank: userRow.rank,
                 odUserId: userRow.id,
                 odName: userRow.name,
-                odLevel: userRow.level,
+                odLevel: userRow.level ?? 1,
                 odElo: userRow.elo,
                 odWins: userRow.wins,
                 odLosses: userRow.losses,
                 odWinRate: winRate,
-                odStreak: userRow.streak,
-                odBestStreak: userRow.best_streak,
+                odStreak: userRow.streak ?? 0,
+                odBestStreak: userRow.best_streak ?? 0,
                 odLeague: league.league,
                 odDivision: league.divisionRoman,
                 odEquippedFrame: equippedItems.frame || null,
@@ -1100,12 +1122,14 @@ export async function getPersistentTeamLeaderboard(
         `).get(currentUserTeamIds[0]) as {
             id: string;
             name: string;
+            tag: string;
             elo: number;
-            wins: number;
-            losses: number;
-            captain_name?: string;
-            member_count?: number;
-            [key: string]: unknown;
+            team_wins: number;
+            team_losses: number;
+            team_win_streak: number;
+            team_best_win_streak: number;
+            captain_name: string;
+            member_count: number;
         } | undefined;
 
         if (userTeam) {
@@ -1122,25 +1146,25 @@ export async function getPersistentTeamLeaderboard(
                 ? db.prepare(rankQuery).get(userTeam.team_wins, userTeam.team_wins, userTeam.elo) as { rank: number }
                 : db.prepare(rankQuery).get(userTeam.elo) as { rank: number };
 
-            currentUserTeamRank = rankResult?.rank || null;
+            currentUserTeamRank = rankResult?.rank ?? null;
 
             const winRate = userTeam.team_wins + userTeam.team_losses > 0
                 ? Math.round((userTeam.team_wins / (userTeam.team_wins + userTeam.team_losses)) * 100)
                 : 0;
 
             currentUserTeamEntry = {
-                rank: currentUserTeamRank || 0,
+                rank: currentUserTeamRank ?? 0,
                 odTeamId: userTeam.id,
                 odTeamName: userTeam.name,
-                odTeamTag: userTeam.tag,
-                odElo: userTeam.elo || 300,
-                odWins: userTeam.team_wins || 0,
-                odLosses: userTeam.team_losses || 0,
+                odTeamTag: userTeam.tag ?? '',
+                odElo: userTeam.elo ?? 300,
+                odWins: userTeam.team_wins ?? 0,
+                odLosses: userTeam.team_losses ?? 0,
                 odWinRate: winRate,
-                odStreak: userTeam.team_win_streak || 0,
-                odBestStreak: userTeam.team_best_win_streak || 0,
-                odMemberCount: userTeam.member_count || 0,
-                odCaptainName: userTeam.captain_name,
+                odStreak: userTeam.team_win_streak ?? 0,
+                odBestStreak: userTeam.team_best_win_streak ?? 0,
+                odMemberCount: userTeam.member_count ?? 0,
+                odCaptainName: userTeam.captain_name ?? '',
                 odIsCurrentUserTeam: true,
             };
         }

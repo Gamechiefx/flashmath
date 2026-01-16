@@ -124,7 +124,7 @@ function DecisionCard({ decision, index }: { decision: IGLDecision; index: numbe
             ? 'text-red-400' 
             : 'text-white/40';
 
-    const impactIcon = (decision.impactPoints ?? 0) > 0 
+    const ImpactIcon = (decision.impactPoints ?? 0) > 0 
         ? TrendingUp 
         : (decision.impactPoints ?? 0) < 0 
             ? TrendingDown 
@@ -183,12 +183,12 @@ function DecisionCard({ decision, index }: { decision: IGLDecision; index: numbe
                             <OutcomeIcon className="w-4 h-4" />
                         </div>
                     )}
-                    {impactIcon && decision.impactPoints !== undefined && (
+                    {ImpactIcon && decision.impactPoints !== undefined && (
                         <div className={cn(
                             "flex items-center gap-1 px-2 py-0.5 rounded",
                             decision.impactPoints > 0 ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
                         )}>
-                            {impactIcon && <impactIcon className="w-3 h-3" />}
+                            <ImpactIcon className="w-3 h-3" />
                             <span className="text-xs font-bold">
                                 {decision.impactPoints > 0 ? '+' : ''}{decision.impactPoints}
                             </span>

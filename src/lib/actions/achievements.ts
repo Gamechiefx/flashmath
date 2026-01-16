@@ -229,7 +229,20 @@ export async function checkAndUnlockAchievements(userId: string) {
     const totalSessions = userSessions.length;
     const totalCorrect = userSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
     const userLevel = user.level || 1;
-    const userTiers = user.math_tiers || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    
+    // Parse math_tiers from JSON if needed
+    type MathTiersType = { addition: number; subtraction: number; multiplication: number; division: number; [key: string]: number };
+    let userTiers: MathTiersType = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    if (typeof user.math_tiers === 'string') {
+        try {
+            userTiers = JSON.parse(user.math_tiers) as MathTiersType;
+        } catch {
+            // Keep default
+        }
+    } else if (user.math_tiers && typeof user.math_tiers === 'object') {
+        userTiers = user.math_tiers as MathTiersType;
+    }
+    
     const itemsOwned = userInventory.length;
     const lifetimeCoins = user.total_xp || 0; // Using XP as proxy for lifetime coins earned
 

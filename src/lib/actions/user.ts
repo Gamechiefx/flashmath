@@ -36,18 +36,22 @@ export async function getDashboardStats() {
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
 
     // Tiers map
-    let userTiers = user?.math_tiers;
-    if (typeof userTiers === 'string') {
-        try { userTiers = JSON.parse(userTiers); } catch { userTiers = null; }
+    const userTiersRaw = user?.math_tiers;
+    let userTiers: Record<string, number> = { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
+    if (typeof userTiersRaw === 'string') {
+        try { userTiers = JSON.parse(userTiersRaw); } catch { /* use default */ }
+    } else if (userTiersRaw && typeof userTiersRaw === 'object') {
+        userTiers = userTiersRaw as Record<string, number>;
     }
-    userTiers = userTiers || { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
 
     // Skill points for tier completion bar
-    let skillPoints = user?.skill_points;
-    if (typeof skillPoints === 'string') {
-        try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+    const skillPointsRaw = user?.skill_points;
+    let skillPoints: Record<string, number> = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    if (typeof skillPointsRaw === 'string') {
+        try { skillPoints = JSON.parse(skillPointsRaw); } catch { /* use default */ }
+    } else if (skillPointsRaw && typeof skillPointsRaw === 'object') {
+        skillPoints = skillPointsRaw as Record<string, number>;
     }
-    skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
 
     // Calculate mastery % for each op
     // Simple system: 100 skill points = 100% tier completion
@@ -281,7 +285,7 @@ export async function getOperationStats(operation: string) {
         index: idx + 1,
         date: s.created_at,
         speed: s.avg_speed || 0,
-        accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
+        accuracy: (s.total_count || 0) > 0 ? ((s.correct_count || 0) / (s.total_count || 1)) * 100 : 0,
         correct: s.correct_count || 0,
         total: s.total_count || 0,
         xp: s.xp_earned || 0,
@@ -334,13 +338,13 @@ export async function getOperationStats(operation: string) {
     // Top speeds (fastest 10 sessions by avg_speed)
     const topSpeeds = [...opSessions]
         .filter(s => s.avg_speed && s.avg_speed > 0)
-        .sort((a, b) => a.avg_speed - b.avg_speed)
+        .sort((a, b) => (a.avg_speed || 0) - (b.avg_speed || 0))
         .slice(0, 10)
         .map((s, idx) => ({
             rank: idx + 1,
             date: s.created_at,
             speed: s.avg_speed,
-            accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
+            accuracy: (s.total_count || 0) > 0 ? ((s.correct_count || 0) / (s.total_count || 1)) * 100 : 0,
         }));
 
     return {

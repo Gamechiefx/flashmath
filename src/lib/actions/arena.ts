@@ -102,8 +102,10 @@ export async function getArenaEligibilityData() {
     }
 
     // Calculate recent accuracy
-    const recentAccuracy = recentStats?.total_questions > 0
-        ? Math.round((recentStats.total_correct / recentStats.total_questions) * 100)
+    const totalQuestions = recentStats?.total_questions ?? 0;
+    const totalCorrect = recentStats?.total_correct ?? 0;
+    const recentAccuracy = totalQuestions > 0
+        ? Math.round((totalCorrect / totalQuestions) * 100)
         : null;
 
     // Calculate confidence score (same formula as sqlite-bridge.js)
@@ -153,16 +155,8 @@ export async function getArenaEligibilityData() {
             daysSinceLastPractice,
             bracket
         },
-        // Decay status
-        decayInfo: {
-            phase: decayStatus.phase,
-            phaseLabel: decayStatus.phaseLabel,
-            daysUntilNextPhase: decayStatus.daysUntilNextPhase,
-            eloAtRisk: decayStatus.eloAtRisk,
-            isReturningPlayer: decayStatus.isReturningPlayer,
-            placementMatchesRequired: decayStatus.placementMatchesRequired,
-            placementMatchesCompleted: decayStatus.placementMatchesCompleted
-        },
+        // Decay status - pass full object to match DecayStatus type
+        decayInfo: decayStatus,
         userAge,
         isAdmin // Admin bypasses all requirements
     };

@@ -12,7 +12,8 @@ import {
     Shield,
     Link2,
     AlertTriangle,
-    Clock
+    Clock,
+    type LucideIcon
 } from "lucide-react";
 
 const ACTION_ICONS: Record<string, LucideIcon> = {

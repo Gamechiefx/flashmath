@@ -58,11 +58,11 @@ export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
 
     // Auto-submit when code is complete
     useEffect(() => {
-        if (code.every(d => d) && !isVerifying) {
+        if (code.every(d => d) && !isVerifying && !success) {
             handleVerify();
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleVerify is stable
-    }, [code, isVerifying]);
+    }, [code, isVerifying, success]);
 
     // Resend cooldown timer
     useEffect(() => {

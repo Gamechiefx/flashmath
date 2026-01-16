@@ -58,6 +58,9 @@ interface UsePresenceReturn {
     pendingPartyInvites: { inviterName: string; partyId: string; timestamp: number }[];
     clearFriendRequestNotification: () => void;
     clearPartyInviteNotification: () => void;
+    // Change flags for triggering data refresh
+    friendsChanged: number;
+    partyChanged: number;
     // Party settings real-time update
     latestPartySettingsUpdate: PartySettingsUpdate | null;
     clearPartySettingsUpdate: () => void;

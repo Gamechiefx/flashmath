@@ -49,7 +49,11 @@ export default async function ShopPage() {
         );
     }
 
-    const inventory = loadData().inventory.filter(i => i.user_id === userId).map(i => i.item_id);
+    interface InventoryItem {
+        user_id: string;
+        item_id: string;
+    }
+    const inventory = (loadData().inventory as InventoryItem[]).filter(i => i.user_id === userId).map(i => i.item_id);
 
     // Get daily selection and strip icons for serialization
     const dailySelection = getDailyShopSelection().map(({ icon: _icon, ...rest }) => {
@@ -120,7 +124,7 @@ export default async function ShopPage() {
                                         <ShopItemCard
                                             item={item}
                                             isOwned={isOwned}
-                                            userCoins={user.coins}
+                                            userCoins={user.coins ?? 0}
                                             index={index}
                                         />
                                     </div>

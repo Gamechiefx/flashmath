@@ -32,6 +32,8 @@ interface Player {
     odEquippedTitle?: string;
     odLevel?: number;
     odTier?: string;
+    odRank?: string;
+    odDivision?: string;
     odLastUpdateTime?: number;
     odSyncVersion?: number;
 }

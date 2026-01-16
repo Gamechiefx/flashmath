@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
 
 import { auth } from "@/auth";
-import { loadData, queryOne } from "@/lib/db";
+import { loadData, queryOne, type UserRow } from "@/lib/db";
 
 // =============================================================================
 // TYPES AND INTERFACES
@@ -325,6 +325,10 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
     interface SessionRow {
         user_id: string;
         created_at: string;
+        operation?: string;
+        total_count?: number;
+        correct_count?: number;
+        avg_speed?: number;
         [key: string]: unknown;
     }
     const userSessions = (db.sessions as SessionRow[])
@@ -364,13 +368,18 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
     }
 
     // Convert sessions to performance metrics
-    const performanceMetrics: PerformanceMetrics[] = userSessions.map(session => ({
-        accuracy: session.total_count > 0 ? (session.correct_count / session.total_count) * 100 : 0,
-        speed: session.avg_speed || 5,
-        consistency: 1, // Will be calculated separately
-        streak: session.correct_count || 0,
-        timestamp: new Date(session.created_at)
-    }));
+    const performanceMetrics: PerformanceMetrics[] = userSessions.map(session => {
+        const totalCount = session.total_count ?? 0;
+        const correctCount = session.correct_count ?? 0;
+        const avgSpeed = typeof session.avg_speed === 'number' ? session.avg_speed : 5;
+        return {
+            accuracy: totalCount > 0 ? (correctCount / totalCount) * 100 : 0,
+            speed: avgSpeed,
+            consistency: 1, // Will be calculated separately
+            streak: correctCount,
+            timestamp: new Date(session.created_at)
+        };
+    });
 
     // Calculate overall trends
     const overallTrend = analyzeTrend(performanceMetrics, 'accuracy');
@@ -382,13 +391,18 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
     operations.forEach(op => {
         const opSessions = userSessions.filter(s => s.operation === op);
         if (opSessions.length >= 3) {
-            const opMetrics = opSessions.map(session => ({
-                accuracy: session.total_count > 0 ? (session.correct_count / session.total_count) * 100 : 0,
-                speed: session.avg_speed || 5,
-                consistency: 1,
-                streak: session.correct_count || 0,
-                timestamp: new Date(session.created_at)
-            }));
+            const opMetrics: PerformanceMetrics[] = opSessions.map(session => {
+                const totalCount = session.total_count ?? 0;
+                const correctCount = session.correct_count ?? 0;
+                const avgSpeed = typeof session.avg_speed === 'number' ? session.avg_speed : 5;
+                return {
+                    accuracy: totalCount > 0 ? (correctCount / totalCount) * 100 : 0,
+                    speed: avgSpeed,
+                    consistency: 1,
+                    streak: correctCount,
+                    timestamp: new Date(session.created_at)
+                };
+            });
             operationTrends[op.toLowerCase()] = analyzeTrend(opMetrics, 'accuracy');
         }
     });
@@ -570,11 +584,15 @@ export async function generateShareableAchievements(): Promise<ShareableAchievem
 
     const db = loadData();
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
-    interface SessionRow {
+    interface ShareSessionRow {
         user_id: string;
+        created_at: string;
+        correct_count?: number;
+        total_count?: number;
+        avg_speed?: number;
         [key: string]: unknown;
     }
-    const userSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
+    const userSessions = (db.sessions as ShareSessionRow[]).filter((s: ShareSessionRow) => s.user_id === userId);
     
     const achievements: ShareableAchievement[] = [];
 
@@ -817,8 +835,9 @@ export async function generateProgressSummary(timeframe: 'week' | 'month' | 'all
 
     // Generate next goals
     const nextGoals: string[] = [];
+    const userLevel = user?.level ?? 1;
     if (averageAccuracy < 90) nextGoals.push('Reach 90% accuracy');
-    if (user?.level < 20) nextGoals.push(`Reach level ${user.level + 5}`);
+    if (userLevel < 20) nextGoals.push(`Reach level ${userLevel + 5}`);
     if (bestStreak < 15) nextGoals.push('Achieve 15+ question streak');
     
     // Try to get arena rank

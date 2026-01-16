@@ -56,11 +56,18 @@ export default async function ArenaQueuePage({ searchParams }: PageProps) {
     const operationElo = getOperationElo();
 
     // Use defaults if data fetch fails - ensure all Banner fields are present
-    const data = matchmakingData.success ? matchmakingData : {
+    const data = matchmakingData.success && matchmakingData.userId ? {
+        userId: matchmakingData.userId,
+        name: matchmakingData.name,
+        level: matchmakingData.level ?? 1,
+        mathTiers: matchmakingData.mathTiers,
+        equippedBanner: matchmakingData.equippedBanner,
+        equippedTitle: matchmakingData.equippedTitle,
+        confidence: matchmakingData.confidence
+    } : {
         userId: (session.user as { id: string }).id,
         name: session.user.name || 'Player',
-        practiceXP: 0,
-        mathTiers: {},
+        mathTiers: {} as Record<string, number>,
         confidence: 1.0,
         level: 1,
         equippedBanner: 'default',

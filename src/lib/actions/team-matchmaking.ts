@@ -1151,7 +1151,7 @@ export async function joinTeammateQueue(params: {
         const queueMembers: TeamQueueMember[] = await Promise.all(
             members.map(async (m) => {
                 const equipped = m.equipped_items ? JSON.parse(m.equipped_items) : {};
-                const tier = getUserTier(m.math_tiers);
+                const tier = getUserTier(m.math_tiers ?? null);
                 
                 // Fetch 5v5 ELO from PostgreSQL (with SQLite fallback)
                 let elo5v5 = 300;
@@ -1184,13 +1184,13 @@ export async function joinTeammateQueue(params: {
         // Calculate average tier
         const avgTier = calculateTeamAvgTier(queueMembers);
 
-        const leader = members.find(m => m.user_id === party.leader_id);
+        const leader = members.find(m => m.user_id === party.leaderId);
 
         const queueEntry: TeammateQueueEntry = {
             odPartyId: params.partyId,
-            odLeaderId: party.leader_id,
+            odLeaderId: party.leaderId,
             odLeaderName: leader?.name || 'Unknown',
-            odTeamId: party.team_id || null,
+            odTeamId: party.teamId || null,
             odElo: avgElo,
             odAvgTier: avgTier,
             odMode: '5v5',
@@ -2002,8 +2002,8 @@ export async function createAITeamMatch(params: {
                 name: rm.odUserName || dbUser?.name || 'Unknown',
                 level: rm.odLevel || dbUser?.level || 1,
                 equipped_items: dbUser?.equipped_items || null,
-                arena_elo_5v5: rm.odElo || dbUser?.arena_elo_5v5 || 300,
-                preferred_operation: rm.odPreferredOperation || null,
+                arena_elo_5v5: (rm as unknown as { odElo?: number }).odElo || dbUser?.arena_elo_5v5 || 300,
+                preferred_operation: rm.preferredOperation || null,
                 is_ready: rm.isReady || false,
             };
         });

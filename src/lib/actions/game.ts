@@ -122,22 +122,22 @@ export async function saveSession(sessionData: {
         // Only award skill points if at least 10 questions were answered
         if (totalCount >= 10) {
             const netSkillPoints = correctCount - (totalCount - correctCount); // = 2*correct - total
-            const opLower = operation.toLowerCase();
+            const opLower = operation.toLowerCase() as 'addition' | 'subtraction' | 'multiplication' | 'division';
 
-            let skillPoints = user.skill_points;
-            if (typeof skillPoints === 'string') {
-                try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+            type SkillPointsType = { addition: number; subtraction: number; multiplication: number; division: number };
+            let parsedSkillPoints: SkillPointsType = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+            if (typeof user.skill_points === 'string') {
+                try { parsedSkillPoints = JSON.parse(user.skill_points) as SkillPointsType; } catch { /* keep default */ }
             }
-            skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
 
             // Update points for this operation (can go negative, min 0)
-            skillPoints[opLower] = Math.max(0, (skillPoints[opLower] || 0) + netSkillPoints);
+            parsedSkillPoints[opLower] = Math.max(0, (parsedSkillPoints[opLower] || 0) + netSkillPoints);
 
-            console.log(`[SAVE_SESSION] Skill points for ${opLower}: ${netSkillPoints} net, new total: ${skillPoints[opLower]}`);
+            console.log(`[SAVE_SESSION] Skill points for ${opLower}: ${netSkillPoints} net, new total: ${parsedSkillPoints[opLower]}`);
 
             execute(
                 "UPDATE users SET skill_points = ? WHERE id = ?",
-                [JSON.stringify(skillPoints), userId]
+                [JSON.stringify(parsedSkillPoints), userId]
             );
         } else {
             console.log(`[SAVE_SESSION] Skipping skill points - only ${totalCount} questions (need 10+)`);
@@ -213,7 +213,15 @@ export async function getMasteryTestProblems(operation: string) {
     const userId = (session.user as { id: string }).id;
 
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
-    const currentTier = user?.math_tiers?.[operation.toLowerCase()] || 1;
+    
+    // Parse math_tiers
+    type MathTiersType = { addition: number; subtraction: number; multiplication: number; division: number };
+    let mathTiers: MathTiersType = { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
+    if (typeof user?.math_tiers === 'string') {
+        try { mathTiers = JSON.parse(user.math_tiers) as MathTiersType; } catch { /* keep default */ }
+    }
+    const opKey = operation.toLowerCase() as keyof MathTiersType;
+    const currentTier = mathTiers[opKey] || 1;
 
     // Already at max tier
     if (currentTier >= MAX_TIER) {
@@ -258,8 +266,13 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
     const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return { error: "User not found" };
 
-    const currentTiers = user.math_tiers || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
-    const opKey = operation.toLowerCase();
+    // Parse math_tiers from JSON
+    type TiersType = { addition: number; subtraction: number; multiplication: number; division: number };
+    let currentTiers: TiersType = { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
+    if (typeof user.math_tiers === 'string') {
+        try { currentTiers = JSON.parse(user.math_tiers) as TiersType; } catch { /* keep default */ }
+    }
+    const opKey = operation.toLowerCase() as keyof TiersType;
     const currentTier = currentTiers[opKey] || 1;
 
     const accuracy = totalCount > 0 ? (correctCount / totalCount) * 100 : 0;
@@ -281,8 +294,8 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
         }
 
         // Update tier
-        const updated = { ...currentTiers, [opKey]: newTier };
-        execute("UPDATE users SET math_tiers = ? WHERE id = ?", [updated, userId]);
+        const updated: TiersType = { ...currentTiers, [opKey]: newTier };
+        execute("UPDATE users SET math_tiers = ? WHERE id = ?", [JSON.stringify(updated), userId]);
 
         // Check for milestone rewards
         const milestone = checkMilestoneReward(currentTier, newTier);
@@ -290,8 +303,8 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
         let xpAwarded = 0;
 
         if (milestone) {
-            coinsAwarded = milestone.coins;
-            xpAwarded = milestone.xp;
+            coinsAwarded = milestone.reward?.coins ?? 0;
+            xpAwarded = milestone.reward?.xp ?? 0;
 
             // Award coins and XP
             const currentCoins = Number(user.coins) || 0;
@@ -304,13 +317,12 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
 
         // Reset skill points only at band boundaries
         if (isBandBoundary) {
-            let skillPoints = user.skill_points;
-            if (typeof skillPoints === 'string') {
-                try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+            let parsedSkillPoints: TiersType = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+            if (typeof user.skill_points === 'string') {
+                try { parsedSkillPoints = JSON.parse(user.skill_points) as TiersType; } catch { /* keep default */ }
             }
-            skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
-            skillPoints[opKey] = 0;
-            execute("UPDATE users SET skill_points = ? WHERE id = ?", [JSON.stringify(skillPoints), userId]);
+            parsedSkillPoints[opKey] = 0;
+            execute("UPDATE users SET skill_points = ? WHERE id = ?", [JSON.stringify(parsedSkillPoints), userId]);
 
             // Clear mastery stats for this operation at band boundaries
             const { getDatabase } = await import("@/lib/db");

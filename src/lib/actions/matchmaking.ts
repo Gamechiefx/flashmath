@@ -557,7 +557,7 @@ export async function checkForMatch(params: {
                 opponent: opponent ? {
                     name: opponent.odUserName,
                     elo: opponent.odElo,
-                    tier: opponent.odTier,
+                    tier: String(opponent.odTier),
                     banner: opponent.odEquippedBanner,
                     title: opponent.odEquippedTitle,
                     level: opponent.odLevel,
@@ -706,7 +706,7 @@ export async function checkForMatch(params: {
                 opponent: {
                     name: candidate.odUserName,
                     elo: candidate.odElo,
-                    tier: candidate.odTier,
+                    tier: String(candidate.odTier),
                     banner: candidate.odEquippedBanner,
                     title: candidate.odEquippedTitle,
                     level: candidate.odLevel,
@@ -1342,11 +1342,12 @@ export async function saveMatchResult(params: {
                 const eloKey = isDuel 
                     ? `elo_${pgOperation}` 
                     : `elo_${params.mode}_${pgOperation}`;
-                interface ArenaPlayer {
-                    [key: string]: unknown;
-                }
-                winnerCurrentElo = (winnerPg as ArenaPlayer)[eloKey] as number || 300;
-                winnerStreak = (isDuel ? winnerPg.duel_win_streak : winnerPg.team_win_streak) + 1 || 1;
+                const winnerPgRecord = winnerPg as unknown as Record<string, unknown>;
+                winnerCurrentElo = (winnerPgRecord[eloKey] as number) || 300;
+                const winnerStreakValue = isDuel 
+                    ? (winnerPgRecord.duel_win_streak as number) 
+                    : (winnerPgRecord.team_win_streak as number);
+                winnerStreak = (winnerStreakValue || 0) + 1;
             }
             if (isLoserHuman) {
                 const loserUser = db.prepare('SELECT name FROM users WHERE id = ?').get(params.loserId) as { name: string } | undefined;
@@ -1355,10 +1356,8 @@ export async function saveMatchResult(params: {
                 const eloKey = isDuel 
                     ? `elo_${pgOperation}` 
                     : `elo_${params.mode}_${pgOperation}`;
-                interface ArenaPlayer {
-                    [key: string]: unknown;
-                }
-                loserCurrentElo = (loserPg as ArenaPlayer)[eloKey] as number || 300;
+                const loserPgRecord = loserPg as unknown as Record<string, unknown>;
+                loserCurrentElo = (loserPgRecord[eloKey] as number) || 300;
             }
 
             // Build performance metrics for new ELO calculation
@@ -1996,8 +1995,8 @@ export async function getMatchHistory(limit: number = 10): Promise<{
                     matchReasoning = typeof match.match_reasoning === 'string' 
                         ? JSON.parse(match.match_reasoning) 
                         : match.match_reasoning;
-                } catch (_e) {
-                    console.warn('[MatchHistory] Failed to parse match_reasoning:', e);
+                } catch (parseError) {
+                    console.warn('[MatchHistory] Failed to parse match_reasoning:', parseError);
                 }
             }
 

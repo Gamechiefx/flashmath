@@ -76,7 +76,7 @@ export async function enable2FA(code: string): Promise<{
     }
 
     // Verify the code
-    if (!verifyTOTPCode(user.two_factor_secret, code)) {
+    if (!user.two_factor_secret || !verifyTOTPCode(user.two_factor_secret, code)) {
         return { success: false, error: "Invalid verification code" };
     }
 
@@ -114,7 +114,7 @@ export async function disable2FA(code: string): Promise<{ success: boolean; erro
     }
 
     // Verify the code
-    if (!verifyTOTPCode(user.two_factor_secret, code)) {
+    if (!user.two_factor_secret || !verifyTOTPCode(user.two_factor_secret, code)) {
         return { success: false, error: "Invalid verification code" };
     }
 
@@ -146,13 +146,13 @@ export async function verify2FACode(
     }
 
     // Try TOTP code first
-    if (verifyTOTPCode(user.two_factor_secret, code)) {
+    if (user.two_factor_secret && verifyTOTPCode(user.two_factor_secret, code)) {
         return { success: true };
     }
 
     // Try recovery code
-    const recoveryCodes = user.two_factor_recovery_codes
-        ? JSON.parse(user.two_factor_recovery_codes)
+    const recoveryCodes = (user.two_factor_recovery_codes && typeof user.two_factor_recovery_codes === 'string')
+        ? JSON.parse(user.two_factor_recovery_codes) as string[]
         : [];
 
     const recoveryIndex = verifyRecoveryCode(code, recoveryCodes);
@@ -224,7 +224,7 @@ export async function regenerateRecoveryCodes(code: string): Promise<{
     }
 
     // Verify current code
-    if (!verifyTOTPCode(user.two_factor_secret, code)) {
+    if (!user.two_factor_secret || !verifyTOTPCode(user.two_factor_secret, code)) {
         return { success: false, error: "Invalid verification code" };
     }
 
