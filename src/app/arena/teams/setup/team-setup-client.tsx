@@ -68,7 +68,16 @@ export function TeamSetupClient({
     const [party, setParty] = useState<Party | null>(initialParty);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [step, setStep] = useState<'party' | 'roles' | 'ready'>('party');
+
+    // Derive initial step from party state to handle missed socket events
+    // If roles are already assigned, start at 'ready'; if party is full, start at 'roles'
+    const getInitialStep = (p: Party | null): 'party' | 'roles' | 'ready' => {
+        if (!p) return 'party';
+        if (p.iglId && p.anchorId) return 'ready';
+        if (p.members && p.members.length >= 3) return 'roles';
+        return 'party';
+    };
+    const [step, setStep] = useState<'party' | 'roles' | 'ready'>(() => getInitialStep(initialParty));
     const [isFullscreen, setIsFullscreen] = useState(false);
     
     // Prevent hydration mismatch - only show animations after mount
@@ -520,6 +529,15 @@ export function TeamSetupClient({
     useEffect(() => {
         if (hasFullParty && step === 'party') setStep('roles');
     }, [hasFullParty, step]);
+
+    // Sync step from party state - handles missed socket events
+    // If roles are already assigned in party data, advance to 'ready'
+    useEffect(() => {
+        if (party?.iglId && party?.anchorId && step === 'roles') {
+            console.log('[TeamSetup] 🔄 Syncing step from party state: roles already assigned, advancing to ready');
+            setStep('ready');
+        }
+    }, [party?.iglId, party?.anchorId, step]);
 
     const handleCreateParty = async () => {
         setLoading(true);
