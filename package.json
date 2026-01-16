@@ -10,6 +10,7 @@
     "start:server": "NODE_ENV=production node server.js",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "typecheck:tests": "tsc --noEmit --project tests/tsconfig.json",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:unit:ui": "vitest --ui",
