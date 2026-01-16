@@ -14,7 +14,6 @@ import { Server as HTTPServer } from 'http';
 
 // Extend global to store arena logs
 declare global {
-    // eslint-disable-next-line no-var
     var arenaLogs: Array<{
         timestamp: string;
         level: string;

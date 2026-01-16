@@ -43,7 +43,7 @@ interface PgArenaPlayer {
 }
 
 /** User team data from database */
-interface UserTeamRow {
+interface _UserTeamRow {
     team_id?: string;
     team_name?: string;
     team_tag?: string;

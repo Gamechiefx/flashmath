@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
 
-import { execute, loadData, saveData } from "@/lib/db";
+import { execute, loadData } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 
