@@ -13,12 +13,10 @@
  * - vote: All players vote (for assembled random teams)
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Crown, Anchor, Check, Clock, Users, Vote, UserCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { UserAvatar } from '@/components/user-avatar';
-import { BANNER_STYLES } from './team-player-card';
 
 export interface TeamMember {
     odUserId: string;
@@ -97,9 +95,6 @@ export function IGLSelectionModal({
     // Sort members by ELO for display
     const sortedMembers = [...members].sort((a, b) => (b.odElo5v5 || b.odDuelElo) - (a.odElo5v5 || a.odDuelElo));
 
-    // Get the member who is willing to be IGL/Anchor
-    const willingIGLs = members.filter(m => m.willingToIGL);
-    const willingAnchors = members.filter(m => m.willingToAnchor);
 
     if (!isOpen) return null;
 

@@ -293,7 +293,7 @@ export const LazyMasteryTest = dynamic(
  *   onMouseEnter={() => preloadComponent(LazyArenaLeaderboard)}
  */
 export const preloadComponent = (component: ReturnType<typeof dynamic>) => {
-    // @ts-ignore - accessing internal preload method
+    // @ts-expect-error - accessing internal preload method
     if (component.preload) {
         component.preload();
     }

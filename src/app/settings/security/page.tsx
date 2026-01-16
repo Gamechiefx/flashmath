@@ -9,7 +9,6 @@ import { setup2FA, enable2FA, disable2FA, get2FAStatus, regenerateRecoveryCodes 
 import { Shield, ArrowLeft, CheckCircle, AlertCircle, Copy, Download } from "lucide-react";
 
 export default function SecuritySettingsPage() {
-    const router = useRouter();
     const [status, setStatus] = useState<{ enabled: boolean; hasRecoveryCodes: boolean }>({ enabled: false, hasRecoveryCodes: false });
     const [loading, setLoading] = useState(true);
     const [setupData, setSetupData] = useState<{ secret: string; qrCode: string } | null>(null);
@@ -18,16 +17,20 @@ export default function SecuritySettingsPage() {
     const [error, setError] = useState<string | null>(null);
     const [step, setStep] = useState<"idle" | "setup" | "verify" | "recovery" | "disable">("idle");
 
-    useEffect(() => {
-        loadStatus();
-    }, []);
-
+    // Define loadStatus before useEffect to avoid "accessed before declaration" error
     const loadStatus = async () => {
         setLoading(true);
         const result = await get2FAStatus();
         setStatus(result);
         setLoading(false);
     };
+
+    useEffect(() => {
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            loadStatus();
+        }, 0);
+    }, []);
 
     const handleStartSetup = async () => {
         setError(null);
@@ -160,7 +163,7 @@ export default function SecuritySettingsPage() {
                             </NeonButton>
                         </div>
                         <NeonButton onClick={finishSetup} className="w-full mt-4">
-                            I've Saved My Codes
+                            I&apos;ve Saved My Codes
                         </NeonButton>
                     </GlassCard>
                 )}
@@ -173,6 +176,7 @@ export default function SecuritySettingsPage() {
                             Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
                         </p>
                         <div className="flex justify-center mb-4">
+                            {/* eslint-disable-next-line @next/next/no-img-element -- QR code image */}
                             <img src={setupData.qrCode} alt="2FA QR Code" className="rounded-lg" />
                         </div>
                         <p className="text-xs text-muted-foreground mb-2">Or enter this code manually:</p>

@@ -49,6 +49,7 @@ export function RealTimeMatch({
     const [answer, setAnswer] = useState('');
     const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
     const [lastCorrectAnswer, setLastCorrectAnswer] = useState<number | null>(null); // Show correct answer briefly on wrong
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- eloChange is set but not currently displayed
     const [eloChange, setEloChange] = useState<number | null>(null);
     const [coinsEarned, setCoinsEarned] = useState<number | null>(null);
     const [hasSavedResult, setHasSavedResult] = useState(false);
@@ -112,8 +113,12 @@ export function RealTimeMatch({
                 const elem = document.documentElement;
                 if (elem.requestFullscreen) {
                     await elem.requestFullscreen();
-                } else if ((elem as any).webkitRequestFullscreen) {
-                    await (elem as any).webkitRequestFullscreen();
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                    const webkitElem = elem as any;
+                    if (webkitElem.webkitRequestFullscreen) {
+                        await webkitElem.webkitRequestFullscreen();
+                    }
                 }
             }
         } catch (err) {
@@ -122,6 +127,7 @@ export function RealTimeMatch({
     };
 
     const {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- connected is available but not currently used
         connected,
         players,
         currentQuestion,
@@ -481,8 +487,6 @@ export function RealTimeMatch({
         !friendshipStatus.requestPending &&
         !friendRequestSent;
 
-    // Progress bar width
-    const timeProgress = (timeLeft / 60) * 100;
 
     // Waiting for opponent to connect via WebSocket
     if (waitingForOpponent && !matchStarted) {

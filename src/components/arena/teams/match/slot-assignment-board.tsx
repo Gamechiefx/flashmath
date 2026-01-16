@@ -340,7 +340,7 @@ export function SlotAssignmentBoard({
                 <div className="p-3 rounded-lg bg-white/5 border border-white/10 text-xs text-white/50">
                     <p>
                         <strong className="text-white">Instructions:</strong> Click on a player to select them, 
-                        then click on an operation slot to assign them. Consider each player's strengths 
+                        then click on an operation slot to assign them. Consider each player&apos;s strengths 
                         when making assignments.
                     </p>
                 </div>

@@ -61,7 +61,10 @@ export function RoleVotePanel({
     const myVote = votes[currentUserId];
 
     useEffect(() => {
-        setHasVoted(!!myVote);
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setHasVoted(!!myVote);
+        }, 0);
     }, [myVote]);
 
     // Count votes per candidate

@@ -21,7 +21,7 @@ export default async function ArenaMatchPage({ params, searchParams }: PageProps
     }
 
     // Check full arena eligibility (email, age, practice sessions)
-    const eligibility = await checkUserArenaEligibility((session.user as any).id);
+    const eligibility = await checkUserArenaEligibility((session.user as { id: string }).id);
     if (!eligibility.isEligible) {
         redirect("/arena");
     }
@@ -45,7 +45,17 @@ export default async function ArenaMatchPage({ params, searchParams }: PageProps
         matchOperation = matchResult.match.odPlayer1?.odOperation || operation;
     }
 
-    const initialPlayers: Record<string, any> = {};
+    interface PlayerInfo {
+        name: string;
+        elo: number;
+        tier: string;
+        banner?: string;
+        title?: string;
+        level: number;
+        rank: string;
+        division: string;
+    }
+    const initialPlayers: Record<string, PlayerInfo> = {};
     if (matchResult.match) {
         const p1 = matchResult.match.odPlayer1;
         initialPlayers[p1.odUserId] = {

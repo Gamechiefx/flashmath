@@ -9,7 +9,7 @@
  */
 
 import { auth } from "@/auth";
-import { queryOne } from "@/lib/db";
+import { queryOne, type UserRow } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import {
     initializeOrchestrator,
@@ -47,10 +47,10 @@ export async function initializeAISession(operation: string): Promise<{
         return { error: "Unauthorized" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     // Get user's current math tiers
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) {
         return { error: "User not found" };
     }
@@ -263,7 +263,7 @@ export async function endAISession(
         return { error: "Unauthorized" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const state = activeSessions.get(sessionId);
     if (!state) {
         return { error: "Session not found" };
@@ -332,7 +332,7 @@ export async function endAISession(
         const { getDatabase } = await import("@/lib/db/sqlite");
         const db = getDatabase();
 
-        const user = db.prepare("SELECT math_tiers, skill_points, coins, total_xp FROM users WHERE id = ?").get(userId) as any;
+        const user = db.prepare("SELECT math_tiers, skill_points, coins, total_xp FROM users WHERE id = ?").get(userId) as { math_tiers?: string | null; skill_points?: string | null; coins?: number; total_xp?: number } | undefined;
 
         if (user) {
             let mathTiers = user.math_tiers;

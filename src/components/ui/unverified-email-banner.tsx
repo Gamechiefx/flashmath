@@ -61,41 +61,7 @@ export function UnverifiedEmailBanner({ email }: UnverifiedEmailBannerProps) {
         }
     };
 
-    // Auto-submit when code is complete
-    useEffect(() => {
-        if (code.every(d => d) && !isVerifying && showCodeInput) {
-            handleVerify();
-        }
-    }, [code, showCodeInput]);
-
-    // Resend cooldown timer
-    useEffect(() => {
-        if (resendCooldown > 0) {
-            const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
-            return () => clearTimeout(timer);
-        }
-    }, [resendCooldown]);
-
-    const handleResend = async () => {
-        if (resendCooldown > 0) return;
-        
-        setResending(true);
-        setError(null);
-        const result = await resendVerificationCode(email);
-        if (result.success) {
-            setResent(true);
-            setShowCodeInput(true);
-            setResendCooldown(60);
-            // Focus first input after showing
-            setTimeout(() => {
-                document.getElementById("banner-code-0")?.focus();
-            }, 100);
-        } else {
-            setError(result.error || "Failed to send code");
-        }
-        setResending(false);
-    };
-
+    // Define handleVerify before useEffect to avoid "accessed before declaration" error
     const handleVerify = async () => {
         const fullCode = code.join("");
         if (fullCode.length !== 6) return;
@@ -124,6 +90,42 @@ export function UnverifiedEmailBanner({ email }: UnverifiedEmailBannerProps) {
 
         setIsVerifying(false);
     };
+
+    const handleResend = async () => {
+        if (resendCooldown > 0) return;
+        
+        setResending(true);
+        setError(null);
+        const result = await resendVerificationCode(email);
+        if (result.success) {
+            setResent(true);
+            setShowCodeInput(true);
+            setResendCooldown(60);
+            // Focus first input after showing
+            setTimeout(() => {
+                document.getElementById("banner-code-0")?.focus();
+            }, 100);
+        } else {
+            setError(result.error || "Failed to send code");
+        }
+        setResending(false);
+    };
+
+    // Auto-submit when code is complete
+    useEffect(() => {
+        if (code.every(d => d) && !isVerifying && showCodeInput) {
+            handleVerify();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [code, showCodeInput]);
+
+    // Resend cooldown timer
+    useEffect(() => {
+        if (resendCooldown > 0) {
+            const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [resendCooldown]);
 
     if (dismissed) return null;
 

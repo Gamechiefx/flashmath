@@ -1,7 +1,9 @@
 "use server";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { auth } from "@/auth";
-import { loadData, queryOne, queryAll } from "@/lib/db";
+import { loadData, queryOne } from "@/lib/db";
 
 // =============================================================================
 // TYPES AND INTERFACES
@@ -71,7 +73,8 @@ function calculateLinearRegression(data: { x: number; y: number }[]): {
     const sumY = data.reduce((sum, point) => sum + point.y, 0);
     const sumXY = data.reduce((sum, point) => sum + point.x * point.y, 0);
     const sumXX = data.reduce((sum, point) => sum + point.x * point.x, 0);
-    const sumYY = data.reduce((sum, point) => sum + point.y * point.y, 0);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- sumYY calculated but not used in regression
+    const _sumYY = data.reduce((sum, point) => sum + point.y * point.y, 0);
 
     const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
     const intercept = (sumY - slope * sumX) / n;
@@ -313,14 +316,19 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
     const session = await auth();
     if (!session?.user) return null;
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) return null;
 
     const db = loadData();
     
     // Get user sessions (last 30 for trend analysis)
-    const userSessions = (db.sessions as any[])
-        .filter((s: any) => s.user_id === userId)
+    interface SessionRow {
+        user_id: string;
+        created_at: string;
+        [key: string]: unknown;
+    }
+    const userSessions = (db.sessions as SessionRow[])
+        .filter((s: SessionRow) => s.user_id === userId)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         .slice(-30);
 
@@ -419,7 +427,11 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
  */
 async function getUserStatsForAnalytics(userId: string) {
     const db = loadData();
-    const userSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId);
+    interface SessionRow {
+        user_id: string;
+        [key: string]: unknown;
+    }
+    const userSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
     
     const operations = ['Addition', 'Subtraction', 'Multiplication', 'Division'];
     const detailedOps = operations.map(op => {
@@ -555,12 +567,16 @@ export async function generateShareableAchievements(): Promise<ShareableAchievem
     const session = await auth();
     if (!session?.user) return [];
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) return [];
 
     const db = loadData();
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
-    const userSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId);
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
+    interface SessionRow {
+        user_id: string;
+        [key: string]: unknown;
+    }
+    const userSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
     
     const achievements: ShareableAchievement[] = [];
 
@@ -717,12 +733,12 @@ export async function generateProgressSummary(timeframe: 'week' | 'month' | 'all
     const session = await auth();
     if (!session?.user) return null;
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const userName = session.user.name || 'Pilot';
     if (!userId) return null;
 
     const db = loadData();
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     
     // Calculate date range
     const now = new Date();
@@ -746,7 +762,11 @@ export async function generateProgressSummary(timeframe: 'week' | 'month' | 'all
     }
 
     // Filter sessions by timeframe
-    const allSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId);
+    interface SessionRow {
+        user_id: string;
+        [key: string]: unknown;
+    }
+    const allSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
     const timeframeSessions = allSessions.filter((s: any) => 
         new Date(s.created_at) >= startDate
     );

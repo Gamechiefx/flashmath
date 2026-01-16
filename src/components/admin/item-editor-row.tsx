@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { loadData } from "@/lib/db"; // Use server component data loading pattern? No, use client for interactivity or simple RSC table.
-// Let's make the page RSC and client components for row editing.
-
 import { Item, Rarity } from "@/lib/items";
 import { updateItem } from "@/lib/actions/admin";
-import { NeonButton } from "@/components/ui/neon-button";
-import { GlassCard } from "@/components/ui/glass-card";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner"; // If we have it? Or just alert.
 

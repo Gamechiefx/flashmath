@@ -52,6 +52,7 @@ export function FirstToFinishBanner({
 
                     {/* Animated particles */}
                     <div className="absolute inset-0 overflow-hidden">
+                        {/* eslint-disable react-hooks/purity -- Intentional randomness for particle effects */}
                         {[...Array(20)].map((_, i) => (
                             <motion.div
                                 key={i}

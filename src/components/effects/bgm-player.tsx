@@ -59,11 +59,12 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
         // ... OTHERWISE USE PROCEDURAL ENGINE ...
 
         // Web Audio Context for Procedural BGM
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         const ctx = new AudioContext();
 
-        let oscillators: OscillatorNode[] = [];
-        let gainNodes: GainNode[] = [];
+        const oscillators: OscillatorNode[] = [];
+        const gainNodes: GainNode[] = [];
         let isCleanedUp = false;
 
         const cleanup = () => {
@@ -266,6 +267,7 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
             scheduler();
 
             // Register stopper
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Mock oscillator for cleanup tracking
             oscillators.push({ stop: () => { isPlayingSeq = false; }, disconnect: () => { } } as any);
         };
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { getDatabase } from "@/lib/db";
+import { getDatabase, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 
@@ -9,7 +9,7 @@ async function requireAdmin() {
     if (!session?.user) return { error: "Unauthorized", isAdmin: false };
 
     const db = getDatabase();
-    const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get((session.user as any).id) as any;
+    const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get((session.user as { id: string }).id) as { is_admin?: number } | undefined;
 
     if (!user?.is_admin) return { error: "Admin access required", isAdmin: false };
 
@@ -65,7 +65,7 @@ export async function giveUserCoins(userId: string, amount: number) {
         const db = getDatabase();
 
         // Check if user exists
-        const user = db.prepare('SELECT id, name, coins FROM users WHERE id = ?').get(userId) as any;
+        const user = db.prepare('SELECT id, name, coins FROM users WHERE id = ?').get(userId) as { id: string; name: string; coins?: number } | undefined;
         if (!user) return { error: "User not found" };
 
         const newCoins = (user.coins || 0) + amount;
@@ -90,7 +90,7 @@ export async function giveUserXP(userId: string, amount: number) {
         const db = getDatabase();
 
         // Check if user exists
-        const user = db.prepare('SELECT id, name, total_xp, level, current_league_id FROM users WHERE id = ?').get(userId) as any;
+        const user = db.prepare('SELECT id, name, total_xp, level, current_league_id FROM users WHERE id = ?').get(userId) as { id: string; name: string; total_xp?: number; level?: number; current_league_id?: string | null } | undefined;
         if (!user) return { error: "User not found" };
 
         const newXP = (user.total_xp || 0) + amount;
@@ -101,7 +101,7 @@ export async function giveUserXP(userId: string, amount: number) {
         // Also update league XP
         const existingParticipant = db.prepare(
             'SELECT id, weekly_xp FROM league_participants WHERE league_id = ? AND user_id = ?'
-        ).get(user.current_league_id || 'neon-league', userId) as any;
+        ).get(user.current_league_id || 'neon-league', userId) as { id: string; weekly_xp?: number } | undefined;
 
         if (existingParticipant) {
             db.prepare('UPDATE league_participants SET weekly_xp = weekly_xp + ? WHERE id = ?')
@@ -156,11 +156,11 @@ export async function giveUserItem(userId: string, itemId: string) {
         const db = getDatabase();
 
         // Check if user exists
-        const user = db.prepare('SELECT id, name FROM users WHERE id = ?').get(userId) as any;
+        const user = db.prepare('SELECT id, name FROM users WHERE id = ?').get(userId) as { id: string; name: string } | undefined;
         if (!user) return { error: "User not found" };
 
         // Check if item exists
-        const item = db.prepare('SELECT id, name FROM shop_items WHERE id = ?').get(itemId) as any;
+        const item = db.prepare('SELECT id, name FROM shop_items WHERE id = ?').get(itemId) as { id: string; name: string } | undefined;
         if (!item) return { error: "Item not found" };
 
         // Check if user already owns this item
@@ -196,11 +196,11 @@ export async function giveUserAllItems(userId: string) {
         const db = getDatabase();
 
         // Check if user exists
-        const user = db.prepare('SELECT id, name FROM users WHERE id = ?').get(userId) as any;
+        const user = db.prepare('SELECT id, name FROM users WHERE id = ?').get(userId) as { id: string; name: string } | undefined;
         if (!user) return { error: "User not found" };
 
         // Get all shop items
-        const allItems = db.prepare('SELECT id, name FROM shop_items').all() as any[];
+        const allItems = db.prepare('SELECT id, name FROM shop_items').all() as { id: string; name: string }[];
 
         // Get user's current inventory
         const existingInventory = db.prepare('SELECT item_id FROM inventory WHERE user_id = ?').all(userId) as { item_id: string }[];

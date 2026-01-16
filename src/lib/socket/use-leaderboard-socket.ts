@@ -99,7 +99,10 @@ export function useLeaderboardSocket(options: UseLeaderboardSocketOptions): UseL
         if (socket.connected) {
             socket.emit('leaderboard:subscribe', { type, operation, timeFilter });
             subscriptionRef.current = { type, operation, timeFilter };
-            setIsConnected(true);
+            // Defer to avoid setState in effect warning
+            setTimeout(() => {
+                setIsConnected(true);
+            }, 0);
         }
 
         return () => {

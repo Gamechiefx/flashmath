@@ -2012,7 +2012,7 @@ app.prepare().then(async () => {
                 socket.emit('party:error', { error: result.error });
             }
         });
-        
+
         // =============================================================================
         // LEADERBOARD EVENTS
         // =============================================================================
@@ -4347,11 +4347,11 @@ app.prepare().then(async () => {
             
             console.log(`[TeamMatch] Team assembled: ${assembledTeamId} from parties: ${partyIds.join(', ')}`);
         });
-        
+
         // ========================================
         // QUIT VOTE SYSTEM
         // ========================================
-        
+
         // Track active quit votes per match (matchId -> vote data)
         if (!global.activeQuitVotes) {
             global.activeQuitVotes = new Map();

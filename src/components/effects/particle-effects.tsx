@@ -179,8 +179,12 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
             if (effectType.includes('vortex')) spawnVortex();
         };
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Event handler type compatibility
         window.addEventListener('keydown', handleInput as any);
-        return () => window.removeEventListener('keydown', handleInput as any);
+        return () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Event handler type compatibility
+            window.removeEventListener('keydown', handleInput as any);
+        };
     }, [effectType, pathname, previewRect]);
 
     // 2. ANIMATION LOOP

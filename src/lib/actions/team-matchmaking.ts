@@ -1,5 +1,7 @@
 'use server';
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results and Redis operations use any types */
+
 /**
  * Arena Team Matchmaking Server Actions
  * Real-time team matchmaking using Redis for queue management
@@ -310,6 +312,7 @@ export async function joinTeamQueue(params: {
     const requiredTeamSize = getTeamSizeForMode(mode);
     
     // #region agent log - HB/HD: Track joinTeamQueue calls
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Debug logging
     const fs = require('fs');
     try {
         fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', JSON.stringify({location:'team-matchmaking.ts:joinTeamQueue',message:'JOIN TEAM QUEUE CALLED',data:{partyId:params.partyId,matchType:params.matchType,mode,requiredTeamSize,stackTrace:new Error().stack?.split('\n').slice(0,5).join('|')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B,D'}) + '\n');
@@ -465,7 +468,7 @@ export async function joinTeamQueue(params: {
         // Get user tier data from SQLite (this is the only SQLite read)
         const userTierData: Record<string, string | null> = {};
         for (const member of redisMembers) {
-            const userData = db.prepare(`SELECT math_tiers FROM users WHERE id = ?`).get(member.odUserId) as any;
+            const userData = db.prepare(`SELECT math_tiers FROM users WHERE id = ?`).get(member.odUserId) as { math_tiers?: string | null } | undefined;
             userTierData[member.odUserId] = userData?.math_tiers || null;
         }
 
@@ -502,7 +505,7 @@ export async function joinTeamQueue(params: {
         // For casual matches: Add AI teammates to fill remaining slots (mode-specific)
         let finalQueueMembers = queueMembers;
         let hasAITeammates = false;
-        let humanMemberCount = redisMembers.length;
+        const humanMemberCount = redisMembers.length;
         
         if (params.matchType === 'casual' && queueMembers.length < requiredTeamSize) {
             const slotsToFill = requiredTeamSize - queueMembers.length;
@@ -1134,7 +1137,15 @@ export async function joinTeammateQueue(params: {
                    arena_elo_5v5, math_tiers
             FROM users
             WHERE id IN (${memberIds.map(() => '?').join(',')})
-        `).all(...memberIds) as any[];
+        `).all(...memberIds) as Array<{
+            user_id: string;
+            name: string;
+            level?: number;
+            equipped_items?: string | null;
+            arena_elo_5v5?: number;
+            math_tiers?: string | null;
+            [key: string]: unknown;
+        }>;
 
         console.log(`[TeamMatchmaking] Party ${params.partyId} has ${redisMembers.length} members, joining teammate search`);
 
@@ -1978,7 +1989,14 @@ export async function createAITeamMatch(params: {
                 SELECT id as user_id, name, level, equipped_items, arena_elo_5v5
                 FROM users
                 WHERE id IN (${memberIds.map(() => '?').join(',')})
-            `).all(...memberIds) as any[]
+            `).all(...memberIds) as Array<{
+                user_id: string;
+                name: string;
+                level?: number;
+                equipped_items?: string | null;
+                arena_elo_5v5?: number;
+                [key: string]: unknown;
+            }>
             : [];
 
         // Merge Redis member data with SQLite user details

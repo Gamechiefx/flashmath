@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
-import { queryOne, loadData } from "@/lib/db";
-import { Item, ITEMS, ItemType } from "@/lib/items";
+import { queryOne, loadData, type UserRow } from "@/lib/db";
+import { Item, ITEMS } from "@/lib/items";
 import { NeonButton } from "@/components/ui/neon-button";
 import { Archive } from "lucide-react";
 import Link from "next/link";
@@ -13,12 +13,16 @@ export default async function LockerPage() {
 
     const session = await auth();
     if (!session?.user) return <div>Please log in</div>;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     const db = loadData();
     const shopItems = db.shop_items as Item[];
-    const inventory = (db.inventory as any[]).filter((i: any) => i.user_id === userId);
+    interface InventoryRow {
+        user_id: string;
+        [key: string]: unknown;
+    }
+    const inventory = (db.inventory as InventoryRow[]).filter((i: InventoryRow) => i.user_id === userId);
 
     // Merge DB shop_items with static ITEMS (ITEMS takes precedence for missing items)
     const allItemsMap = new Map<string, Item>();
@@ -27,7 +31,7 @@ export default async function LockerPage() {
     const allItems = Array.from(allItemsMap.values());
 
     const ownedItems = allItems.filter(item =>
-        inventory.some((inv: any) => inv.item_id === item.id)
+        inventory.some((inv: InventoryRow) => inv.item_id === item.id)
     );
 
     const equipped = user.equipped_items || {};

@@ -1,6 +1,6 @@
 "use server";
 
-import { execute, queryOne, initSchema, getDatabase } from "@/lib/db";
+import { execute, queryOne, initSchema, getDatabase, type UserRow } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { signIn, auth } from "@/auth";
 import { AuthError } from "next-auth";
@@ -170,7 +170,11 @@ export async function loginUser(formData: FormData) {
             const lockResult = await incrementFailedAttempts(email);
 
             // Check if it's our custom ban error (nested in cause usually)
-            const cause = error.cause?.err?.message || (error.cause as any)?.message;
+            interface ErrorCause {
+                err?: { message?: string };
+                message?: string;
+            }
+            const cause = error.cause?.err?.message || (error.cause as ErrorCause)?.message;
             if (cause && cause.includes("Account suspended")) {
                 return { error: cause };
             }
@@ -207,7 +211,7 @@ export async function loginUser(formData: FormData) {
 export async function sendVerificationEmail(email: string): Promise<{ success: boolean; error?: string }> {
     const db = getDatabase();
 
-    const user = db.prepare('SELECT id, name, email_verified FROM users WHERE email = ?').get(email) as any;
+    const user = db.prepare('SELECT id, name, email_verified FROM users WHERE email = ?').get(email) as { id: string; name: string; email_verified?: number } | undefined;
 
     if (!user) {
         return { success: false, error: "User not found" };
@@ -261,7 +265,7 @@ export async function verifyEmailCode(
     await markTokenUsed(code);
 
     // Get user ID to unlock achievement
-    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as any;
+    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: string } | undefined;
     if (user) {
         await unlockEmailVerifiedAchievement(user.id);
     }
@@ -285,13 +289,13 @@ export async function resendVerificationEmail(): Promise<{ success: boolean; err
         return { success: false, error: 'Not authenticated' };
     }
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) {
         return { success: false, error: 'User ID not found' };
     }
     
     const db = getDatabase();
-    const user = db.prepare('SELECT email, email_verified FROM users WHERE id = ?').get(userId) as any;
+    const user = db.prepare('SELECT email, email_verified FROM users WHERE id = ?').get(userId) as { email: string; email_verified?: number } | undefined;
     
     if (!user) {
         return { success: false, error: 'User not found' };
@@ -311,7 +315,7 @@ export async function resendVerificationEmail(): Promise<{ success: boolean; err
 export async function requestPasswordReset(email: string): Promise<{ success: boolean; error?: string }> {
     const db = getDatabase();
 
-    const user = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email) as any;
+    const user = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email) as { id: string; name: string } | undefined;
 
     if (!user) {
         // Don't reveal if user exists
@@ -378,7 +382,7 @@ export async function resetPassword(
 export async function requestMagicLink(email: string): Promise<{ success: boolean; error?: string }> {
     const db = getDatabase();
 
-    const user = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email) as any;
+    const user = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email) as { id: string; name: string } | undefined;
 
     if (!user) {
         // Don't reveal if user exists - still show success
@@ -427,7 +431,7 @@ export async function requestMagicLink(email: string): Promise<{ success: boolea
 export async function incrementFailedAttempts(email: string): Promise<{ locked: boolean; attemptsRemaining?: number }> {
     const db = getDatabase();
 
-    const user = db.prepare('SELECT id, failed_login_attempts FROM users WHERE email = ?').get(email) as any;
+    const user = db.prepare('SELECT id, failed_login_attempts FROM users WHERE email = ?').get(email) as { id: string; failed_login_attempts?: number } | undefined;
 
     if (!user) {
         return { locked: false };
@@ -454,7 +458,7 @@ export async function resetFailedAttempts(email: string): Promise<void> {
 export async function isAccountLocked(email: string): Promise<{ locked: boolean; until?: Date }> {
     const db = getDatabase();
 
-    const user = db.prepare('SELECT locked_until FROM users WHERE email = ?').get(email) as any;
+    const user = db.prepare('SELECT locked_until FROM users WHERE email = ?').get(email) as { locked_until?: string | null } | undefined;
 
     if (!user?.locked_until) {
         return { locked: false };

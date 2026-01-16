@@ -26,12 +26,15 @@ export function AudioSettingsProvider({ children }: { children: React.ReactNode 
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        const storedBGM = localStorage.getItem("fg_bgm_volume");
-        const storedSFX = localStorage.getItem("fg_sfx_volume");
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            const storedBGM = localStorage.getItem("fg_bgm_volume");
+            const storedSFX = localStorage.getItem("fg_sfx_volume");
 
-        if (storedBGM) setBGMVolumeState(parseFloat(storedBGM));
-        if (storedSFX) setSFXVolumeState(parseFloat(storedSFX));
-        setMounted(true);
+            if (storedBGM) setBGMVolumeState(parseFloat(storedBGM));
+            if (storedSFX) setSFXVolumeState(parseFloat(storedSFX));
+            setMounted(true);
+        }, 0);
     }, []);
 
     const setBGMVolume = (vol: number) => {

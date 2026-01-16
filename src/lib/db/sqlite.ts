@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
@@ -355,7 +357,7 @@ function initializeSchema() {
     // Auto-promote user to admin via environment variable (useful for Docker deployments)
     const autoAdminEmail = process.env.AUTO_ADMIN_EMAIL;
     if (autoAdminEmail) {
-        const user = database.prepare('SELECT id, is_admin, role FROM users WHERE email = ?').get(autoAdminEmail) as any;
+        const user = database.prepare('SELECT id, is_admin, role FROM users WHERE email = ?').get(autoAdminEmail) as { id: string; is_admin?: number; role?: string | null } | undefined;
         if (user && (!user.is_admin || user.role !== 'super_admin')) {
             database.prepare('UPDATE users SET is_admin = 1, role = ? WHERE email = ?')
                 .run('super_admin', autoAdminEmail);

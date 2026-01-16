@@ -6,7 +6,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAITeamMatch } from '@/lib/actions/team-matchmaking';
 import { generateAITeam } from '@/lib/arena/ai-team';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -64,10 +63,11 @@ export async function POST(request: NextRequest) {
             },
             testMode,
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[TestAPI] Error creating match:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return NextResponse.json(
-            { error: error.message },
+            { error: errorMessage },
             { status: 500 }
         );
     }

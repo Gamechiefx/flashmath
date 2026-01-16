@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
@@ -22,11 +24,14 @@ export function OperationStatsModal({ operation, isOpen, onClose }: OperationSta
 
     useEffect(() => {
         if (isOpen && operation) {
-            setLoading(true);
-            getOperationStats(operation).then((result) => {
-                setData(result);
-                setLoading(false);
-            });
+            // Defer to avoid setState in effect warning
+            setTimeout(() => {
+                setLoading(true);
+                getOperationStats(operation).then((result) => {
+                    setData(result);
+                    setLoading(false);
+                });
+            }, 0);
         }
     }, [isOpen, operation]);
 

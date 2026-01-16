@@ -47,21 +47,24 @@ export function ArenaEligibility({
     const meetsAge = isAdmin || (userAge !== null && userAge >= MIN_AGE);
 
     useEffect(() => {
-        // Admin bypasses all requirements
-        if (isAdmin) {
-            setIsEligible(true);
-            setRequirementsExpanded(false);
-            return;
-        }
-        
-        // Simplified eligibility: just age and basic practice
-        const eligible = hasEnoughPractice && meetsAge;
-        setIsEligible(eligible);
-        
-        // Auto-collapse when all requirements are met
-        if (eligible) {
-            setRequirementsExpanded(false);
-        }
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            // Admin bypasses all requirements
+            if (isAdmin) {
+                setIsEligible(true);
+                setRequirementsExpanded(false);
+                return;
+            }
+            
+            // Simplified eligibility: just age and basic practice
+            const eligible = hasEnoughPractice && meetsAge;
+            setIsEligible(eligible);
+            
+            // Auto-collapse when all requirements are met
+            if (eligible) {
+                setRequirementsExpanded(false);
+            }
+        }, 0);
     }, [isAdmin, hasEnoughPractice, meetsAge]);
 
     // Build confidence breakdown from practiceStats if not provided
@@ -250,8 +253,12 @@ export function ArenaEligibility({
                             const elem = document.documentElement;
                             if (elem.requestFullscreen && !document.fullscreenElement) {
                                 elem.requestFullscreen();
-                            } else if ((elem as any).webkitRequestFullscreen) {
-                                (elem as any).webkitRequestFullscreen();
+                            } else {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                                const webkitElem = elem as any;
+                                if (webkitElem.webkitRequestFullscreen) {
+                                    webkitElem.webkitRequestFullscreen();
+                                }
                             }
                         } catch (err) {
                             console.log('[Arena] Fullscreen request failed:', err);

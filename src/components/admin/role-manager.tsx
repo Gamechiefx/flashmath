@@ -36,8 +36,8 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
 
     // Get available roles (all roles below manager level)
     const availableRoles = Object.entries(ROLE_HIERARCHY)
-        .filter(([_, level]) => level < managerLevel)
-        .map(([role, _]) => role as Role)
+        .filter(([, level]) => level < managerLevel)
+        .map(([role]) => role as Role)
         .sort((a, b) => ROLE_HIERARCHY[b] - ROLE_HIERARCHY[a]); // Highest first
 
     const openDropdown = useCallback(() => {

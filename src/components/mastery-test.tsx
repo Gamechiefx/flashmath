@@ -29,10 +29,7 @@ export function MasteryTest({ operation, currentTier, onComplete, onCancel }: Ma
     const [testComplete, setTestComplete] = useState(false);
     const [finalResult, setFinalResult] = useState<any>(null);
 
-    useEffect(() => {
-        loadProblems();
-    }, [operation]);
-
+    // Define loadProblems before useEffect to avoid "accessed before declaration" error
     const loadProblems = async () => {
         setIsLoading(true);
         const res = await getMasteryTestProblems(operation);
@@ -41,6 +38,11 @@ export function MasteryTest({ operation, currentTier, onComplete, onCancel }: Ma
         }
         setIsLoading(false);
     };
+
+    useEffect(() => {
+        loadProblems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [operation]);
 
     const handleSubmit = async () => {
         if (!inputValue || showResult) return;

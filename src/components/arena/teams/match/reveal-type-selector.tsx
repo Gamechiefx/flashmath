@@ -38,7 +38,7 @@ export function RevealTypeSelector({
     showExplanation = true,
     className,
 }: RevealTypeSelectorProps) {
-    const [hoveredOption, setHoveredOption] = useState<string | null>(null);
+    const [, setHoveredOption] = useState<string | null>(null);
 
     const canSelect = teamHasBetterRecord && !isLocked;
 

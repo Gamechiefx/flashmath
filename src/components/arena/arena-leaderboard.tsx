@@ -85,7 +85,7 @@ export function ArenaLeaderboard({ initialData }: ArenaLeaderboardProps) {
     }, []);
 
     // Real-time updates via WebSocket
-    const { isConnected, updateCount } = useLeaderboardSocket({
+    const { isConnected } = useLeaderboardSocket({
         type,
         operation,
         timeFilter,

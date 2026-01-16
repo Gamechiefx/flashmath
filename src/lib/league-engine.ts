@@ -1,6 +1,8 @@
 "use server";
 
-import { query, queryOne, execute, saveData } from "./db";
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
+import { query, queryOne, execute, saveData, type UserRow } from "./db";
 import { v4 as uuid } from "uuid";
 
 const LEAGUE_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (weekly cycle)
@@ -112,7 +114,7 @@ async function promoteUser(userId: string, targetTier: string) {
 }
 
 async function awardPrize(userId: string, amount: number) {
-    const user = queryOne('SELECT * FROM users WHERE id = ?', [userId]) as any;
+    const user = queryOne('SELECT * FROM users WHERE id = ?', [userId]) as UserRow | null;
     if (user) {
         execute('UPDATE users SET total_xp = ?, level = ?, coins = ? WHERE id = ?', [
             user.total_xp,
@@ -187,11 +189,17 @@ export async function ensureLeagueParticipation(userId: string, userName: string
     }
     
     // 1. Check if user is already in a league
-    const existing = queryOne('SELECT * FROM league_participants WHERE user_id = ?', [userId]) as any;
+    interface LeagueParticipantRow {
+        id: string;
+        league_id: string;
+        user_id: string;
+        [key: string]: unknown;
+    }
+    const existing = queryOne('SELECT * FROM league_participants WHERE user_id = ?', [userId]) as LeagueParticipantRow | null;
 
     // 2. If not, add them to their current league (or default Neon)
     if (!existing) {
-        const user = queryOne('SELECT * FROM users WHERE id = ?', [userId]) as any;
+        const user = queryOne('SELECT * FROM users WHERE id = ?', [userId]) as UserRow | null;
         const leagueId = user?.current_league_id || 'neon-league';
         const weeklyXp = 0; // Or calculate from sessions this week? safer to start at 0 if new to league.
 

@@ -1,7 +1,7 @@
 'use server';
 
 import { auth } from '@/auth';
-import { queryOne } from '@/lib/db';
+import { queryOne, type UserRow } from '@/lib/db';
 
 /**
  * Check if the current user has verified their email
@@ -11,10 +11,10 @@ export async function isEmailVerified(): Promise<boolean> {
     const session = await auth();
     if (!session?.user) return false;
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) return false;
     
-    const user = queryOne('SELECT email_verified FROM users WHERE id = ?', [userId]) as any;
+    const user = queryOne('SELECT email_verified FROM users WHERE id = ?', [userId]) as { email_verified?: number } | null;
     
     return user?.email_verified === 1;
 }
@@ -32,7 +32,7 @@ export async function getEmailVerificationStatus(): Promise<{
         return { isVerified: false, email: null, verifiedAt: null };
     }
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) {
         return { isVerified: false, email: null, verifiedAt: null };
     }
@@ -40,7 +40,7 @@ export async function getEmailVerificationStatus(): Promise<{
     const user = queryOne(
         'SELECT email, email_verified, email_verified_at FROM users WHERE id = ?', 
         [userId]
-    ) as any;
+    ) as { email?: string; email_verified?: number; email_verified_at?: string | null } | null;
     
     return {
         isVerified: user?.email_verified === 1,

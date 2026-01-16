@@ -3,9 +3,42 @@
  * Maintains backward-compatible API with JSON-based db.ts
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { getDatabase, generateId, now } from './db/sqlite';
 import Database from 'better-sqlite3';
 import { ITEMS } from './items';
+
+/**
+ * Database user row type - represents a row from the users table
+ * All fields are optional to handle SELECT * queries and schema evolution
+ */
+export interface UserRow {
+    id: string;
+    email: string;
+    email_verified?: number;
+    email_verified_at?: string | null;
+    name: string;
+    password_hash?: string | null;
+    level?: number;
+    total_xp?: number;
+    coins?: number;
+    current_league_id?: string | null;
+    theme_preferences?: string | null;
+    math_tiers?: string | null;
+    skill_points?: string | null;
+    equipped_items?: string | null;
+    is_admin?: number;
+    role?: string | null;
+    is_banned?: number;
+    banned_until?: string | null;
+    failed_login_attempts?: number;
+    locked_until?: string | null;
+    created_at?: string;
+    last_active?: string | null;
+    dob?: string | null;
+    [key: string]: unknown; // Allow additional fields for schema evolution
+}
 
 // Get database instance
 let db: Database.Database;
@@ -141,7 +174,7 @@ export const queryOne = (text: string, params: any[] = []): any | null => {
 
     // Support for email verification checks
     if (lowerText.includes('select email_verified from users where id = ?')) {
-        const row = database.prepare('SELECT email_verified FROM users WHERE id = ?').get(params[0]) as any;
+        const row = database.prepare('SELECT email_verified FROM users WHERE id = ?').get(params[0]) as { email_verified?: number } | undefined;
         return row || null;
     }
 
@@ -372,7 +405,7 @@ export const getUserIdsByEmailBatch = (emails: string[]): { id: string; email: s
     
     const database = ensureDb();
     const placeholders = emails.map(() => '?').join(',');
-    return database.prepare(`SELECT id, email FROM users WHERE email IN (${placeholders})`).all(...emails) as any[];
+    return database.prepare(`SELECT id, email FROM users WHERE email IN (${placeholders})`).all(...emails) as Array<{ id: string; email: string }>;
 };
 
 /**
@@ -401,7 +434,11 @@ export const getFriendshipsBatch = (userIds: string[]): any[] => {
  * @param limit - Max sessions per user (default 10)
  * @returns Array of session records
  */
-export const getPracticeSessionsBatch = (userIds: string[], limit: number = 10): any[] => {
+export const getPracticeSessionsBatch = (userIds: string[], limit: number = 10): Array<{
+    id: string;
+    user_id: string;
+    [key: string]: unknown;
+}> => {
     if (!userIds || userIds.length === 0) return [];
     
     const database = ensureDb();
@@ -422,7 +459,15 @@ export const getPracticeSessionsBatch = (userIds: string[], limit: number = 10):
  * @param userIds - Array of user IDs
  * @returns Array of inventory records
  */
-export const getInventoryBatch = (userIds: string[]): any[] => {
+export const getInventoryBatch = (userIds: string[]): Array<{
+    id: string;
+    user_id: string;
+    item_id: string;
+    item_name?: string;
+    item_type?: string;
+    item_rarity?: string;
+    [key: string]: unknown;
+}> => {
     if (!userIds || userIds.length === 0) return [];
     
     const database = ensureDb();

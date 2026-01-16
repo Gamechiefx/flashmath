@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { GlassCard } from "@/components/ui/glass-card";
 
 interface AdminSectionProps {
     title: string;

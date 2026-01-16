@@ -36,6 +36,7 @@ export function FriendRequestCard({
 
     // Time ago helper
     const getTimeAgo = (dateStr: string) => {
+        // eslint-disable-next-line react-hooks/purity -- Time calculation for display
         const diff = Date.now() - new Date(dateStr).getTime();
         const minutes = Math.floor(diff / 60000);
         if (minutes < 60) return `${minutes}m ago`;

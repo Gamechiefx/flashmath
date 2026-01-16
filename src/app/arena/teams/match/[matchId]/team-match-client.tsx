@@ -19,7 +19,7 @@ import {
     IGLFAB,
     TeamPlayerCard,
     VSScreenBackground,
-    BANNER_STYLES
+    BANNER_STYLES,
 } from '@/components/arena/teams';
 import {
     HalftimePanel,
@@ -486,7 +486,7 @@ export function TeamMatchClient({
     
     // Points feed state for real-time scoring events
     const [pointsEvents, setPointsEvents] = useState<PointsEvent[]>([]);
-    
+
     // Quit vote state
     const [quitVote, setQuitVote] = useState<{
         active: boolean;
@@ -512,13 +512,13 @@ export function TeamMatchClient({
     const [doubleAnchorForRound, setDoubleAnchorForRound] = useState<number | null>(null); // Which round it applies to
     const [doubleAnchorBenchedPlayer, setDoubleAnchorBenchedPlayer] = useState<string | null>(null); // Who is benched
     const [doubleAnchorPlayerName, setDoubleAnchorPlayerName] = useState<string | null>(null); // Anchor player name
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- doubleAnchorTeamId is set but not currently used
     const [doubleAnchorTeamId, setDoubleAnchorTeamId] = useState<string | null>(null); // Which team has it active
     
     // For OPPONENT team - so we can show their Double Anchor status
     const [opponentDoubleAnchorSlot, setOpponentDoubleAnchorSlot] = useState<string | null>(null);
     const [opponentDoubleAnchorForRound, setOpponentDoubleAnchorForRound] = useState<number | null>(null);
     const [opponentDoubleAnchorPlayerName, setOpponentDoubleAnchorPlayerName] = useState<string | null>(null);
-    const [opponentDoubleAnchorBenchedPlayer, setOpponentDoubleAnchorBenchedPlayer] = useState<string | null>(null);
     const [phaseInitialDuration, setPhaseInitialDuration] = useState(0); // Initial duration when phase starts
     const lastPhaseRef = useRef<string | null>(null);
     
@@ -674,7 +674,8 @@ export function TeamMatchClient({
         }
     }, [isDemoMode, matchState, matchId, currentUserId, usedDoubleCallinHalf1, usedDoubleCallinHalf2]);
 
-    // Handle Anchor Solo (final round ability)
+    // Handle Anchor Solo (final round ability) - currently unused but kept for future use
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const handleAnchorSolo = useCallback(() => {
         if (!socketRef.current?.connected || usedAnchorSolo) return;
         console.log('[TeamMatch] Activating Anchor Solo');
@@ -2238,6 +2239,7 @@ export function TeamMatchClient({
             socket.disconnect();
             soundEngine.stopAllPhaseMusic(0); // Stop all phase music immediately on unmount
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- effectivePartyId, isDemoMode, myTeam, opponentTeam are derived values that don't need to be in deps
     }, [matchId, currentUserId, router]);
 
     // Quit vote timer countdown
@@ -2332,6 +2334,7 @@ export function TeamMatchClient({
         }
         
         previousSlotRef.current = currentSlot;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matchState is intentionally not in deps to avoid re-running on every state change
     }, [matchState?.phase, myTeam?.currentSlot, myTeam, currentUserId]);
 
 

@@ -1,13 +1,13 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { motion, useSpring, useTransform, useInView } from "framer-motion";
+import { motion, useInView } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
-    Zap,
     Trophy,
-    Target,
     History,
     ChevronRight,
     Activity,
@@ -134,7 +134,7 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
     const [showPlacementTest, setShowPlacementTest] = useState(false);
     const router = useRouter();
     const { data: session, update } = useSession();
-    const isEmailVerified = (session?.user as any)?.emailVerified;
+    const isEmailVerified = (session?.user as { emailVerified?: boolean })?.emailVerified;
 
     // Refresh session on mount to get latest emailVerified status
     useEffect(() => {

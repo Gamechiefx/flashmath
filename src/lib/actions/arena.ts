@@ -1,7 +1,7 @@
 'use server';
 
 import { auth } from "@/auth";
-import { queryOne, query, getDatabase } from "@/lib/db";
+import { queryOne, query, getDatabase, type UserRow } from "@/lib/db";
 import { ITEMS } from "@/lib/items";
 import { getDecayStatus } from "@/lib/arena/decay";
 
@@ -24,7 +24,7 @@ export async function getArenaEligibilityData() {
     }
 
     const userId = session.user.id;
-    const userRole = (session.user as any)?.role;
+    const userRole = (session.user as { role?: string })?.role;
 
     // Admin and moderator bypass - skip requirements
     const isAdmin = userRole === 'admin' || userRole === 'super_admin' || userRole === 'moderator';
@@ -33,25 +33,32 @@ export async function getArenaEligibilityData() {
     const db = getDatabase();
 
     // User data query
-    // User data query
-    let user;
+    interface UserDataRow {
+        total_xp?: number;
+        level?: number;
+        created_at?: string;
+        last_active?: string | null;
+        dob?: string | null;
+    }
+    let user: UserDataRow | undefined;
     try {
         user = db.prepare(
             "SELECT total_xp, level, created_at, last_active, dob FROM users WHERE id = ?"
-        ).get(userId) as any;
-    } catch (error: any) {
+        ).get(userId) as UserDataRow | undefined;
+    } catch (error: unknown) {
         // If column doesn't exist, add it and retry
-        if (error.message && error.message.includes('no such column: dob')) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage && errorMessage.includes('no such column: dob')) {
             try {
                 db.prepare("ALTER TABLE users ADD COLUMN dob TEXT").run();
                 user = db.prepare(
                     "SELECT total_xp, level, created_at, last_active, dob FROM users WHERE id = ?"
-                ).get(userId) as any;
-            } catch (e) {
+                ).get(userId) as UserDataRow | undefined;
+            } catch {
                 // Fallback to query without dob if migration fails (concurrency safe-ish)
                 user = db.prepare(
                     "SELECT total_xp, level, created_at, last_active FROM users WHERE id = ?"
-                ).get(userId) as any;
+                ).get(userId) as UserDataRow | undefined;
             }
         } else {
             throw error;
@@ -74,7 +81,7 @@ export async function getArenaEligibilityData() {
     // Count practice sessions
     const sessionCount = db.prepare(
         "SELECT COUNT(*) as count FROM practice_sessions WHERE user_id = ?"
-    ).get(userId) as any;
+    ).get(userId) as { count: number } | undefined;
 
     // Get recent practice stats (last 7 days)
     const recentStats = db.prepare(`
@@ -84,7 +91,7 @@ export async function getArenaEligibilityData() {
             MAX(created_at) as last_session
         FROM practice_sessions
         WHERE user_id = ? AND created_at > datetime('now', '-7 days')
-    `).get(userId) as any;
+    `).get(userId) as { total_correct?: number; total_questions?: number; last_session?: string | null } | undefined;
 
     // Calculate days since last practice
     let daysSinceLastPractice = 30;
@@ -185,19 +192,28 @@ export async function checkUserArenaEligibility(userId: string): Promise<{
     const MIN_AGE = 13;
     
     // Get user data
-    let user;
+    interface UserEligibilityRow {
+        id: string;
+        name: string;
+        role?: string | null;
+        is_admin?: number;
+        dob?: string | null;
+        email_verified?: number;
+    }
+    let user: UserEligibilityRow | undefined;
     try {
         user = db.prepare(`
             SELECT id, name, role, is_admin, dob, email_verified 
             FROM users WHERE id = ?
-        `).get(userId) as any;
-    } catch (error: any) {
+        `).get(userId) as UserEligibilityRow | undefined;
+    } catch (error: unknown) {
         // Handle missing dob column
-        if (error.message?.includes('no such column: dob')) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage?.includes('no such column: dob')) {
             user = db.prepare(`
                 SELECT id, name, role, is_admin, email_verified 
                 FROM users WHERE id = ?
-            `).get(userId) as any;
+            `).get(userId) as UserEligibilityRow | undefined;
         } else {
             throw error;
         }
@@ -241,7 +257,7 @@ export async function checkUserArenaEligibility(userId: string): Promise<{
     // Count practice sessions
     const sessionCount = db.prepare(
         "SELECT COUNT(*) as count FROM practice_sessions WHERE user_id = ?"
-    ).get(userId) as any;
+    ).get(userId) as { count: number } | undefined;
     const totalSessions = sessionCount?.count || 0;
     const hasEnoughPractice = totalSessions >= MIN_SESSIONS;
     
@@ -310,7 +326,7 @@ export async function checkPartyArenaEligibility(memberIds: string[]): Promise<{
         
         if (!eligibility.isEligible) {
             // Get user name for display
-            const user = db.prepare('SELECT name FROM users WHERE id = ?').get(memberId) as any;
+            const user = db.prepare('SELECT name FROM users WHERE id = ?').get(memberId) as { name: string } | undefined;
             ineligibleMembers.push({
                 userId: memberId,
                 userName: user?.name,
@@ -341,7 +357,7 @@ export async function getMatchmakingData() {
     const user = queryOne(
         "SELECT * FROM users WHERE id = ?",
         [userId]
-    ) as any;
+    ) as UserRow | null;
 
     if (!user) {
         return { success: false, error: 'User not found' };

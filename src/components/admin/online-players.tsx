@@ -19,7 +19,7 @@ export function OnlinePlayers({ initialCount }: OnlinePlayersProps) {
                 if (typeof data.count === 'number') {
                     setCount(data.count);
                 }
-            } catch (e) {
+            } catch {
                 // Ignore errors
             }
         }, 10000);

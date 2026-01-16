@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import { GlassCard } from "@/components/ui/glass-card";
-import { NeonButton } from "@/components/ui/neon-button";
 import { Zap, Mail, Lock, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { loginUser, signInWithGoogle } from "@/lib/actions/auth";
@@ -16,7 +15,6 @@ export default function LoginPage() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const [shake, setShake] = useState(false);
 
     // Redirect authenticated users to dashboard
     useEffect(() => {
@@ -209,7 +207,7 @@ export default function LoginPage() {
                     </Link>
 
                     <div className="text-center text-sm text-muted-foreground mt-6">
-                        Don't have an account?{" "}
+                        Don&apos;t have an account?{" "}
                         <Link href="/auth/register" className="text-accent hover:underline">
                             Create Account
                         </Link>

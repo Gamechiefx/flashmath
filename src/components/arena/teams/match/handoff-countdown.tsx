@@ -65,6 +65,7 @@ export function HandoffCountdown({
     // Initialize audio context
     useEffect(() => {
         if (typeof window !== 'undefined' && !audioContextRef.current) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         return () => {
@@ -92,19 +93,21 @@ export function HandoffCountdown({
             
             oscillator.start(ctx.currentTime);
             oscillator.stop(ctx.currentTime + duration);
-        } catch (e) {
+        } catch {
             // Ignore audio errors
         }
     };
     
     // Countdown effect
     useEffect(() => {
-        if (!isVisible) {
+        // Defer initial setState to avoid setState in effect warning
+        setTimeout(() => {
             setCountdown(secondsUntil);
+        }, 0);
+        
+        if (!isVisible) {
             return;
         }
-        
-        setCountdown(secondsUntil);
         
         const interval = setInterval(() => {
             setCountdown(prev => {

@@ -10,6 +10,9 @@
  * - Redis: Real-time queue state, active matches, parties, CACHING
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- PostgreSQL query results use any types */
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS modules */
+
 // Import the PostgreSQL module
 const arenaPostgres = require('./postgres.js');
 
@@ -24,6 +27,7 @@ let arenaRedis: {
 } | null = null;
 
 try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- CommonJS module
     arenaRedis = require('../../../server-redis.js');
 } catch (e) {
     // Redis not available (e.g., during build), will use direct DB

@@ -20,7 +20,6 @@ import {
     Calendar, 
     Clock, 
     ChevronDown, 
-    ChevronUp,
     Zap,
     TrendingUp,
     AlertTriangle,
@@ -67,6 +66,7 @@ const CONFIDENCE_THRESHOLDS = {
 // HELPERS
 // =============================================================================
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function getConfidenceLabel(value: number): string {
     if (value >= CONFIDENCE_THRESHOLDS.EXCELLENT) return 'Excellent';
     if (value >= CONFIDENCE_THRESHOLDS.GOOD) return 'Good';
@@ -174,9 +174,6 @@ function ImprovementTip({ tip }: { tip: string }) {
 }
 
 function PlacementProgress({ decay }: { decay: DecayInfo }) {
-    const progress = decay.placementMatchesRequired > 0 
-        ? decay.placementMatchesCompleted / decay.placementMatchesRequired 
-        : 0;
     const remaining = decay.placementMatchesRequired - decay.placementMatchesCompleted;
     
     return (

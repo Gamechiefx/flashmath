@@ -19,7 +19,7 @@ export default async function ArenaQueuePage({ searchParams }: PageProps) {
     }
 
     // Check full arena eligibility (email, age, practice sessions)
-    const eligibility = await checkUserArenaEligibility((session.user as any).id);
+    const eligibility = await checkUserArenaEligibility((session.user as { id: string }).id);
     if (!eligibility.isEligible) {
         redirect("/arena");
     }
@@ -57,7 +57,7 @@ export default async function ArenaQueuePage({ searchParams }: PageProps) {
 
     // Use defaults if data fetch fails - ensure all Banner fields are present
     const data = matchmakingData.success ? matchmakingData : {
-        userId: (session.user as any).id,
+        userId: (session.user as { id: string }).id,
         name: session.user.name || 'Player',
         practiceXP: 0,
         mathTiers: {},

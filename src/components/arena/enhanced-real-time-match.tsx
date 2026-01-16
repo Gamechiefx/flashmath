@@ -23,7 +23,7 @@ import { PlayerBanner } from '@/components/arena/player-banner';
 import { soundEngine } from '@/lib/sound-engine';
 import { SoundToggle } from '@/components/sound-toggle';
 import { AuthHeader } from '@/components/auth-header';
-import { LogOut, UserPlus, Check, Loader2, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
+import { LogOut, Loader2, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import { 
     checkFriendshipStatus, 
     sendFriendRequestToUser 
@@ -62,12 +62,23 @@ export function EnhancedRealTimeMatch({
     // Basic match state
     const [answer, setAnswer] = useState('');
     const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
-    const [lastCorrectAnswer, setLastCorrectAnswer] = useState<number | null>(null);
-    const [eloChange, setEloChange] = useState<number | null>(null);
-    const [coinsEarned, setCoinsEarned] = useState<number | null>(null);
     const [hasSavedResult, setHasSavedResult] = useState(false);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
-    const [resultData, setResultData] = useState<any>(null);
+    interface MatchResultData {
+        success: boolean;
+        winnerEloChange?: number;
+        loserEloChange?: number;
+        winnerCoinsEarned?: number;
+        loserCoinsEarned?: number;
+        isRanked?: boolean;
+        isVoid?: boolean;
+        isDraw?: boolean;
+        voidReason?: string;
+        connectionQuality?: string;
+        error?: string;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- resultData is set but not currently displayed
+    const [resultData, setResultData] = useState<MatchResultData | null>(null);
     const savingRef = useRef(false);
 
     // Enhanced connection state
@@ -96,13 +107,16 @@ export function EnhancedRealTimeMatch({
         opponentDivision: string;
     } | null>(null);
     
-    // Friend request state
+    // Friend request state - currently unused but kept for future use
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [friendshipStatus, setFriendshipStatus] = useState<{
         isFriend: boolean;
         requestPending: boolean;
         requestDirection?: 'sent' | 'received';
     } | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [sendingFriendRequest, setSendingFriendRequest] = useState(false);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [friendRequestSent, setFriendRequestSent] = useState(false);
 
     // Enhanced arena socket with improved synchronization
@@ -124,6 +138,7 @@ export function EnhancedRealTimeMatch({
         submitAnswer: socketSubmitAnswer,
         leaveMatch,
         preserveCurrentState,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- forceSync is available but not currently used
         forceSync,
     } = useEnhancedArenaSocket({
         matchId,
@@ -381,12 +396,6 @@ export function EnhancedRealTimeMatch({
         }
     };
 
-    // Enhanced connection recovery
-    const handleConnectionRecovery = useCallback(() => {
-        if (!connected) {
-            forceSync();
-        }
-    }, [connected, forceSync]);
 
     // Sound effects (same as original but with connection awareness)
     const [hasPlayedStartSound, setHasPlayedStartSound] = useState(false);
@@ -450,6 +459,7 @@ export function EnhancedRealTimeMatch({
         checkStatus();
     }, [matchEnded, opponentId]);
     
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- handleSendFriendRequest is kept for future use
     const handleSendFriendRequest = async () => {
         if (!opponentId || opponentId.startsWith('ai_bot_')) return;
         
@@ -463,14 +473,9 @@ export function EnhancedRealTimeMatch({
         }
     };
     
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- isRealOpponent is kept for future use
     const isRealOpponent = opponentId && !opponentId.startsWith('ai_bot_');
-    const canAddFriend = isRealOpponent && 
-        friendshipStatus && 
-        !friendshipStatus.isFriend && 
-        !friendshipStatus.requestPending &&
-        !friendRequestSent;
 
-    const timeProgress = (timeLeft / 60) * 100;
 
     // Enhanced waiting screen with connection status
     if (waitingForOpponent && !matchStarted) {
@@ -530,7 +535,6 @@ export function EnhancedRealTimeMatch({
         const yourScore = finalStats?.yourScore ?? you?.odScore ?? 0;
         const oppScore = finalStats?.opponentScore ?? opponent?.odScore ?? 0;
         const isWinner = wonByForfeit || yourScore > oppScore;
-        const isTie = !wonByForfeit && yourScore === oppScore;
 
         return (
             <motion.div

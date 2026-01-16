@@ -1,6 +1,6 @@
 "use server";
 
-import { execute, loadData, saveData, queryOne } from "@/lib/db";
+import { execute, loadData, saveData, queryOne, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { syncLeagueState } from "@/lib/league-engine";
@@ -14,11 +14,19 @@ export async function getNextProblems(operation: string, count: number = 20) {
     let currentTier = 1;
 
     if (session?.user) {
-        const userId = (session.user as any).id;
-        const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+        const userId = (session.user as { id: string }).id;
+        const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
 
         if (user && user.math_tiers) {
-            currentTier = (user.math_tiers as any)[operation.toLowerCase()] || 1;
+            let mathTiers: Record<string, number> = {};
+            try {
+                mathTiers = typeof user.math_tiers === 'string' 
+                    ? JSON.parse(user.math_tiers) 
+                    : user.math_tiers;
+            } catch {
+                mathTiers = {};
+            }
+            currentTier = mathTiers[operation.toLowerCase()] || 1;
         }
     }
 
@@ -36,13 +44,22 @@ export async function getNextProblems(operation: string, count: number = 20) {
 export async function updateTiers(newTiers: Record<string, number>) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return { error: "User not found" };
 
     // Merge provided tiers with existing
-    const currentTiers = user.math_tiers || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    let currentTiers: Record<string, number> = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    if (user?.math_tiers) {
+        try {
+            currentTiers = typeof user.math_tiers === 'string' 
+                ? JSON.parse(user.math_tiers) 
+                : user.math_tiers;
+        } catch {
+            currentTiers = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+        }
+    }
     const updated = { ...currentTiers, ...newTiers };
 
     // In a real DB we'd use a proper update. Here we hack the JSON object via execute helper or direct
@@ -54,13 +71,20 @@ export async function updateTiers(newTiers: Record<string, number>) {
     return { success: true };
 }
 
-export async function saveSession(sessionData: any) {
+export async function saveSession(sessionData: {
+    operation: string;
+    correctCount: number;
+    totalCount: number;
+    avgSpeed: number;
+    xpGained?: number | string;
+    maxStreak?: number;
+}) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
 
     const { operation, correctCount, totalCount, avgSpeed, xpGained: rawXpGained, maxStreak = 0 } = sessionData;
     const xpGained = Number(rawXpGained) || 0;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     console.log(`[SAVE_SESSION] User: ${userId}, XP: ${xpGained}, Op: ${operation}`);
 
@@ -72,7 +96,7 @@ export async function saveSession(sessionData: any) {
     // 🏆 LEAGUE & LEVELING SYSTEM
     await syncLeagueState(); // Process any time-based resets
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (user) {
         const currentTotalXp = Number(user.total_xp) || 0;
         const newTotalXp = currentTotalXp + xpGained;
@@ -133,7 +157,7 @@ export async function saveSession(sessionData: any) {
 export async function updateMastery(stats: any[]) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     const { getDatabase, generateId, now } = await import("@/lib/db");
     const db = getDatabase();
@@ -185,9 +209,9 @@ export async function updateMastery(stats: any[]) {
 export async function getMasteryTestProblems(operation: string) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     const currentTier = user?.math_tiers?.[operation.toLowerCase()] || 1;
 
     // Already at max tier
@@ -228,9 +252,9 @@ export async function getMasteryTestProblems(operation: string) {
 export async function completeMasteryTest(operation: string, correctCount: number, totalCount: number) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return { error: "User not found" };
 
     const currentTiers = user.math_tiers || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };

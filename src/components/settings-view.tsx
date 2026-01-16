@@ -369,7 +369,7 @@ export function SettingsView({ user }: SettingsViewProps) {
                                     <Monitor size={18} className="text-accent" />
                                     <div>
                                         <div className="text-sm font-bold uppercase tracking-widest">Active Sessions</div>
-                                        <div className="text-xs text-muted-foreground mt-1">Manage where you're logged in</div>
+                                        <div className="text-xs text-muted-foreground mt-1">Manage where you&apos;re logged in</div>
                                     </div>
                                 </div>
                                 <ChevronRight size={18} className="text-muted-foreground" />
@@ -522,7 +522,7 @@ export function SettingsView({ user }: SettingsViewProps) {
                         </p>
                         <div>
                             <label className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 block">
-                                Type "DELETE" to confirm
+                                Type &quot;DELETE&quot; to confirm
                             </label>
                             <input
                                 type="text"

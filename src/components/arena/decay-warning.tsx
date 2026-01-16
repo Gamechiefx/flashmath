@@ -26,7 +26,6 @@ export interface DecayWarningProps {
 
 export function DecayWarning({
     phase,
-    phaseLabel,
     daysUntilNextPhase,
     eloAtRisk,
     isReturningPlayer,

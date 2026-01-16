@@ -11,8 +11,8 @@ export async function GET() {
     }
 
     const db = getDatabase();
-    const userId = (session.user as any).id;
-    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?').get(userId) as any;
+    const userId = (session.user as { id: string }).id;
+    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?').get(userId) as { role?: string | null; is_admin?: number } | undefined;
 
     if (!user) {
         return NextResponse.json({ error: "User not found" }, { status: 404 });

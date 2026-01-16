@@ -1,7 +1,9 @@
 "use server";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { auth } from "@/auth";
-import { queryOne, loadData, execute, getDatabase, generateId, now } from "@/lib/db";
+import { queryOne, loadData, execute, getDatabase, generateId, now, type UserRow } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ACHIEVEMENTS, Achievement, getAchievementById } from "@/lib/achievements";
 
@@ -40,12 +42,20 @@ export interface UserAchievement {
 export async function getUserAchievements(): Promise<UserAchievement[]> {
     const session = await auth();
     if (!session?.user) return [];
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     const db = getDatabase();
+    interface UserAchievementRow {
+        id: string;
+        user_id: string;
+        achievement_id: string;
+        progress: number;
+        unlocked_at?: string | null;
+        claimed_at?: string | null;
+    }
     const userAchievements = db.prepare(
         'SELECT * FROM user_achievements WHERE user_id = ?'
-    ).all(userId) as any[];
+    ).all(userId) as UserAchievementRow[];
 
     return ACHIEVEMENTS.map(achievement => {
         const userAch = userAchievements.find(ua => ua.achievement_id === achievement.id);
@@ -77,7 +87,7 @@ export async function getUserAchievements(): Promise<UserAchievement[]> {
 export async function getUnclaimedAchievementsCount(): Promise<number> {
     const session = await auth();
     if (!session?.user) return 0;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     const db = getDatabase();
     const result = db.prepare(
@@ -93,7 +103,7 @@ export async function getUnclaimedAchievementsCount(): Promise<number> {
 export async function claimAchievement(achievementId: string) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     const achievement = getAchievementById(achievementId);
     if (!achievement) return { error: "Achievement not found" };
@@ -101,9 +111,17 @@ export async function claimAchievement(achievementId: string) {
     const db = getDatabase();
 
     // Check if unlocked and not claimed
+    interface UserAchievementRow {
+        id: string;
+        user_id: string;
+        achievement_id: string;
+        progress: number;
+        unlocked_at?: string | null;
+        claimed_at?: string | null;
+    }
     const userAch = db.prepare(
         'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
-    ).get(userId, achievementId) as any;
+    ).get(userId, achievementId) as UserAchievementRow | undefined;
 
     if (!userAch || !userAch.unlocked_at) {
         return { error: "Achievement not unlocked" };
@@ -114,7 +132,7 @@ export async function claimAchievement(achievementId: string) {
     }
 
     // Grant rewards
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return { error: "User not found" };
 
     let coinsAwarded = 0;
@@ -191,12 +209,20 @@ export async function claimAchievement(achievementId: string) {
  */
 export async function checkAndUnlockAchievements(userId: string) {
     const db = getDatabase();
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return;
 
     const data = loadData();
-    const userSessions = (data.sessions as any[]).filter((s: any) => s.user_id === userId);
-    const userInventory = (data.inventory as any[]).filter((i: any) => i.user_id === userId);
+    interface SessionRow {
+        user_id: string;
+        [key: string]: unknown;
+    }
+    interface InventoryRow {
+        user_id: string;
+        [key: string]: unknown;
+    }
+    const userSessions = (data.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
+    const userInventory = (data.inventory as InventoryRow[]).filter((i: InventoryRow) => i.user_id === userId);
 
     // Calculate stats
     const totalSessions = userSessions.length;
@@ -208,9 +234,17 @@ export async function checkAndUnlockAchievements(userId: string) {
 
     for (const achievement of ACHIEVEMENTS) {
         // Skip if already unlocked
+        interface UserAchievementRow {
+            id: string;
+            user_id: string;
+            achievement_id: string;
+            progress: number;
+            unlocked_at?: string | null;
+            claimed_at?: string | null;
+        }
         const existing = db.prepare(
             'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
-        ).get(userId, achievement.id) as any;
+        ).get(userId, achievement.id) as UserAchievementRow | undefined;
 
         if (existing?.unlocked_at) continue;
 
@@ -285,9 +319,17 @@ export async function updateAchievementProgress(userId: string, achievementId: s
     const achievement = getAchievementById(achievementId);
     if (!achievement) return;
 
+    interface UserAchievementRow {
+        id: string;
+        user_id: string;
+        achievement_id: string;
+        progress: number;
+        unlocked_at?: string | null;
+        claimed_at?: string | null;
+    }
     const existing = db.prepare(
         'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
-    ).get(userId, achievementId) as any;
+    ).get(userId, achievementId) as UserAchievementRow | undefined;
 
     const newProgress = (existing?.progress || 0) + progress;
     const shouldUnlock = newProgress >= achievement.requirement.target;
@@ -332,7 +374,13 @@ export async function checkSessionAchievements(
     if (totalCount >= 20 && correctCount === totalCount) {
         const existing = db.prepare(
             'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
-        ).get(userId, 'perfect_session') as any;
+        ).get(userId, 'perfect_session') as {
+            id: string;
+            user_id: string;
+            achievement_id: string;
+            unlocked_at?: string | null;
+            [key: string]: unknown;
+        } | undefined;
 
         if (!existing?.unlocked_at) {
             if (existing) {
@@ -400,9 +448,17 @@ export async function unlockEmailVerifiedAchievement(userId: string) {
     const achievementId = 'welcome';
 
     // Check if already unlocked
+    interface UserAchievementRow {
+        id: string;
+        user_id: string;
+        achievement_id: string;
+        progress: number;
+        unlocked_at?: string | null;
+        claimed_at?: string | null;
+    }
     const existing = db.prepare(
         'SELECT * FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
-    ).get(userId, achievementId) as any;
+    ).get(userId, achievementId) as UserAchievementRow | undefined;
 
     if (existing?.unlocked_at) {
         return; // Already unlocked

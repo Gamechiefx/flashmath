@@ -2,13 +2,15 @@
 
 import { useEffect } from 'react';
 import { soundEngine } from '@/lib/sound-engine';
+import type { Session } from 'next-auth';
+import type { ArenaStatsResult } from '@/lib/actions/matchmaking';
 
 import { AuthHeader } from "@/components/auth-header";
 import { ModeSelection } from "@/components/arena/mode-selection";
 
 interface ArenaModesClientProps {
-    session: any;
-    arenaStats: any;
+    session: Session | null;
+    arenaStats: ArenaStatsResult;
 }
 
 export function ArenaModesClient({ session, arenaStats }: ArenaModesClientProps) {

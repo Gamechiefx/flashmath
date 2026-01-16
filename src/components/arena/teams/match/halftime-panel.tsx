@@ -361,7 +361,6 @@ function TeamStatsTable({
 }) {
     const [expanded, setExpanded] = useState(defaultExpanded);
     const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
-    const teamScore = players.reduce((sum, p) => sum + p.score, 0);
     const teamAccuracy = players.length > 0
         ? players.reduce((sum, p) => sum + p.accuracy, 0) / players.length
         : 0;
@@ -444,14 +443,7 @@ export function HalftimePanel({
     myTeamPlayers,
     opponentPlayers,
     isIGL,
-    currentUserId,
-    round,
-    half,
-    usedDoubleCallinHalf1,
-    timeoutsRemaining,
     availableSlots,
-    onDoubleCallin,
-    onTimeout,
     onSlotReassign,
     onComplete,
 }: HalftimePanelProps) {

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "gitea-mcp": {
+      "command": "node",
+      "args": ["/root/.cursor/mcp-servers/gitea-mcp/build/index.js"],
+      "env": {
+        "NODE_ENV": "production",
+        "LOG_LEVEL": "info",
+        "GITEA_INSTANCES": "[{\"id\":\"main\",\"name\":\"Lanit Gitea\",\"baseUrl\":\"https://gitcode.lanit.services\",\"token\":\"a2c6e9f867bc6fead13f2f35b26161b5105b2154\"}]"
+      }
+    }
+  }
+}

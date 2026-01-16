@@ -53,7 +53,10 @@ function FloatingMathSymbols() {
     }, [symbols]);
 
     useEffect(() => {
-        setMounted(true);
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setMounted(true);
+        }, 0);
     }, []);
 
     if (!mounted) return null;

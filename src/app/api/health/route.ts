@@ -10,15 +10,15 @@
 import { NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/db';
 
-// PostgreSQL check (lazy import to avoid build issues)
-let arenaPostgres: any = null;
-try {
-    arenaPostgres = require('@/lib/arena/postgres.js');
-} catch {
-    // PostgreSQL not available during build
-}
-
 export async function GET(request: Request) {
+    // PostgreSQL check (lazy import to avoid build issues)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Dynamic import result type unknown
+    let arenaPostgres: any = null;
+    try {
+        arenaPostgres = await import('@/lib/arena/postgres.js').catch(() => null);
+    } catch {
+        // PostgreSQL not available during build
+    }
     const url = new URL(request.url);
     const deep = url.searchParams.get('deep') === 'true';
     

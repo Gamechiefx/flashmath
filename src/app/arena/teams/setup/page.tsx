@@ -20,7 +20,7 @@ export default async function TeamSetupPage({
     }
 
     // Check full arena eligibility (email, age, practice sessions)
-    const eligibility = await checkUserArenaEligibility((session.user as any).id);
+    const eligibility = await checkUserArenaEligibility((session.user as { id: string }).id);
     if (!eligibility.isEligible) {
         redirect('/arena');
     }

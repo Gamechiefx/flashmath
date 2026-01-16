@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, markTokenUsed } from "@/lib/auth/tokens";
-import { getDatabase } from "@/lib/db";
+import { getDatabase, type UserRow } from "@/lib/db";
 import { cookies } from "next/headers";
 import { encode } from "next-auth/jwt";
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         const db = getDatabase();
 
         // Get the user
-        const user = db.prepare("SELECT * FROM users WHERE email = ?").get(result.email) as any;
+        const user = db.prepare("SELECT * FROM users WHERE email = ?").get(result.email) as UserRow | undefined;
 
         if (!user) {
             console.log("[MagicLink] User not found:", result.email);

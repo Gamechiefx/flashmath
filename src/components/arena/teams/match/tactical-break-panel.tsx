@@ -79,6 +79,7 @@ export function TacticalBreakPanel({
     onComplete,
 }: TacticalBreakPanelProps) {
     const [remainingMs, setRemainingMs] = useState(durationMs);
+    // eslint-disable-next-line react-hooks/purity -- Time tracking requires Date.now()
     const startTimeRef = useRef(Date.now());
 
     useEffect(() => {

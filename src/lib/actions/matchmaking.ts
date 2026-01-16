@@ -1,5 +1,7 @@
 'use server';
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results and Redis operations use any types */
+
 /**
  * Arena Matchmaking Server Actions
  * Real-time matchmaking using Redis for queue management
@@ -15,8 +17,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { 
     getPlayerElo as getPlayerEloFromPostgres,
     getOrCreateArenaPlayer,
-    updatePlayerDuelElo,
-    recordDuelMatch,
     getFullArenaStats,
     updatePlayerOperationElo,
     updatePlayerTeamOperationElo,
@@ -389,7 +389,7 @@ export async function joinQueue(params: {
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const userName = session.user.name || 'Player';
     const confidence = params.confidence ?? 0.5; // Default to 50% if not provided
     const confidenceBracket = getConfidenceBracket(confidence);
@@ -481,7 +481,7 @@ export async function leaveQueue(params: {
         return { success: false };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const redis = await getRedis();
     if (!redis) return { success: false };
 
@@ -533,7 +533,7 @@ export async function checkForMatch(params: {
         return { matched: false };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const redis = await getRedis();
 
     if (!redis) {
@@ -894,7 +894,7 @@ export async function clearMatch(matchId: string): Promise<{ success: boolean }>
         return { success: false };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const redis = await getRedis();
     if (!redis) return { success: false };
 
@@ -1041,10 +1041,10 @@ function calculateEloChange(
     const actualScore = won ? 1 : 0;
 
     // Base ELO change
-    let baseChange = kFactor * (actualScore - expectedScore);
+    const baseChange = kFactor * (actualScore - expectedScore);
 
     // Default breakdown (no bonuses)
-    let bonusBreakdown = { aps: 0, accuracy: 0, speed: 0, streak: 0 };
+    const bonusBreakdown = { aps: 0, accuracy: 0, speed: 0, streak: 0 };
 
     // If no metrics provided, return base change
     if (!metrics) {
@@ -1219,7 +1219,7 @@ export async function saveMatchResult(params: {
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     console.log(`[Match] saveMatchResult userId=${userId}`);
 
     // Only allow match participants to save results
@@ -1274,7 +1274,11 @@ export async function saveMatchResult(params: {
             const lockAcquired = await redis.setnx(saveLockKey, userId);
             if (!lockAcquired) {
                 await new Promise(resolve => setTimeout(resolve, 500));
-                const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as any;
+                const existingMatch = db.prepare("SELECT id, winner_elo_change, loser_elo_change FROM arena_matches WHERE id = ?").get(params.matchId) as {
+                    id: string;
+                    winner_elo_change?: number;
+                    loser_elo_change?: number;
+                } | undefined;
                 if (existingMatch) {
                     const { revalidatePath } = await import("next/cache");
                     revalidatePath("/arena/modes");
@@ -1332,24 +1336,30 @@ export async function saveMatchResult(params: {
 
             if (isWinnerHuman) {
                 // Ensure player exists in PostgreSQL
-                const winnerUser = db.prepare('SELECT name FROM users WHERE id = ?').get(params.winnerId) as any;
+                const winnerUser = db.prepare('SELECT name FROM users WHERE id = ?').get(params.winnerId) as { name: string } | undefined;
                 const winnerPg = await getOrCreateArenaPlayer(params.winnerId, winnerUser?.name || 'Player');
                 
                 // Get operation-specific ELO
                 const eloKey = isDuel 
                     ? `elo_${pgOperation}` 
                     : `elo_${params.mode}_${pgOperation}`;
-                winnerCurrentElo = (winnerPg as any)[eloKey] || 300;
+                interface ArenaPlayer {
+                    [key: string]: unknown;
+                }
+                winnerCurrentElo = (winnerPg as ArenaPlayer)[eloKey] as number || 300;
                 winnerStreak = (isDuel ? winnerPg.duel_win_streak : winnerPg.team_win_streak) + 1 || 1;
             }
             if (isLoserHuman) {
-                const loserUser = db.prepare('SELECT name FROM users WHERE id = ?').get(params.loserId) as any;
+                const loserUser = db.prepare('SELECT name FROM users WHERE id = ?').get(params.loserId) as { name: string } | undefined;
                 const loserPg = await getOrCreateArenaPlayer(params.loserId, loserUser?.name || 'Player');
                 
                 const eloKey = isDuel 
                     ? `elo_${pgOperation}` 
                     : `elo_${params.mode}_${pgOperation}`;
-                loserCurrentElo = (loserPg as any)[eloKey] || 300;
+                interface ArenaPlayer {
+                    [key: string]: unknown;
+                }
+                loserCurrentElo = (loserPg as ArenaPlayer)[eloKey] as number || 300;
             }
 
             // Build performance metrics for new ELO calculation
@@ -1473,7 +1483,7 @@ export async function saveMatchResult(params: {
             // Update winner ELO in PostgreSQL (source of truth)
             if (isWinnerHuman) {
                 // Update coins in SQLite (user profile data)
-                const winner = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.winnerId) as any;
+                const winner = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.winnerId) as { coins?: number } | undefined;
                 const newCoins = (winner?.coins || 0) + winnerCoinsEarned;
                 db.prepare("UPDATE users SET coins = ? WHERE id = ?").run(newCoins, params.winnerId);
 
@@ -1539,7 +1549,7 @@ export async function saveMatchResult(params: {
         } else {
             // Unranked (mixed) - just update coins
             if (isWinnerHuman) {
-                const winner = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.winnerId) as any;
+                const winner = db.prepare("SELECT coins FROM users WHERE id = ?").get(params.winnerId) as { coins?: number } | undefined;
                 db.prepare("UPDATE users SET coins = ? WHERE id = ?").run((winner?.coins || 0) + winnerCoinsEarned, params.winnerId);
             }
             if (isLoserHuman) {
@@ -1590,7 +1600,7 @@ export async function saveMatchResult(params: {
                 // For human matches, try to get opponent data
                 let opponentElo = humanElo;
                 let opponentTier = humanTier;
-                let opponentConfidence = 0.5;
+                const opponentConfidence = 0.5;
                 
                 if (!isAiMatch) {
                     const opponentId = isWinnerHuman ? params.loserId : params.winnerId;
@@ -1778,7 +1788,7 @@ const DEFAULT_STATS: ArenaStatsResult = {
  */
 export async function getArenaStats(userId?: string): Promise<ArenaStatsResult> {
     const session = await auth();
-    const targetId = userId || (session?.user as any)?.id;
+    const targetId = userId || (session?.user as { id?: string })?.id;
 
     if (!targetId) {
         return DEFAULT_STATS;
@@ -1796,7 +1806,7 @@ export async function getArenaStats(userId?: string): Promise<ArenaStatsResult> 
             // Player doesn't exist in PostgreSQL yet, create them
             const { getDatabase } = await import("@/lib/db");
             const db = getDatabase();
-            const user = db.prepare('SELECT name FROM users WHERE id = ?').get(targetId) as any;
+            const user = db.prepare('SELECT name FROM users WHERE id = ?').get(targetId) as { name: string } | undefined;
             if (user) {
                 await getOrCreateArenaPlayer(targetId, user.name || 'Player');
                 // Return defaults for new player
@@ -1817,7 +1827,7 @@ export async function getArenaStats(userId?: string): Promise<ArenaStatsResult> 
 export async function sendMatchEmoji(matchId: string, emoji: string) {
     const session = await auth();
     if (!session?.user) return { success: false };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     const redis = await getRedis();
     if (!redis) return { success: false };
@@ -1937,7 +1947,7 @@ export async function getMatchHistory(limit: number = 10): Promise<{
         return { matches: [], error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Import PostgreSQL arena functions
@@ -1962,7 +1972,7 @@ export async function getMatchHistory(limit: number = 10): Promise<{
                 return 'AI Opponent';
             }
             try {
-                const user = db.prepare('SELECT name FROM users WHERE id = ?').get(odUserId) as any;
+                const user = db.prepare('SELECT name FROM users WHERE id = ?').get(odUserId) as { name: string } | undefined;
                 const name = user?.name || fallbackName || 'Unknown';
                 userNameCache[odUserId] = name;
                 return name;
@@ -2039,7 +2049,7 @@ export async function getTeamMatchHistoryForUser(limit: number = 10): Promise<{
         return { matches: [], error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Import PostgreSQL arena functions
@@ -2062,7 +2072,7 @@ export async function getTeamMatchHistoryForUser(limit: number = 10): Promise<{
             if (userNameCache[odUserId]) return userNameCache[odUserId];
             if (odUserId?.startsWith('ai_bot_')) return 'AI Bot';
             try {
-                const user = db.prepare('SELECT name FROM users WHERE id = ?').get(odUserId) as any;
+                const user = db.prepare('SELECT name FROM users WHERE id = ?').get(odUserId) as { name: string } | undefined;
                 const name = user?.name || 'Unknown';
                 userNameCache[odUserId] = name;
                 return name;

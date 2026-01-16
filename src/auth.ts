@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
-import { queryOne, loadData, execute, getDatabase } from "./lib/db";
+import { queryOne, loadData, getDatabase } from "./lib/db";
 import { authConfig } from "./auth.config";
 import { v4 as uuidv4 } from "uuid";
 
@@ -21,7 +21,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
                 // User lookup in SQLite
                 console.log("[AUTH] Attempting lookup for:", credentials.email);
-                const user = queryOne('SELECT * FROM users WHERE email = ?', [credentials.email]) as any;
+                const user = queryOne('SELECT * FROM users WHERE email = ?', [credentials.email]) as UserRow | null;
 
                 if (!user) {
                     console.log("[AUTH] User not found:", credentials.email);
@@ -66,7 +66,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 console.log("[AUTH] Google sign in for:", email);
 
                 // Check if user exists
-                let existingUser = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Database query result
+                const existingUser = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as any;
 
                 if (existingUser) {
                     // Check if banned
@@ -116,7 +117,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
             return true;
         },
-        async jwt({ token, user, account }) {
+        async jwt({ token, user }) {
             if (user) {
                 token.id = user.id;
             }
@@ -127,7 +128,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 if (token && session.user) {
                     console.log("[SESSION] Processing session for token:", token.id);
                     // Get freshest data from DB for header display
-                    const user = queryOne("SELECT * FROM users WHERE id = ?", [token.id]) as any;
+                    const user = queryOne("SELECT * FROM users WHERE id = ?", [token.id]) as UserRow | null;
 
                     if (user) {
                         console.log("[SESSION] Found user:", user.name, "BannedUntil:", user.banned_until);
@@ -136,18 +137,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                             const banDate = new Date(user.banned_until);
                             if (banDate > new Date()) {
                                 console.log("[AUTH] Session invalidated due to ban:", user.banned_until);
-                                return null as any; // Force logout
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth requires null for logout
+                        return null as any; // Force logout
                             }
                         }
 
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                         (session.user as any).id = user.id;
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                         (session.user as any).level = user.level;
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                         (session.user as any).coins = user.coins;
                         console.log(`[SESSION] User ${user.name} coins from DB: ${user.coins}`);
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                         (session.user as any).equipped_items = user.equipped_items;
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                         (session.user as any).emailVerified = !!user.email_verified;
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                         (session.user as any).createdAt = user.created_at;
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                         (session.user as any).role = user.role; // For admin bypass
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                         (session.user as any).dob = user.dob; // Date of birth for settings
 
                         // Update last_active timestamp for online tracking
@@ -158,14 +168,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                         const titleId = user.equipped_items?.title;
                         if (titleId && titleId !== 'default') {
                             const db = loadData();
-                            const titleItem = db.shop_items.find((i: any) => i.id === titleId);
+                            interface ShopItem {
+                                id: string;
+                                name?: string;
+                            }
+                            const titleItem = db.shop_items.find((i: ShopItem) => i.id === titleId);
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                             (session.user as any).equippedTitleName = titleItem?.name || null;
                         } else {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session extension
                             (session.user as any).equippedTitleName = null;
                         }
                     } else {
                         console.log("[SESSION] User not found for token:", token.id, "Invalidating.");
                         // User was deleted/not found - invalidate session
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth requires null for logout
                         return null as any;
                     }
                 }

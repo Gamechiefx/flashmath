@@ -85,7 +85,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     
     // Prefer props over session (avoids SessionProvider dependency during navigation)
     const effectiveUserId = propsUserId || session?.user?.id;
-    const effectiveUserName = propsUserName || (session?.user as any)?.name || 'Unknown';
+    const effectiveUserName = propsUserName || (session?.user as { name?: string })?.name || 'Unknown';
     
     const [isConnected, setIsConnected] = useState(false);
     const [myStatus, setMyStatusState] = useState<PresenceStatus>('online');
@@ -111,7 +111,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
 
     // Step update for real-time sync (party/roles/ready flow)
     const [latestStepUpdate, setLatestStepUpdate] = useState<PartyStepUpdate | null>(null);
-    
+
     const userIdRef = useRef<string | null>(null);
     const statusRef = useRef<PresenceStatus>('online');
     

@@ -1,7 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
-import { getDatabase, generateId, now } from "@/lib/db";
+import { getDatabase, generateId, now, type UserRow } from "@/lib/db";
 import { Role, Permission, hasPermission, canManageRole, parseRole, ROLE_HIERARCHY } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 
@@ -15,7 +15,7 @@ export async function getCurrentUserRole(): Promise<Role> {
     const db = getDatabase();
     // Use SELECT * to handle databases without role column
     const user = db.prepare('SELECT * FROM users WHERE id = ?')
-        .get((session.user as any).id) as any;
+        .get((session.user as { id: string }).id) as UserRow | undefined;
 
     if (!user) return Role.USER;
     return parseRole(user.role, !!user.is_admin);
@@ -39,19 +39,19 @@ export async function changeUserRole(
     const session = await auth();
     if (!session?.user) return { success: false, error: "Unauthorized" };
 
-    const currentUserId = (session.user as any).id;
+    const currentUserId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     // Get current user's role (SELECT * to handle missing role column)
     const currentUser = db.prepare('SELECT * FROM users WHERE id = ?')
-        .get(currentUserId) as any;
+        .get(currentUserId) as UserRow | undefined;
     if (!currentUser) return { success: false, error: "User not found" };
 
     const currentUserRole = parseRole(currentUser.role, !!currentUser.is_admin);
 
     // Get target user's current role
     const targetUser = db.prepare('SELECT * FROM users WHERE id = ?')
-        .get(targetUserId) as any;
+        .get(targetUserId) as UserRow | undefined;
     if (!targetUser) return { success: false, error: "Target user not found" };
 
     const targetUserRole = parseRole(targetUser.role, !!targetUser.is_admin);
@@ -116,7 +116,7 @@ export async function getUsersWithRoles(): Promise<Array<{
     const db = getDatabase();
     // Use SELECT * to handle databases without role column
     const users = db.prepare('SELECT * FROM users ORDER BY created_at DESC')
-        .all() as any[];
+        .all() as UserRow[];
 
     return users.map(user => ({
         id: user.id,

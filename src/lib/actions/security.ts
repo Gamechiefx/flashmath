@@ -4,6 +4,8 @@
  * Security Activity Log Actions
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { getDatabase } from "@/lib/db";
 import { auth } from "@/auth";
 import { v4 as uuidv4 } from "uuid";
@@ -54,7 +56,7 @@ export async function getSecurityActivity(limit: number = 20): Promise<SecurityA
         return [];
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     const activities = db.prepare(`
@@ -63,7 +65,14 @@ export async function getSecurityActivity(limit: number = 20): Promise<SecurityA
         WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT ?
-    `).all(userId, limit) as any[];
+    `).all(userId, limit) as Array<{
+        id: string;
+        action: string;
+        ip_address: string | null;
+        user_agent: string | null;
+        details: string | null;
+        created_at: string;
+    }>;
 
     return activities.map(a => ({
         ...a,
@@ -84,14 +93,19 @@ export async function getLinkedAccounts(): Promise<Array<{
         return [];
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     return db.prepare(`
         SELECT provider, provider_account_id, created_at 
         FROM oauth_accounts 
         WHERE user_id = ?
-    `).all(userId) as any[];
+    `).all(userId) as Array<{
+        provider: string;
+        provider_account_id: string;
+        created_at?: string;
+        [key: string]: unknown;
+    }>;
 }
 
 /**
@@ -103,12 +117,12 @@ export async function unlinkAccount(provider: string): Promise<{ success: boolea
         return { success: false, error: "Not authenticated" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     // Check if user has a password (can't unlink if it's their only login method)
-    const user = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userId) as any;
-    const linkedAccounts = db.prepare("SELECT COUNT(*) as count FROM oauth_accounts WHERE user_id = ?").get(userId) as any;
+    const user = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(userId) as { password_hash?: string | null } | undefined;
+    const linkedAccounts = db.prepare("SELECT COUNT(*) as count FROM oauth_accounts WHERE user_id = ?").get(userId) as { count: number } | undefined;
 
     if (!user.password_hash && linkedAccounts.count <= 1) {
         return { success: false, error: "Cannot unlink your only login method. Set a password first." };

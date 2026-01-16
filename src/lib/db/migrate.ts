@@ -3,6 +3,8 @@
  * Run this once to migrate existing flashmath_db.json to SQLite
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Migration script uses any for JSON data */
+
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';

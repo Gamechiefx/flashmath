@@ -64,7 +64,7 @@ function RankBadge({ rank, division }: { rank: string; division: string }) {
     );
 }
 
-export function MatchmakingQueue({ userId, userName, level, practiceTier, rank, division, elo, operation = 'mixed', mode = '1v1', isRanked = true, equippedBanner = 'default', equippedTitle = 'Challenger', confidence }: MatchmakingQueueProps) {
+export function MatchmakingQueue({ userName, level, practiceTier, rank, division, elo, operation = 'mixed', mode = '1v1', equippedBanner = 'default', equippedTitle = 'Challenger', confidence }: MatchmakingQueueProps) {
     const router = useRouter();
     const opLabel = OPERATION_LABELS[operation] || OPERATION_LABELS.mixed;
 

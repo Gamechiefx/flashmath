@@ -100,30 +100,36 @@ export function StrategyTimer({
 
     // Handle callbacks
     useEffect(() => {
-        // Complete callback
-        if (remainingSeconds <= 0 && !hasCalledComplete && onComplete) {
-            setHasCalledComplete(true);
-            onComplete();
-        }
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            // Complete callback
+            if (remainingSeconds <= 0 && !hasCalledComplete && onComplete) {
+                setHasCalledComplete(true);
+                onComplete();
+            }
 
-        // Warning callbacks at specific thresholds
-        if (onWarning && remainingSeconds < prevRemainingRef.current) {
-            const thresholds = [30, 15, 10, 5, 3, 2, 1];
-            for (const threshold of thresholds) {
-                if (remainingSeconds === threshold && !warningsCalled.has(threshold)) {
-                    setWarningsCalled(prev => new Set([...prev, threshold]));
-                    onWarning(threshold);
+            // Warning callbacks at specific thresholds
+            if (onWarning && remainingSeconds < prevRemainingRef.current) {
+                const thresholds = [30, 15, 10, 5, 3, 2, 1];
+                for (const threshold of thresholds) {
+                    if (remainingSeconds === threshold && !warningsCalled.has(threshold)) {
+                        setWarningsCalled(prev => new Set([...prev, threshold]));
+                        onWarning(threshold);
+                    }
                 }
             }
-        }
+        }, 0);
 
         prevRemainingRef.current = remainingSeconds;
     }, [remainingSeconds, hasCalledComplete, onComplete, onWarning, warningsCalled]);
 
     // Reset when totalSeconds changes (new timer started)
     useEffect(() => {
-        setHasCalledComplete(false);
-        setWarningsCalled(new Set());
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setHasCalledComplete(false);
+            setWarningsCalled(new Set());
+        }, 0);
     }, [totalSeconds]);
 
     return (

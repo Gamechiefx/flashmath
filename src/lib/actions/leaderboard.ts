@@ -1,5 +1,7 @@
 'use server';
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { getDatabase } from '@/lib/db/sqlite';
 import { auth } from '@/auth';
 import { getLeagueFromElo } from '@/lib/arena/leagues';
@@ -250,7 +252,14 @@ export async function getDuelLeaderboard(
         try {
             const { getDuelLeaderboard: getPgLeaderboard } = await import('@/lib/arena/arena-db');
             // Pass operation to filter by specific operation (addition, subtraction, multiplication, division, or overall)
-            const pgData = await getPgLeaderboard(limit, operation) as any[];
+            interface LeaderboardRow {
+                user_id: string;
+                elo?: number;
+                matches_won?: number;
+                matches_lost?: number;
+                [key: string]: unknown;
+            }
+            const pgData = await getPgLeaderboard(limit, operation) as LeaderboardRow[];
             
             // #region agent log
             console.log('[Leaderboard] PostgreSQL leaderboard data:', pgData?.length || 0, 'players');
@@ -359,7 +368,16 @@ export async function getDuelLeaderboard(
             operation !== 'overall' 
                 ? [weekAgo, operation, weekAgo, operation, limit]
                 : [weekAgo, weekAgo, limit]
-        ) as any[];
+        ) as Array<{
+            user_id: string;
+            name: string;
+            elo: number;
+            wins: number;
+            losses: number;
+            net_elo_change?: number;
+            weekly_wins?: number;
+            [key: string]: unknown;
+        }>;
 
         totalPlayers = rows.length;
 
@@ -395,7 +413,13 @@ export async function getDuelLeaderboard(
                     FROM arena_matches WHERE mode = '1v1' AND loser_id IN (${placeholders}) ${opFilter}
                 )
                 GROUP BY user_id
-            `).all(queryParams) as any[];
+            `).all(queryParams) as Array<{
+                user_id: string;
+                avg_accuracy?: number;
+                avg_speed?: number;
+                best_streak?: number;
+                [key: string]: unknown;
+            }>;
             
             for (const p of perfRows) {
                 perfStats.set(p.user_id, {
@@ -406,7 +430,17 @@ export async function getDuelLeaderboard(
             }
         }
 
-        entries = rows.map((row: any, index: number) => {
+        entries = rows.map((row: {
+            user_id: string;
+            name: string;
+            elo: number;
+            wins: number;
+            losses: number;
+            streak?: number;
+            best_streak?: number;
+            equipped_items?: string | null;
+            [key: string]: unknown;
+        }, index: number) => {
             const equippedItems = row.equipped_items ? JSON.parse(row.equipped_items) : {};
             // Get ELO from PostgreSQL (source of truth), fallback to 300
             const playerPgStats = pgStats.get(row.id);
@@ -506,7 +540,16 @@ export async function getDuelLeaderboard(
                  AND (u2.arena_duel_wins > 0 OR u2.arena_duel_losses > 0)) as rank
             FROM users u
             WHERE u.id = ?
-        `).get(currentUserId) as any;
+        `).get(currentUserId) as {
+            elo: number;
+            wins: number;
+            losses: number;
+            streak: number;
+            best_streak: number;
+            equipped_items?: string | null;
+            rank?: number;
+            [key: string]: unknown;
+        } | undefined;
 
         if (userRow && (userRow.wins > 0 || userRow.losses > 0)) {
             const equippedItems = userRow.equipped_items ? JSON.parse(userRow.equipped_items) : {};
@@ -641,9 +684,29 @@ export async function getTeamLeaderboard(
             WHERE (u.arena_team_wins > 0 OR u.arena_team_losses > 0)
             ORDER BY u.${eloColumn} DESC
             LIMIT ?
-        `).all(limit) as any[];
+        `).all(limit) as Array<{
+            user_id: string;
+            name: string;
+            elo: number;
+            wins: number;
+            losses: number;
+            streak?: number;
+            best_streak?: number;
+            equipped_items?: string | null;
+            [key: string]: unknown;
+        }>;
 
-        entries = rows.map((row: any, index: number) => {
+        entries = rows.map((row: {
+            user_id: string;
+            name: string;
+            elo: number;
+            wins: number;
+            losses: number;
+            streak?: number;
+            best_streak?: number;
+            equipped_items?: string | null;
+            [key: string]: unknown;
+        }, index: number) => {
             const equippedItems = row.equipped_items ? JSON.parse(row.equipped_items) : {};
             const league = getLeagueFromElo(row.elo);
             const winRate = row.wins + row.losses > 0 
@@ -734,11 +797,30 @@ export async function getTeamLeaderboard(
             operation !== 'overall' 
                 ? [weekAgo, operation, weekAgo, operation, limit]
                 : [weekAgo, weekAgo, limit]
-        ) as any[];
+        ) as Array<{
+            user_id: string;
+            name: string;
+            elo: number;
+            wins: number;
+            losses: number;
+            net_elo_change?: number;
+            weekly_wins?: number;
+            [key: string]: unknown;
+        }>;
 
         totalPlayers = rows.length;
 
-        entries = rows.map((row: any, index: number) => {
+        entries = rows.map((row: {
+            user_id: string;
+            name: string;
+            elo: number;
+            wins: number;
+            losses: number;
+            streak?: number;
+            best_streak?: number;
+            equipped_items?: string | null;
+            [key: string]: unknown;
+        }, index: number) => {
             const equippedItems = row.equipped_items ? JSON.parse(row.equipped_items) : {};
             const league = getLeagueFromElo(row.elo);
             const winRate = row.wins + row.losses > 0 
@@ -799,7 +881,16 @@ export async function getTeamLeaderboard(
                  AND (u2.arena_team_wins > 0 OR u2.arena_team_losses > 0)) as rank
             FROM users u
             WHERE u.id = ?
-        `).get(currentUserId) as any;
+        `).get(currentUserId) as {
+            elo: number;
+            wins: number;
+            losses: number;
+            streak: number;
+            best_streak: number;
+            equipped_items?: string | null;
+            rank?: number;
+            [key: string]: unknown;
+        } | undefined;
 
         if (userRow && (userRow.wins > 0 || userRow.losses > 0)) {
             const equippedItems = userRow.equipped_items ? JSON.parse(userRow.equipped_items) : {};
@@ -1006,7 +1097,16 @@ export async function getPersistentTeamLeaderboard(
             JOIN team_elo e ON e.team_id = t.id
             JOIN users u ON u.id = t.created_by
             WHERE t.id = ?
-        `).get(currentUserTeamIds[0]) as any;
+        `).get(currentUserTeamIds[0]) as {
+            id: string;
+            name: string;
+            elo: number;
+            wins: number;
+            losses: number;
+            captain_name?: string;
+            member_count?: number;
+            [key: string]: unknown;
+        } | undefined;
 
         if (userTeam) {
             // Calculate rank

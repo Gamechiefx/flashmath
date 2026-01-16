@@ -123,8 +123,12 @@ export function TeamSetupClient({
                 const elem = document.documentElement;
                 if (elem.requestFullscreen) {
                     await elem.requestFullscreen();
-                } else if ((elem as any).webkitRequestFullscreen) {
-                    await (elem as any).webkitRequestFullscreen();
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                    const webkitElem = elem as any;
+                    if (webkitElem.webkitRequestFullscreen) {
+                        await webkitElem.webkitRequestFullscreen();
+                    }
                 }
             }
         } catch (err) {

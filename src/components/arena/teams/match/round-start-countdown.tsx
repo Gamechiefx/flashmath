@@ -54,6 +54,7 @@ export function RoundStartCountdown({
         
         if (typeof window !== 'undefined' && !audioContextRef.current) {
             try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
             } catch (e) {
                 console.warn('[RoundCountdown] Failed to create AudioContext:', e);

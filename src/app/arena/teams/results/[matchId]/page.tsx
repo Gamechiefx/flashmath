@@ -3,9 +3,7 @@ import { redirect } from 'next/navigation';
 import { TeamResultsClient } from './team-results-client';
 import { checkUserArenaEligibility } from '@/lib/actions/arena';
 import { getDatabase } from '@/lib/db/sqlite';
-
-// Import the PostgreSQL module for arena data
-const arenaPostgres = require('@/lib/arena/postgres');
+import * as arenaPostgres from '@/lib/arena/postgres';
 
 async function getMatchResults(matchId: string) {
     try {
@@ -32,7 +30,7 @@ export default async function TeamResultsPage({
     }
 
     // Check full arena eligibility (email, age, practice sessions)
-    const eligibility = await checkUserArenaEligibility((session.user as any).id);
+    const eligibility = await checkUserArenaEligibility((session.user as { id: string }).id);
     if (!eligibility.isEligible) {
         redirect('/arena');
     }

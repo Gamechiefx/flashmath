@@ -7,6 +7,8 @@
  * Handles real-time match state, spectating, and answer submissions.
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Socket.IO event handlers use any types */
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 

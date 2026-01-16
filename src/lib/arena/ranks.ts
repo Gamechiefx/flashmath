@@ -18,7 +18,9 @@
  * - Then promote to next rank and reset
  */
 
-import { getBandForTier, BANDS } from '@/lib/tier-system';
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
+import { getBandForTier } from '@/lib/tier-system';
 
 export interface ArenaRank {
     rank: string;

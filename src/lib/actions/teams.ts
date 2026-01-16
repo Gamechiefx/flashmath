@@ -228,7 +228,22 @@ export async function getTeam(
         FROM teams t
         LEFT JOIN team_elo e ON e.team_id = t.id
         WHERE t.id = ?
-    `).get(teamId) as any;
+    `).get(teamId) as {
+        id: string;
+        name: string;
+        tag?: string | null;
+        created_by: string;
+        team_wins?: number;
+        team_losses?: number;
+        team_win_streak?: number;
+        team_best_win_streak?: number;
+        elo_5v5?: number;
+        elo_5v5_addition?: number;
+        elo_5v5_subtraction?: number;
+        elo_5v5_multiplication?: number;
+        elo_5v5_division?: number;
+        [key: string]: unknown;
+    } | undefined;
 
     if (!team) {
         return null;
@@ -247,7 +262,22 @@ export async function getTeam(
         ORDER BY 
             CASE tm.role WHEN 'captain' THEN 0 WHEN 'igl' THEN 1 ELSE 2 END,
             tm.joined_at ASC
-    `).all(teamId) as any[];
+    `).all(teamId) as Array<{
+        id: string;
+        user_id: string;
+        role?: string;
+        primary_operation?: string | null;
+        joined_at?: string;
+        name: string;
+        level?: number;
+        equipped_items?: string | null;
+        arena_elo_5v5?: number;
+        arena_elo_5v5_addition?: number;
+        arena_elo_5v5_subtraction?: number;
+        arena_elo_5v5_multiplication?: number;
+        arena_elo_5v5_division?: number;
+        [key: string]: unknown;
+    }>;
 
     const memberList: TeamMember[] = members.map(m => {
         const equipped = m.equipped_items ? JSON.parse(m.equipped_items) : {};
@@ -322,7 +352,13 @@ export async function getUserTeams(
         JOIN team_members tm ON tm.team_id = t.id
         WHERE tm.user_id = ?
         ORDER BY t.team_wins DESC
-    `).all(targetUserId) as any[];
+    `).all(targetUserId) as Array<{
+        id: string;
+        name: string;
+        team_wins?: number;
+        team_losses?: number;
+        [key: string]: unknown;
+    }>;
 
     return teams.map(t => ({
         id: t.id,
@@ -433,7 +469,14 @@ export async function acceptTeamInvite(
     const invite = db.prepare(`
         SELECT id, team_id, invitee_id, expires_at, status
         FROM team_invites WHERE id = ?
-    `).get(inviteId) as any;
+    `).get(inviteId) as {
+        id: string;
+        team_id: string;
+        invitee_id: string;
+        expires_at?: string | null;
+        status?: string;
+        [key: string]: unknown;
+    } | undefined;
 
     if (!invite) {
         return { error: 'Invite not found' };
@@ -532,7 +575,15 @@ export async function getTeamInvites(): Promise<TeamInvite[]> {
         JOIN users u ON u.id = ti.inviter_id
         WHERE ti.invitee_id = ? AND ti.status = 'pending'
         ORDER BY ti.created_at DESC
-    `).all(session.user.id) as any[];
+    `).all(session.user.id) as Array<{
+        id: string;
+        team_id: string;
+        inviter_id: string;
+        created_at?: string;
+        team_name?: string;
+        inviter_name?: string;
+        [key: string]: unknown;
+    }>;
 
     return invites.map(i => ({
         id: i.id,
@@ -747,7 +798,13 @@ export async function getTeamElo(
             elo_5v5, elo_5v5_addition, elo_5v5_subtraction,
             elo_5v5_multiplication, elo_5v5_division
         FROM team_elo WHERE team_id = ?
-    `).get(teamId) as any;
+    `).get(teamId) as {
+        elo_5v5?: number;
+        elo_5v5_addition?: number;
+        elo_5v5_subtraction?: number;
+        elo_5v5_multiplication?: number;
+        elo_5v5_division?: number;
+    } | undefined;
 
     if (!elo) {
         return 300; // Default ELO
@@ -1118,7 +1175,15 @@ export async function searchTeams(
         WHERE t.name LIKE ? OR t.tag LIKE ?
         ORDER BY t.team_wins DESC
         LIMIT ?
-    `).all(searchQuery, searchQuery, limit) as any[];
+    `).all(searchQuery, searchQuery, limit) as Array<{
+        id: string;
+        name: string;
+        tag?: string | null;
+        team_wins?: number;
+        team_losses?: number;
+        elo_5v5?: number;
+        [key: string]: unknown;
+    }>;
 
     return teams.map(t => ({
         id: t.id,

@@ -35,8 +35,6 @@ import {
     updateTelemetry,
     loadEchoQueue,
     persistLearnerModel,
-    tierToDifficulty,
-    difficultyToTier,
     updateSkillMastery,
 } from './state';
 

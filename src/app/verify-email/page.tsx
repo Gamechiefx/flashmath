@@ -53,21 +53,7 @@ export default function VerifyEmailPage() {
         }
     };
 
-    // Auto-submit when code is complete
-    useEffect(() => {
-        if (code.every(d => d) && !isLoading) {
-            handleVerify();
-        }
-    }, [code]);
-
-    // Resend cooldown timer
-    useEffect(() => {
-        if (resendCooldown > 0) {
-            const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
-            return () => clearTimeout(timer);
-        }
-    }, [resendCooldown]);
-
+    // Define handleVerify before useEffect to avoid "accessed before declaration" error
     const handleVerify = async () => {
         const fullCode = code.join("");
         if (fullCode.length !== 6) return;
@@ -88,6 +74,22 @@ export default function VerifyEmailPage() {
 
         setIsLoading(false);
     };
+
+    // Auto-submit when code is complete
+    useEffect(() => {
+        if (code.every(d => d) && !isLoading) {
+            handleVerify();
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [code]);
+
+    // Resend cooldown timer
+    useEffect(() => {
+        if (resendCooldown > 0) {
+            const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [resendCooldown]);
 
     const handleResend = async () => {
         if (resendCooldown > 0) return;

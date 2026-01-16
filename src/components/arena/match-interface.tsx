@@ -56,7 +56,7 @@ function generateQuestion() {
     return { question, answer, operation };
 }
 
-export function MatchInterface({ matchId, currentUserId, players: initialPlayers, isAiMatch = false, operation }: MatchInterfaceProps) {
+export function MatchInterface({ matchId, currentUserId, players: initialPlayers, operation }: MatchInterfaceProps) {
     const router = useRouter();
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -79,13 +79,9 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
     const you = players.find(p => p.id === currentUserId);
     const opponent = players.find(p => p.id !== currentUserId);
 
-    if (!you || !opponent) {
-        return <div className="text-center text-red-500">Error: Invalid match state</div>;
-    }
-
     // 60 second match timer
     useEffect(() => {
-        if (gameOver) return;
+        if (gameOver || !you || !opponent) return;
 
         const interval = setInterval(() => {
             setTimeLeft(t => {
@@ -99,25 +95,25 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [gameOver]);
+    }, [gameOver, you, opponent]);
 
     // Save match result when game ends
     useEffect(() => {
-        if (!gameOver || hasSavedResult) return;
+        if (!gameOver || hasSavedResult || !you || !opponent) return;
 
         async function saveResult() {
-            const isDraw = you.score === opponent.score;
-            const winner = you.score > opponent.score ? you : opponent;
-            const loser = you.score > opponent.score ? opponent : you;
+            const isDraw = you!.score === opponent!.score;
+            const winner = you!.score > opponent!.score ? you! : opponent!;
+            const loser = you!.score > opponent!.score ? opponent! : you!;
 
             const { saveMatchResult } = await import('@/lib/actions/matchmaking');
             const result = await saveMatchResult({
                 matchId,
                 // For draws, we still need to pass IDs but they don't determine a winner
-                winnerId: isDraw ? you.id : winner.id,
-                loserId: isDraw ? opponent.id : loser.id,
-                winnerScore: isDraw ? you.score : winner.score,
-                loserScore: isDraw ? opponent.score : loser.score,
+                winnerId: isDraw ? you!.id : winner.id,
+                loserId: isDraw ? opponent!.id : loser.id,
+                winnerScore: isDraw ? you!.score : winner.score,
+                loserScore: isDraw ? opponent!.score : loser.score,
                 operation,
                 mode: '1v1',
                 isDraw,
@@ -126,7 +122,7 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
             if (result.success) {
                 // For draws, both players get the same ELO change (typically 0 or small)
                 // For wins/losses, use the appropriate change based on whether we won
-                const isWinner = you.score > opponent.score;
+                const isWinner = you!.score > opponent!.score;
                 if (isDraw) {
                     // Both players get the draw ELO change (use winnerEloChange as draw change)
                     setEloChange(result.winnerEloChange || 0);
@@ -149,7 +145,7 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
 
     const submitAnswer = useCallback(() => {
         const numAnswer = parseInt(answer, 10);
-        if (isNaN(numAnswer)) return;
+        if (isNaN(numAnswer) || !you || !opponent) return;
 
         const isCorrect = numAnswer === currentQuestion.answer;
 
@@ -189,13 +185,18 @@ export function MatchInterface({ matchId, currentUserId, players: initialPlayers
             setAnswer('');
             setCurrentQuestion(generateQuestion());
         }, 300);
-    }, [answer, currentQuestion.answer, currentUserId]);
+    }, [answer, currentQuestion.answer, currentUserId, you, opponent]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             submitAnswer();
         }
     };
+
+    // Early return for invalid match state - after all hooks
+    if (!you || !opponent) {
+        return <div className="text-center text-red-500">Error: Invalid match state</div>;
+    }
 
     // Progress bar width
     const timeProgress = (timeLeft / 60) * 100;

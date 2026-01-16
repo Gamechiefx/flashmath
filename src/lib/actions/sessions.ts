@@ -29,18 +29,25 @@ export async function getUserSessions(): Promise<UserSession[]> {
         return [];
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) return [];
 
     const db = getDatabase();
 
     // Get all non-expired sessions
+    interface SessionRow {
+        id: string;
+        ip_address: string | null;
+        user_agent: string | null;
+        created_at: string;
+        expires_at: string;
+    }
     const sessions = db.prepare(`
         SELECT id, ip_address, user_agent, created_at, expires_at 
         FROM sessions 
         WHERE user_id = ? AND expires_at > ?
         ORDER BY created_at DESC
-    `).all(userId, now()) as any[];
+    `).all(userId, now()) as SessionRow[];
 
     // Get current session token from cookies (approximate match)
     // In a real implementation, you'd compare session tokens directly
@@ -85,7 +92,7 @@ export async function revokeSession(sessionId: string): Promise<{ success: boole
         return { success: false, error: "Not authenticated" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     // Verify the session belongs to this user
@@ -114,7 +121,7 @@ export async function revokeAllOtherSessions(): Promise<{ success: boolean; coun
         return { success: false, count: 0, error: "Not authenticated" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     // Get count before deletion

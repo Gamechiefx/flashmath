@@ -1,5 +1,7 @@
 'use server';
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results and Redis operations use any types */
+
 /**
  * FlashMath Party System - Redis-Based
  * 
@@ -305,11 +307,11 @@ export async function getParty(partyId: string): Promise<FullPartyData | null> {
             leaderName: partyData.leaderName,
             iglId: partyData.iglId || null,
             anchorId: partyData.anchorId || null,
-            targetMode: partyData.targetMode as any || null,
+            targetMode: (partyData.targetMode as '5v5' | '3v3' | '2v2' | null) || null,
             teamId: partyData.teamId || null,
             teamName: partyData.teamName || null,
             teamTag: partyData.teamTag || null,
-            inviteMode: partyData.inviteMode as any || 'open',
+            inviteMode: (partyData.inviteMode as 'open' | 'invite_only') || 'open',
             maxSize: parseInt(partyData.maxSize) || 5,
             createdAt: parseInt(partyData.createdAt) || Date.now(),
             updatedAt: parseInt(partyData.updatedAt) || Date.now(),
@@ -911,6 +913,7 @@ export async function updateQueueState(
     matchType?: 'ranked' | 'casual'
 ): Promise<{ success: boolean; error?: string }> {
     // #region agent log - HA: Track queue state updates at Redis level
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Debug logging
     const fs = require('fs');
     const logPath = '/home/evan.hill/FlashMath/.cursor/debug.log';
     const logEntry = (msg: string, data: any, hypothesisId: string) => {
@@ -1011,6 +1014,7 @@ export async function getQueueState(partyId: string): Promise<PartyQueueState | 
         const parsed = queueData ? JSON.parse(queueData) : null;
         
         // #region agent log - Track queue state reads
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- Debug logging
         const fs = require('fs');
         try {
             fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', JSON.stringify({location:'party-redis.ts:getQueueState',message:'Queue state read from Redis',data:{partyId,status:parsed?.status},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'}) + '\n');

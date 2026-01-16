@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
@@ -15,14 +15,12 @@ import {
     Download,
     Copy,
     CheckCircle2,
-    AlertCircle,
-    Info
+    AlertCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { 
     AdvancedAnalytics, 
-    TrendAnalysis, 
-    ImprovementSuggestion,
+    TrendAnalysis,
     ShareableAchievement,
     ShareableProgressSummary 
 } from "@/lib/actions/analytics";
@@ -126,7 +124,7 @@ export function AdvancedAnalyticsView({ analytics, achievements, progressSummary
                     ].map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setSelectedTab(tab.id as any)}
+                            onClick={() => setSelectedTab(tab.id as 'trends' | 'suggestions' | 'achievements' | 'share')}
                             className={cn(
                                 "flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all",
                                 selectedTab === tab.id

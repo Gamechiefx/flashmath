@@ -49,7 +49,6 @@ function RoundBar({
     const team2Pct = (round.team2RoundPoints / maxPoints) * 100;
     const team1Won = round.team1RoundPoints > round.team2RoundPoints;
     const team2Won = round.team2RoundPoints > round.team1RoundPoints;
-    const tie = round.team1RoundPoints === round.team2RoundPoints;
     
     const isHalftime = round.round === 3; // After round 3 is halftime
     

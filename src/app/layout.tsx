@@ -31,7 +31,6 @@ import { GlobalThemeManager } from "@/components/global-theme-manager";
 import { AuthProvider } from "@/components/auth-provider";
 import { ItemPreviewProvider } from "@/components/item-preview-provider";
 import { AudioSettingsProvider } from "@/components/audio-settings-provider";
-import { SessionGuard } from "@/components/session-guard";
 import { DevFooter } from "@/components/dev-footer";
 import { SocialProvider, SocialFAB, SocialPanel } from "@/components/social";
 import { AuditorProvider, AuditorPanel, AuditorFab } from "@/components/auditor";
@@ -50,7 +49,7 @@ export default async function RootLayout({
   const availableItems = (db.shop_items && db.shop_items.length > 0) ? db.shop_items : ITEMS;
 
   if (session?.user) {
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [(session.user as any).id]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [(session.user as { id: string }).id]) as UserRow | null;
     if (user) {
       equippedItems = user.equipped_items || {};
     }

@@ -304,7 +304,8 @@ export function PointsFeedFAB({
         }
         
         return { team1Breakdown: t1, team2Breakdown: t2 };
-    }, [events, team1Id, team2Id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- team2Id is not needed in deps
+    }, [events, team1Id]);
     
     // Determine which team is "my team"
     const isTeam1Mine = team1Id === myTeamId;
@@ -493,7 +494,7 @@ export function createPointsEventFromResult(
 ): PointsEvent {
     let eventType: PointsEvent['eventType'] = data.isCorrect ? 'correct' : 'incorrect';
     let description = data.isCorrect ? 'Correct answer' : 'Wrong answer';
-    let totalPoints = data.pointsEarned;
+    const totalPoints = data.pointsEarned;
     
     // Check for speed bonus
     if (data.speedBonus && data.speedBonus > 0) {

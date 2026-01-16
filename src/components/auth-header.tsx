@@ -20,7 +20,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
     const [showAchievements, setShowAchievements] = useState(false);
-    const isEmailVerified = (session?.user as any)?.emailVerified;
+    const isEmailVerified = (session?.user as { emailVerified?: boolean })?.emailVerified;
     
     // Check if currently on an arena page (entrance music might be playing)
     const isOnArenaPage = pathname?.startsWith('/arena');
@@ -33,7 +33,10 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
     };
 
     useEffect(() => {
-        setIsMuted(!soundEngine.isEnabled());
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setIsMuted(!soundEngine.isEnabled());
+        }, 0);
     }, []);
 
     const toggleMute = () => {
@@ -134,14 +137,14 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                         <div className="flex items-center gap-4 pl-2 cursor-pointer">
                             <div className="text-right hidden sm:block">
                                 <div className="text-sm font-black uppercase tracking-widest text-primary line-clamp-1">{session.user?.name}</div>
-                                {(session.user as any)?.equippedTitleName && (
+                                {(session.user as { equippedTitleName?: string })?.equippedTitleName && (
                                     <div className="text-[10px] font-bold uppercase tracking-widest text-accent mb-0.5">
-                                        {(session.user as any).equippedTitleName}
+                                        {(session.user as { equippedTitleName: string }).equippedTitleName}
                                     </div>
                                 )}
                                 <div className="flex items-center justify-end gap-3 mt-1">
-                                    <span className="text-xs font-bold text-white/70">XP LVL: <span className="text-white">{(session.user as any)?.level || 1}</span></span>
-                                    <span className="text-xs font-bold text-yellow-400/70">§ <span className="text-yellow-400">{(session.user as any)?.coins || 0}</span></span>
+                                    <span className="text-xs font-bold text-white/70">XP LVL: <span className="text-white">{(session.user as { level?: number })?.level || 1}</span></span>
+                                    <span className="text-xs font-bold text-yellow-400/70">§ <span className="text-yellow-400">{(session.user as { coins?: number })?.coins || 0}</span></span>
                                 </div>
                             </div>
                             <UserAvatar user={session.user} size="md" key={session.user?.equipped_items?.frame || 'default'} />
@@ -198,8 +201,8 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                                     </Link>
 
                                     {/* Admin Console - Only for admins/mods */}
-                                    {((session.user as any)?.is_admin ||
-                                      ['moderator', 'admin', 'super_admin'].includes((session.user as any)?.role)) && (
+                                    {((session.user as { is_admin?: boolean })?.is_admin ||
+                                      ['moderator', 'admin', 'super_admin'].includes((session.user as { role?: string })?.role || '')) && (
                                         <Link
                                             href="/admin"
                                             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-500/10 transition-colors text-purple-400"

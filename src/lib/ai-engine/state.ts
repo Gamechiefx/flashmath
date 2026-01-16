@@ -32,9 +32,14 @@ export function initializeLearnerModel(
     const db = getDatabase();
 
     // Load existing skill mastery from DB
+    interface SkillMasteryRow {
+        skill_id: string;
+        mastery_prob?: number;
+        [key: string]: unknown;
+    }
     const skillRows = db.prepare(`
     SELECT * FROM skill_mastery WHERE user_id = ?
-  `).all(userId) as any[];
+  `).all(userId) as SkillMasteryRow[];
 
     const skills = new Map<string, SkillMastery>();
 
@@ -307,11 +312,19 @@ export function getLatencyTrendRatio(telemetry: SessionTelemetry): number {
 export function loadEchoQueue(userId: string): EchoQueueEntry[] {
     const db = getDatabase();
 
+    interface EchoQueueRow {
+        id: string;
+        skill_id: string;
+        concept_id?: string;
+        priority?: number;
+        due_after_n?: number;
+        [key: string]: unknown;
+    }
     const rows = db.prepare(`
     SELECT * FROM echo_queue 
     WHERE user_id = ? AND status IN ('scheduled', 'due')
     ORDER BY priority DESC, created_at ASC
-  `).all(userId) as any[];
+  `).all(userId) as EchoQueueRow[];
 
     return rows.map(row => ({
         id: row.id,

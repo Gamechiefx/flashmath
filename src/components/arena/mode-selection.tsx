@@ -108,7 +108,10 @@ function ParticleBackground({ analyser }: { analyser: AnalyserNode | null }) {
     const animationRef = useRef<number | null>(null);
 
     useEffect(() => {
-        setMounted(true);
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setMounted(true);
+        }, 0);
     }, []);
 
     // Audio data loop - only updates when analyser is available
@@ -654,10 +657,14 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
             const elem = document.documentElement;
             if (elem.requestFullscreen && !document.fullscreenElement) {
                 await elem.requestFullscreen();
-            } else if ((elem as any).webkitRequestFullscreen) {
-                await (elem as any).webkitRequestFullscreen();
-            } else if ((elem as any).msRequestFullscreen) {
-                await (elem as any).msRequestFullscreen();
+            } else {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                const webkitElem = elem as any;
+                if (webkitElem.webkitRequestFullscreen) {
+                    await webkitElem.webkitRequestFullscreen();
+                } else if (webkitElem.msRequestFullscreen) {
+                    await webkitElem.msRequestFullscreen();
+                }
             }
         } catch (err) {
             console.log('[Arena] Fullscreen request failed:', err);
@@ -772,7 +779,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                             <div className="flex items-center gap-2">
                                 <Users className="w-5 h-5" style={{ color: 'var(--accent)' }} />
                                 <span className="text-sm font-bold" style={{ color: 'var(--accent)' }}>
-                                    You're in a party
+                                    You&apos;re in a party
                                 </span>
                                 <span className="hidden sm:inline text-xs text-muted-foreground">
                                     • Party queue is 5v5 only

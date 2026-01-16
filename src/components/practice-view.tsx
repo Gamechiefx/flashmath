@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -373,7 +375,24 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                         setTimeout(() => reject(new Error('timeout')), AI_TIMEOUT_MS)
                     );
 
-                    const aiResult = await Promise.race([aiPromise, timeoutPromise]) as any;
+                    interface AIAnswerResult {
+                        isCorrect?: boolean;
+                        hint?: unknown;
+                        nextQuestion?: {
+                            promptText: string;
+                            correctAnswer: number;
+                            explanation?: string;
+                        };
+                        envelope?: unknown;
+                        sessionStats?: {
+                            questionNumber?: number;
+                            tiltScore?: number;
+                            echoQueueSize?: number;
+                            echoItemsResolved?: number;
+                        };
+                        error?: string;
+                    }
+                    const aiResult = await Promise.race([aiPromise, timeoutPromise]) as AIAnswerResult | { error: string };
 
                     if (!('error' in aiResult)) {
                         setTiltScore(aiResult.sessionStats.tiltScore);
@@ -614,7 +633,24 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                     setTimeout(() => reject(new Error('timeout')), AI_TIMEOUT_MS)
                 );
 
-                const aiResult = await Promise.race([aiPromise, timeoutPromise]) as any;
+                interface AIAnswerResult {
+                    isCorrect?: boolean;
+                    hint?: unknown;
+                    nextQuestion?: {
+                        promptText: string;
+                        correctAnswer: number;
+                        explanation?: string;
+                    };
+                    envelope?: unknown;
+                    sessionStats?: {
+                        questionNumber?: number;
+                        tiltScore?: number;
+                        echoQueueSize?: number;
+                        echoItemsResolved?: number;
+                    };
+                    error?: string;
+                }
+                const aiResult = await Promise.race([aiPromise, timeoutPromise]) as AIAnswerResult | { error: string };
 
                 if (!('error' in aiResult)) {
                     setCurrentAIItem(aiResult.nextQuestion);
@@ -1096,14 +1132,14 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                         className="mb-8 p-6 rounded-2xl bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border border-primary/20 text-center"
                                     >
                                         <div className="text-lg font-bold text-white mb-2">
-                                            🎉 Enjoyed that? There's so much more!
+                                            🎉 Enjoyed that? There&apos;s so much more!
                                         </div>
                                         <p className="text-sm text-muted-foreground mb-4">
                                             Sign up to track your progress, compete on leaderboards, unlock achievements, and level up your skills.
                                         </p>
                                         <Link href="/auth/register">
                                             <button className="px-8 py-3 rounded-xl font-black uppercase tracking-widest border border-primary/30 hover:border-primary/50 bg-gradient-to-r from-primary/20 to-accent/20 transition-all text-primary">
-                                                Sign Up — It's Free!
+                                                Sign Up — It&apos;s Free!
                                             </button>
                                         </Link>
                                     </motion.div>

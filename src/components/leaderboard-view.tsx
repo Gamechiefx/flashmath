@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { motion } from "framer-motion";

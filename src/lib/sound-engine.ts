@@ -88,6 +88,7 @@ class SoundEngine {
 
     private init() {
         if (!this.ctx) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         if (this.ctx.state === 'suspended') {
@@ -99,6 +100,7 @@ class SoundEngine {
     // Use this when enabling sound from a user gesture to ensure context is ready
     private async initAsync(): Promise<boolean> {
         if (!this.ctx) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         if (this.ctx.state === 'suspended') {

@@ -349,7 +349,7 @@ export function SocialPanel() {
             toast.success(`Party is now ${settings.inviteMode === 'open' ? 'open to invites' : 'invite only'}`);
             // Broadcast settings change to all party members
             if (result.partyMemberIds && result.newInviteMode) {
-                const currentUserId = (session?.user as any)?.id;
+                const currentUserId = (session?.user as { id?: string })?.id;
                 if (currentUserId) {
                     notifyPartySettingsUpdated(result.partyMemberIds, result.newInviteMode, currentUserId);
                 }
@@ -418,8 +418,8 @@ export function SocialPanel() {
         // Optimistically add to pending list for instant UI feedback
         const optimisticRequest: FriendRequest = {
             id: `temp-${userId}`,
-            senderId: (session?.user as any)?.id || '',
-            senderName: (session?.user as any)?.name || '',
+            senderId: (session?.user as { id?: string })?.id || '',
+            senderName: (session?.user as { name?: string })?.name || '',
             senderLevel: 1,
             senderFrame: 'default',
             receiverId: userId,
@@ -606,7 +606,7 @@ export function SocialPanel() {
                                                         party={party}
                                                         invites={partyInvites}
                                                         friends={friendsWithRealTimeStatus}
-                                                        currentUserId={(session?.user as any)?.id}
+                                                        currentUserId={(session?.user as { id?: string })?.id}
                                                         currentUserStatus={presenceStatus}
                                                         pendingFriendRequestIds={outgoingRequests.map(r => r.receiverId)}
                                                         memberStatuses={friendStatuses}
