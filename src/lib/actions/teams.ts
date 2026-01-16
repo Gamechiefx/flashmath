@@ -85,6 +85,7 @@ export interface TeamLeaderboardEntry {
 }
 
 // Valid operations for ELO tracking
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used for type inference
 const VALID_OPERATIONS = ['addition', 'subtraction', 'multiplication', 'division'] as const;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used for type inference
 type Operation = typeof VALID_OPERATIONS[number];

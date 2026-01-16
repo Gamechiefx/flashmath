@@ -1,4 +1,3 @@
-
 import { auth } from "@/auth";
 import { queryOne, loadData, type UserRow } from "@/lib/db";
 import { getDailyShopSelection } from "@/lib/shop-engine";
@@ -10,6 +9,7 @@ import { ShopItemCard } from "@/components/shop/shop-item-card";
 import { ShopTimer } from "@/components/shop/shop-timer";
 import { AuthHeader } from "@/components/auth-header";
 import { unstable_noStore as noStore } from 'next/cache';
+import { ItemType } from "@/lib/items";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;

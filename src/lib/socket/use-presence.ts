@@ -71,7 +71,9 @@ interface UsePresenceReturn {
 }
 
 let presenceSocket: Socket | null = null;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
 let socketConnectionCount = 0;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
 let handlerRegistrationCount = 0;
 
 export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn {

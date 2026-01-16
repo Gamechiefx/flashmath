@@ -106,7 +106,7 @@ function generateBotId(matchId: string, botIndex: number): string {
 /**
  * Select random items from array without duplicates
  */
-function selectRandom<T>(arr: T[], count: number): T[] {
+function _selectRandom<T>(arr: T[], count: number): T[] {
     const shuffled = [...arr].sort(() => Math.random() - 0.5);
     return shuffled.slice(0, count);
 }

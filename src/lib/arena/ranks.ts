@@ -58,7 +58,7 @@ export const MODE_BASE_ELO: Record<string, number> = {
 };
 
 // Rank order (lowest to highest)
-const RANKS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master'];
+const _RANKS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master'];
 const DIVISIONS = ['I', 'II', 'III'];
 
 // Band to rank bracket mapping (based on 100-tier system)

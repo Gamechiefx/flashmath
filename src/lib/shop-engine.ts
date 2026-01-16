@@ -14,7 +14,8 @@ import { loadData, initSchema } from "./db";
 // 5. BGM Slot
 // 6. Wildcard (Title or Frame)
 
-const RARITY_WEIGHTS = {
+ 
+const _RARITY_WEIGHTS = {
     [Rarity.COMMON]: 0.50,
     [Rarity.UNCOMMON]: 0.30,
     [Rarity.RARE]: 0.15,

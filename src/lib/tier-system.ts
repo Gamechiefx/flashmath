@@ -530,7 +530,7 @@ export function canAttemptBandPromotion(currentTier: number): boolean {
 // EXPORTS FOR BACKWARD COMPATIBILITY
 // =============================================================================
 
-export default {
+const tierSystemExports = {
     BANDS,
     MIN_TIER,
     MAX_TIER,
@@ -549,3 +549,5 @@ export default {
     checkMilestoneReward,
     calculateTierAdvancement,
 };
+
+export default tierSystemExports;

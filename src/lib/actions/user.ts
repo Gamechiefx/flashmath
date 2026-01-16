@@ -117,7 +117,19 @@ export async function getDashboardStats() {
         title?: string;
         [key: string]: unknown;
     }
-    const equippedItems = (user?.equipped_items ? JSON.parse(user.equipped_items as string) : {}) as EquippedItems;
+    // Handle both string (needs parsing) and object (already parsed) cases
+    let equippedItems: EquippedItems = {};
+    if (user?.equipped_items) {
+        if (typeof user.equipped_items === 'string') {
+            try {
+                equippedItems = JSON.parse(user.equipped_items);
+            } catch {
+                equippedItems = {};
+            }
+        } else if (typeof user.equipped_items === 'object') {
+            equippedItems = user.equipped_items as EquippedItems;
+        }
+    }
     const titleId = equippedItems?.title;
     let equippedTitle = "";
     if (titleId && titleId !== 'default') {
