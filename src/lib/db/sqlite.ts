@@ -351,6 +351,19 @@ function initializeSchema() {
         `).run('super-admin-001', adminEmail, 'FlashAdmin', adminHash, new Date().toISOString());
         console.log('[SQLite] Seeded admin account');
     }
+
+    // Auto-promote user to admin via environment variable (useful for Docker deployments)
+    const autoAdminEmail = process.env.AUTO_ADMIN_EMAIL;
+    if (autoAdminEmail) {
+        const user = database.prepare('SELECT id, is_admin, role FROM users WHERE email = ?').get(autoAdminEmail) as any;
+        if (user && (!user.is_admin || user.role !== 'super_admin')) {
+            database.prepare('UPDATE users SET is_admin = 1, role = ? WHERE email = ?')
+                .run('super_admin', autoAdminEmail);
+            console.log(`[SQLite] Auto-promoted ${autoAdminEmail} to super_admin via AUTO_ADMIN_EMAIL`);
+        } else if (!user) {
+            console.log(`[SQLite] AUTO_ADMIN_EMAIL set but user ${autoAdminEmail} not found`);
+        }
+    }
 }
 
 // Close database connection (for cleanup)

@@ -108,6 +108,11 @@ services:
       # Dev Tools - DISABLED in production
       - ENABLE_DEV_TOOLS=false
       - NEXT_PUBLIC_ENABLE_DEV_TOOLS=false
+
+      # ============================================
+      # AUTO ADMIN PROMOTION
+      # ============================================
+      - AUTO_ADMIN_EMAIL=admin@flashmath.io
     depends_on:
       postgres:
         condition: service_healthy
