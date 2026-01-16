@@ -489,10 +489,12 @@ export function TeamSetupClient({
         // Check if this is an AI match notification
         if (latestQueueStatusUpdate.queueStatus.startsWith('ai_match:')) {
             const matchId = latestQueueStatusUpdate.queueStatus.replace('ai_match:', '');
-            console.log('[TeamSetup] 🤖 AI Match started via socket - redirecting to match:', matchId);
+            // Use partyId from socket event - more reliable than potentially stale party state
+            const socketPartyId = latestQueueStatusUpdate.partyId || party?.id;
+            console.log('[TeamSetup] 🤖 AI Match started via socket - redirecting to match:', matchId, 'partyId:', socketPartyId);
             isRedirecting.current = true;
             clearQueueStatusUpdate();
-            router.push(`/arena/teams/match/${matchId}?partyId=${party?.id}`);
+            router.push(`/arena/teams/match/${matchId}?partyId=${socketPartyId}`);
             return;
         }
         
@@ -501,15 +503,17 @@ export function TeamSetupClient({
         // #endregion
         isRedirecting.current = true;
         blockAutoRedirect.current = false;
-        
+
         // Clear sessionStorage since we're intentionally following the leader
         sessionStorage.removeItem('flashmath_just_left_queue');
-        
+
+        // Use partyId from socket event - more reliable than potentially stale party state
+        const socketPartyId = latestQueueStatusUpdate.partyId || party?.id;
         clearQueueStatusUpdate();
-        const phase = latestQueueStatusUpdate.queueStatus === 'finding_teammates' 
-            ? 'teammates' 
+        const phase = latestQueueStatusUpdate.queueStatus === 'finding_teammates'
+            ? 'teammates'
             : 'opponent';
-        router.push(`/arena/teams/queue?partyId=${party?.id}&phase=${phase}&mode=${mode}`);
+        router.push(`/arena/teams/queue?partyId=${socketPartyId}&phase=${phase}&mode=${mode}`);
     }, [latestQueueStatusUpdate, party?.id, router, clearQueueStatusUpdate, mode]);
 
     // Listen for step changes from party leader via socket (for non-leaders)
