@@ -9,6 +9,7 @@
     "start": "next start",
     "start:server": "NODE_ENV=production node server.js",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:unit:ui": "vitest --ui",
