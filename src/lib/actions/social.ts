@@ -16,14 +16,14 @@ import { getDatabase, generateId, now } from "@/lib/db/sqlite";
 import { getArenaDisplayStatsBatch } from "@/lib/arena/arena-db";
 import { checkUserArenaEligibility } from "@/lib/actions/arena";
 import { ITEMS, ItemType } from "@/lib/items";
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- CommonJS module
+ 
 // const { getLeagueFromElo } = require('@/lib/arena/leagues.js');
 
 /**
  * Resolve banner item ID to style ID
  * e.g., "banner_synthwave" -> "synthwave"
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- resolveBannerStyle is used in the codebase
+ 
 function resolveBannerStyle(bannerId: string): string {
     if (!bannerId || bannerId === 'default') return 'default';
     // If it's a raw style ID (legacy), return it
@@ -60,7 +60,7 @@ async function getRedis() {
  * Cancel all queue entries for a party
  * Called when party membership changes or party is disbanded
  */
-async function cancelPartyQueues(partyId: string): Promise<void> {
+async function _cancelPartyQueues(partyId: string): Promise<void> {
     try {
         const redis = await getRedis();
         if (!redis) return;
@@ -94,7 +94,7 @@ async function cancelPartyQueues(partyId: string): Promise<void> {
 /**
  * Check if party has an active match found (prevent modifications)
  */
-async function hasActiveMatch(partyId: string): Promise<boolean> {
+async function _hasActiveMatch(partyId: string): Promise<boolean> {
     try {
         const redis = await getRedis();
         if (!redis) return false;
@@ -729,7 +729,7 @@ export async function getPendingRequests(): Promise<{
             receiver_equipped?: string | null;
             [key: string]: unknown;
         }
-        const mapRequest = (r: FriendRequestRow, isIncoming: boolean): FriendRequest => {
+        const mapRequest = (r: FriendRequestRow, _isIncoming: boolean): FriendRequest => {
             let senderEquipped: Record<string, string> = {};
             let receiverEquipped: Record<string, string> = {};
             try {
@@ -947,8 +947,6 @@ import {
     getParty as getRedisParty,
     getUserParty as getRedisUserParty,
     createParty as createRedisParty,
-    disbandParty as disbandRedisParty,
-    joinParty as joinRedisParty,
     leaveParty as leaveRedisParty,
     kickMember as kickRedisPartyMember,
     toggleReady as toggleRedisPartyReady,
@@ -960,10 +958,7 @@ import {
     declineInvite as declineRedisPartyInvite,
     getUserPendingInvites as getRedisUserPendingInvites,
     validateUserPartyState,
-    type PartyState,
-    type PartyMember as RedisPartyMember,
     type PartyInvite as RedisPartyInvite,
-    type FullPartyData,
 } from "@/lib/party/party-redis";
 
 export async function getPartyData(): Promise<{ party: Party | null; invites: PartyInvite[]; error?: string }> {
@@ -1108,7 +1103,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                 hypothesisId: 'SERVER_RETURN'
             }) + '\n';
             fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', logEntry);
-        } catch (e) { /* ignore logging errors */ }
+        } catch (_e) { /* ignore logging errors */ }
         // #endregion
         
         return result;

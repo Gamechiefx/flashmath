@@ -27,7 +27,7 @@ let arenaRedis: {
 } | null = null;
 
 try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- CommonJS module
+     
     arenaRedis = require('../../../server-redis.js');
 } catch (e) {
     // Redis not available (e.g., during build), will use direct DB

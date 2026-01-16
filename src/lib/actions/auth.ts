@@ -1,6 +1,6 @@
 "use server";
 
-import { queryOne, initSchema, getDatabase, type UserRow } from "@/lib/db";
+import { queryOne, initSchema, getDatabase } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { signIn, auth } from "@/auth";
 import { AuthError } from "next-auth";

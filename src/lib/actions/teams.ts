@@ -86,6 +86,7 @@ export interface TeamLeaderboardEntry {
 
 // Valid operations for ELO tracking
 const VALID_OPERATIONS = ['addition', 'subtraction', 'multiplication', 'division'] as const;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used for type inference
 type Operation = typeof VALID_OPERATIONS[number];
 
 // =============================================================================
@@ -533,7 +534,7 @@ export async function declineTeamInvite(
     const db = getDatabase();
     const userId = session.user.id;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Database query result
+     
     const invite = (db.prepare(`
         SELECT id, invitee_id, status FROM team_invites WHERE id = ?
     `).get(inviteId) as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- Database query result

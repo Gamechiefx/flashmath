@@ -1,8 +1,8 @@
 "use server";
 
 import { auth } from "@/auth";
-import { execute, queryOne, loadData, getDatabase, generateId, now, type UserRow } from "@/lib/db";
-import { Item, ITEMS } from "@/lib/items";
+import { execute, queryOne, getDatabase, generateId, now, type UserRow } from "@/lib/db";
+import { ITEMS } from "@/lib/items";
 import { revalidatePath } from "next/cache";
 
 export async function purchaseItem(itemId: string) {

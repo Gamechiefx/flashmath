@@ -25,11 +25,6 @@ export async function getDashboardStats() {
         operation?: string;
         [key: string]: unknown;
     }
-    interface MasteryRow {
-        user_id: string;
-        operation?: string;
-        [key: string]: unknown;
-    }
     const userSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
 
     const totalCorrect = userSessions.reduce((acc: number, s: SessionRow) => acc + (s.correct_count || 0), 0);

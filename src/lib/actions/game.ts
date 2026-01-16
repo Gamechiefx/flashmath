@@ -1,6 +1,6 @@
 "use server";
 
-import { execute, loadData, saveData, queryOne, type UserRow } from "@/lib/db";
+import { execute, queryOne, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { syncLeagueState } from "@/lib/league-engine";

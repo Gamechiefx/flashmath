@@ -9,7 +9,7 @@ const authMiddleware = NextAuth(authConfig).auth;
 // Wrap to add custom headers
 export default async function middleware(request: NextRequest) {
     // Run NextAuth middleware first
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth middleware type is complex
+     
     const authResponse = await (authMiddleware as (req: NextRequest) => Promise<NextResponse | undefined>)(request);
     
     // Get or create response

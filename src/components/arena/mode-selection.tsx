@@ -784,12 +784,12 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                                     You&apos;re in a party
                                 </span>
                                 <span className="hidden sm:inline text-xs text-muted-foreground">
-                                    • Party queue is 5v5 only
+                                    • Queue together in team modes
                                 </span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <Link
-                                    href="/arena/teams/setup?mode=5v5"
+                                    href="/arena/teams/setup"
                                     onClick={() => {
                                         soundEngine.playClick();
                                         requestFullscreen();

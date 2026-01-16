@@ -23,7 +23,7 @@ import {
 } from "@/lib/arena/arena-db";
 
 // Redis client for matchmaking
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Redis client type
+ 
 let redisClient: any = null;
 
 async function getRedis() {

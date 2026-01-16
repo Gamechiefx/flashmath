@@ -181,7 +181,7 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
     const submitAnswer = async () => {
         if (!inputValue || !currentProblem || showFeedback) return;
 
-        // eslint-disable-next-line react-hooks/purity -- Safe in event handler
+         
         const timeMs = Date.now() - questionStartTime;
         const isCorrect = Math.abs(parseFloat(inputValue) - currentProblem.answer) < 0.01;
 

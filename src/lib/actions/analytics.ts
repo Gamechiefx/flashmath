@@ -73,7 +73,7 @@ function calculateLinearRegression(data: { x: number; y: number }[]): {
     const sumY = data.reduce((sum, point) => sum + point.y, 0);
     const sumXY = data.reduce((sum, point) => sum + point.x * point.y, 0);
     const sumXX = data.reduce((sum, point) => sum + point.x * point.x, 0);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- sumYY calculated but not used in regression
+     
     const _sumYY = data.reduce((sum, point) => sum + point.y * point.y, 0);
 
     const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
@@ -452,8 +452,6 @@ async function getUserStatsForAnalytics(userId: string) {
         };
     });
 
-    const totalCorrect = userSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
-    const totalAttempted = userSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0);
     const avgSpeed = userSessions.length > 0
         ? userSessions.reduce((acc: number, s: any) => acc + s.avg_speed, 0) / userSessions.length
         : 0;
@@ -716,7 +714,7 @@ export async function generateShareableAchievements(): Promise<ShareableAchievem
                 });
             }
         }
-    } catch (error) {
+    } catch (_error) {
         // Arena stats not available, skip
     }
 
@@ -830,7 +828,7 @@ export async function generateProgressSummary(timeframe: 'week' | 'month' | 'all
         if (arenaStats?.duel?.rank) {
             arenaRank = `${arenaStats.duel.rank} ${arenaStats.duel.rankDivision || ''}`.trim();
         }
-    } catch (error) {
+    } catch (_error) {
         // Arena stats not available
     }
 
@@ -905,12 +903,12 @@ export async function generateSocialShareText(card: ShareableCard): Promise<stri
 /**
  * Helper function to get arena stats for sharing (simplified)
  */
-async function getArenaStatsForSharing(userId: string) {
+async function getArenaStatsForSharing(_userId: string) {
     try {
         // Import dynamically to avoid circular dependencies
         const { getArenaStats } = await import('./matchmaking');
         return await getArenaStats();
-    } catch (error) {
+    } catch (_error) {
         return null;
     }
 }

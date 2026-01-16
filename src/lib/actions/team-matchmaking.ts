@@ -155,7 +155,6 @@ export interface TeammateSearchResult {
 const TEAM_QUEUE_PREFIX = 'team:queue:';
 const TEAM_MATCH_PREFIX = 'team:match:';
 const TEAM_MATCH_SETUP_PREFIX = 'arena:team_match_setup:'; // Must match server-redis.js KEYS.TEAM_MATCH_SETUP
-const TEAM_IGL_SELECTION_PREFIX = 'team:igl:';
 const TEAMMATE_QUEUE_PREFIX = 'team:teammates:'; // For partial parties looking for teammates
 const ASSEMBLED_TEAM_PREFIX = 'team:assembled:'; // For assembled teams in IGL selection
 
@@ -165,7 +164,6 @@ const ELO_EXPANSION_RATE = 50;      // +50 ELO per interval
 const ELO_EXPANSION_INTERVAL = 15;  // 15 seconds
 const MAX_ELO_RANGE = 400;          // ±400 ELO max
 const QUEUE_TIMEOUT_MS = 180000;    // 3 minutes max queue time
-const IGL_SELECTION_TIMEOUT = 25;   // 25 seconds for IGL/Anchor selection
 
 // Tier matchmaking settings (100-tier system)
 const TEAM_TIER_RANGE = 25;         // ±25 tiers for team matching (slightly wider than 1v1)
@@ -483,7 +481,7 @@ export async function joinTeamQueue(params: {
                     
                     // Ensure player exists in PostgreSQL arena_players
                     await getOrCreateArenaPlayer(m.odUserId, m.odUserName);
-                } catch (error) {
+                } catch (_error) {
                     console.warn(`[TeamMatchmaking] Failed to get PostgreSQL ELO for ${m.odUserId}, using default`);
                 }
                 
@@ -1161,7 +1159,7 @@ export async function joinTeammateQueue(params: {
                     const playerElo = await getPlayerElo(m.user_id, '5v5');
                     elo5v5 = playerElo.elo;
                     await getOrCreateArenaPlayer(m.user_id, m.name);
-                } catch (error) {
+                } catch (_error) {
                     elo5v5 = m.arena_elo_5v5 || 300;
                 }
                 
@@ -1781,7 +1779,6 @@ export async function confirmIGLSelection(
 
         // Add all members to the new party
         for (const member of assembled.odMembers) {
-            const isLeader = member.odUserId === assembled.odLargestPartyLeaderId ? 1 : 0;
             db.prepare(`
                 INSERT INTO party_members (id, party_id, user_id, joined_at, is_ready, preferred_operation)
                 VALUES (?, ?, ?, ?, 1, ?)
@@ -2030,7 +2027,9 @@ export async function createAITeamMatch(params: {
         };
 
         const leader = members.find(m => m.user_id === party.leader_id);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const igl = members.find(m => m.user_id === party.igl_id);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const anchor = members.find(m => m.user_id === party.anchor_id);
 
         // Build human team queue entry

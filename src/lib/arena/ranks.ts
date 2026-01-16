@@ -18,7 +18,7 @@
  * - Then promote to next rank and reset
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+ 
 
 import { getBandForTier } from '@/lib/tier-system';
 
