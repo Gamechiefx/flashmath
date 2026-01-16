@@ -20,7 +20,6 @@ const {
     TIER_ORDER,
     MATCHMAKING,
     SKILL_TIER_LEVELS,
-    TIER_BANDS,
     getBandForTier,
     getTierDisplayName,
     OPERATIONS

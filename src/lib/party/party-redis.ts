@@ -1022,7 +1022,7 @@ export async function getQueueState(partyId: string): Promise<PartyQueueState | 
         // #endregion
         
         return parsed;
-    } catch (error) {
+    } catch (_error) {
         return null;
     }
 }

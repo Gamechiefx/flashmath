@@ -11,7 +11,6 @@ import {
     getTierWithinBand,
     isMasteryTestAvailable,
     isAtBandBoundary,
-    TIERS_PER_BAND,
     MIN_TIER,
     MAX_TIER,
 } from './tier-system';
@@ -354,9 +353,11 @@ export const generateMasteryTestLegacy = (operation: MathOperation, tier: number
     return problems;
 };
 
-export default {
+const mathTiersModule = {
     generateProblemForSession,
     generatePlacementTest,
     checkProgression,
     generateMasteryTest,
 };
+
+export default mathTiersModule;

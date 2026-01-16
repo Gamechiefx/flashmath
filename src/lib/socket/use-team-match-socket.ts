@@ -230,7 +230,7 @@ export function useTeamMatchSocket(options: UseTeamMatchSocketOptions) {
         return () => {
             socket.disconnect();
         };
-    }, [options.matchId, options.userId]);
+    }, [options]);
 
     // Submit an answer
     const submitAnswer = useCallback((answer: string) => {

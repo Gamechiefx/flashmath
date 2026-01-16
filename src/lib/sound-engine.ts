@@ -1242,7 +1242,7 @@ class SoundEngine {
 
         // Rising power chord
         const freqs = this.is8BitPack() ? [262, 330, 392, 523] : [196, 262, 330, 392]; // Lower, more powerful
-        freqs.forEach((freq, i) => {
+        freqs.forEach((freq, _i) => {
             const osc = this.ctx!.createOscillator();
             const gain = this.ctx!.createGain();
 

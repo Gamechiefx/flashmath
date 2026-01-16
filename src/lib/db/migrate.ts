@@ -5,7 +5,6 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Migration script uses any for JSON data */
 
-import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { getDatabase, generateId, now } from './sqlite';

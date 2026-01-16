@@ -160,8 +160,8 @@ function initializeSchema() {
         try {
             database.exec(`ALTER TABLE users ADD COLUMN ${col.name} INTEGER DEFAULT ${col.default}`);
             console.log(`[SQLite] Added ${col.name} column`);
-        } catch (e: any) {
-            if (!e.message.includes('duplicate column')) {
+        } catch (_e: any) {
+            if (!_e.message.includes('duplicate column')) {
                 // Expected if column already exists
             }
         }
@@ -186,7 +186,7 @@ function initializeSchema() {
     try {
         database.exec("UPDATE parties SET max_size = 5 WHERE max_size = 3");
         console.log('[SQLite] Updated party max_size to 5');
-    } catch (e: any) {
+    } catch (_e: any) {
         // Table might not exist yet, that's fine
     }
 
@@ -194,7 +194,7 @@ function initializeSchema() {
     try {
         database.exec("ALTER TABLE parties ADD COLUMN invite_mode TEXT DEFAULT 'open'");
         console.log('[SQLite] Added invite_mode column to parties');
-    } catch (e: any) {
+    } catch (_e: any) {
         // Column might already exist, that's fine
     }
 
@@ -211,8 +211,8 @@ function initializeSchema() {
         try {
             database.exec(`ALTER TABLE parties ADD COLUMN ${col.name} ${col.type}`);
             console.log(`[SQLite] Added ${col.name} column to parties`);
-        } catch (e: any) {
-            if (!e.message.includes('duplicate column')) {
+        } catch (_e: any) {
+            if (!_e.message.includes('duplicate column')) {
                 // Expected if column already exists
             }
         }
@@ -250,8 +250,8 @@ function initializeSchema() {
         try {
             database.exec(`ALTER TABLE arena_matches ADD COLUMN ${col.name} ${col.type}`);
             console.log(`[SQLite] Added ${col.name} column to arena_matches`);
-        } catch (e: any) {
-            if (!e.message.includes('duplicate column')) {
+        } catch (_e: any) {
+            if (!_e.message.includes('duplicate column')) {
                 // Expected if column already exists
             }
         }
@@ -282,8 +282,8 @@ function initializeSchema() {
             const defaultClause = col.default !== undefined ? ` DEFAULT ${col.default}` : '';
             database.exec(`ALTER TABLE users ADD COLUMN ${col.name} ${col.type}${defaultClause}`);
             console.log(`[SQLite] Added ${col.name} column for decay system`);
-        } catch (e: any) {
-            if (!e.message.includes('duplicate column')) {
+        } catch (_e: any) {
+            if (!_e.message.includes('duplicate column')) {
                 // Expected if column already exists
             }
         }
@@ -296,7 +296,7 @@ function initializeSchema() {
             WHERE last_arena_activity IS NULL 
             AND (arena_duel_wins > 0 OR arena_duel_losses > 0 OR arena_team_wins > 0 OR arena_team_losses > 0)
         `);
-    } catch (e: any) {
+    } catch (_e: any) {
         // Expected if no users match
     }
 
@@ -314,7 +314,7 @@ function initializeSchema() {
     for (const indexSql of leaderboardIndexes) {
         try {
             database.exec(indexSql);
-        } catch (e: any) {
+        } catch (_e: any) {
             // Index might already exist
         }
     }

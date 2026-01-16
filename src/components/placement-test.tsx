@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { generateProblemForSession, MathProblem } from "@/lib/math-tiers";
 import { BANDS } from "@/lib/tier-system";
 import { updateTiers } from "@/lib/actions/game";
@@ -55,7 +55,7 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
     const [timer, setTimer] = useState(0);
     const [showFeedback, setShowFeedback] = useState<'correct' | 'incorrect' | null>(null);
 
-    const ops: MathOperation[] = ['addition', 'subtraction', 'multiplication', 'division'];
+    const ops: MathOperation[] = useMemo(() => ['addition', 'subtraction', 'multiplication', 'division'], []);
     const currentOp = ops[currentOpIndex];
     const currentBand = BANDS[currentBandIndex];
 
@@ -63,7 +63,7 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
     const currentTimeLimit = BAND_TIME_LIMITS[currentBandIndex];
     const timeRemaining = Math.max(0, currentTimeLimit / 1000 - timer);
 
-    const calculateFinalTiers = async (finalResults: Record<MathOperation, TestResult[]>) => {
+    const calculateFinalTiers = useCallback(async (finalResults: Record<MathOperation, TestResult[]>) => {
         setIsSubmitting(true);
 
         const newTiers: Record<string, number> = {};
@@ -115,7 +115,7 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
 
         // Complete test
         onComplete();
-    };
+    }, [onComplete, ops]);
 
     // Timer effect
     useEffect(() => {

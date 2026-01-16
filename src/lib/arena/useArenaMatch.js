@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { io } from 'socket.io-client';
-import { EVENTS, GAME } from './constants.js';
+import { EVENTS } from './constants.js';
 
 // =============================================================================
 // TYPES (for documentation, actual types would be TypeScript)
@@ -264,7 +264,7 @@ export function useArenaMatch(options = {}) {
             socket.disconnect();
             socketRef.current = null;
         };
-    }, [user?.id, serverUrl, onMatchStart, onQuestionStart, onMatchEnd, onError]);
+    }, [user?.id, user?.name, serverUrl, onMatchStart, onQuestionStart, onMatchEnd, onError]);
 
     // =================================================================
     // ACTIONS
@@ -439,7 +439,7 @@ export function useArenaMatch(options = {}) {
  * Plays appropriate sounds based on match events
  */
 export function useArenaSounds(matchState) {
-    const { status, answerFeedback, result } = matchState;
+    const { status: _status, answerFeedback, result } = matchState;
 
     useEffect(() => {
         // These would integrate with your existing sound engine

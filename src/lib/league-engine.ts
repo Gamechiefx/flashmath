@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
 
-import { query, queryOne, execute, saveData, type UserRow } from "./db";
+import { query, queryOne, execute, type UserRow } from "./db";
 import { v4 as uuid } from "uuid";
 
 const LEAGUE_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (weekly cycle)

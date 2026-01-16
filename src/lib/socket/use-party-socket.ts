@@ -402,7 +402,7 @@ export function usePartySocket(options: UsePartySocketOptions = {}): UsePartySoc
             socket.off('party:member_offline', handleMemberOffline);
             socket.off('party:invite_received', handleInviteReceived);
         };
-    }, [autoConnect, effectiveUserId, effectiveUserName]);
+    }, [autoConnect, effectiveUserId, effectiveUserName, party?.party?.id]);
     
     // ==========================================================================
     // ACTIONS

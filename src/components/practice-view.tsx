@@ -109,7 +109,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [isLoadingHint, setIsLoadingHint] = useState(false);
 
     // Fetch problems helper
-    const fetchMoreProblems = async (op: string) => {
+    const fetchMoreProblems = useCallback(async (op: string) => {
         setIsLoadingProblems(true);
         const res = await getNextProblems(op);
         if (res.problems) {
@@ -117,7 +117,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             if (res.currentTier) setCurrentTier(res.currentTier);
         }
         setIsLoadingProblems(false);
-    };
+    }, []);
 
     // Sync selected op with URL param on mount
     useEffect(() => {
@@ -282,7 +282,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
         setIsSaving(false);
         soundEngine.playComplete();
-    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState, aiSessionId, maxStreak, tiltScore, echoQueueSize, hintsReceivedCount, echoItemsResolved, update]);
+    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState, aiSessionId, maxStreak, tiltScore, hintsReceivedCount, echoItemsResolved, update]);
 
     // Timer logic - use setInterval for reliable timing independent of state changes
     const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -525,33 +525,34 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
         let a = Math.floor(Math.random() * (max - min + 1)) + min;
         let b = Math.floor(Math.random() * (max - min + 1)) + min;
-        let answer: number;
+        let _answer: number;
         let question: string;
 
         switch (op) {
             case 'Addition':
-                answer = a + b;
+                _answer = a + b;
                 question = `${a} + ${b}`;
                 break;
             case 'Subtraction':
                 // Ensure positive result
                 if (b > a) [a, b] = [b, a];
-                answer = a - b;
+                _answer = a - b;
                 question = `${a} - ${b}`;
                 break;
             case 'Division':
                 // Ensure clean division
                 b = Math.max(2, b);
-                answer = a;
+                _answer = a;
                 a = a * b;
                 question = `${a} ÷ ${b}`;
                 break;
             default: // Multiplication
-                answer = a * b;
+                _answer = a * b;
                 question = `${a} × ${b}`;
         }
 
         const band = getBandForTier(tier);
+        const answer = _answer;
         return { question, answer, explanation: `${question} = ${answer}`, type: 'basic' as const, tier, band: band.name };
     };
 
@@ -599,7 +600,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         }
     };
 
-    const handleHelpNext = async () => {
+    const handleHelpNext = useCallback(async () => {
         setShowHelpModal(false);
         setIsPaused(false);
         setInputValue("");
@@ -692,7 +693,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             setProblem(nextQueue[0]);
             setProblemStartTime(Date.now());
         }
-    };
+    }, [aiSessionId, prefetchedQuestion, currentAIItem, problemStartTime, selectedOp, currentTier, problemQueue, fetchMoreProblems]);
 
     return (
         <main className="min-h-screen bg-background text-foreground flex flex-col items-center relative overflow-hidden">

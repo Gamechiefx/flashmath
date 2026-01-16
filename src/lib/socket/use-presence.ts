@@ -11,7 +11,8 @@ import { useSession } from 'next-auth/react';
 
 export type PresenceStatus = 'online' | 'away' | 'invisible' | 'in-match' | 'offline';
 
-interface FriendPresence {
+ 
+interface _FriendPresence {
     userId: string;
     status: PresenceStatus;
     lastUpdated: number;
@@ -88,6 +89,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     // Prefer props over session (avoids SessionProvider dependency during navigation)
     const effectiveUserId = propsUserId || session?.user?.id;
     const effectiveUserName = propsUserName || (session?.user as { name?: string })?.name || 'Unknown';
+    const userNameFromSession = (session?.user as { name?: string })?.name;
     
     const [isConnected, setIsConnected] = useState(false);
     const [myStatus, setMyStatusState] = useState<PresenceStatus>('online');
@@ -285,7 +287,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             socket.off('party:queue_status_changed', handlePartyQueueStatusChanged);
             socket.off('party:step_changed', handlePartyStepChanged);
         };
-    }, [autoConnect, effectiveUserId, effectiveUserName]);
+    }, [autoConnect, effectiveUserId, effectiveUserName, userNameFromSession]);
     
     // Set my status
     const setMyStatus = useCallback((status: PresenceStatus) => {

@@ -5,7 +5,7 @@
  * Connects to the presence Socket.io namespace for leaderboard updates
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useSession } from 'next-auth/react';
 import type { Operation, TimeFilter, LeaderboardType } from '@/lib/actions/leaderboard';

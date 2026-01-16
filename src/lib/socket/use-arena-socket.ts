@@ -328,7 +328,7 @@ export function useArenaSocket({
                 socketRef.current.disconnect();
             }
         };
-    }, [matchId, userId, userName, operation, isAiMatch]);
+    }, [matchId, userId, userName, operation, isAiMatch, connected, onAnswerResult, onConnectionStatesUpdate, onMatchEnd, onMatchStart, onNewQuestion, onPlayerForfeit, onPlayerJoined, onPlayerLeft, onTimeUpdate, userBanner, userDivision, userLevel, userRank, userTitle]);
 
     const submitAnswer = useCallback((userAnswer: number) => {
         if (socketRef.current && connected) {
