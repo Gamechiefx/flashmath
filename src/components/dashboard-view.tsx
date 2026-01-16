@@ -139,9 +139,12 @@ export function DashboardView({ stats, userName: _userName, initialEmailVerified
     const isEmailVerified = sessionEmailVerified ?? initialEmailVerified ?? false;
 
     // Refresh session on mount to get latest emailVerified status
+    // Note: Empty dependency array intentionally used to run only once on mount
+    // Using [update] could cause infinite loops if update changes reference
     useEffect(() => {
         update();
-    }, [update]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handlePlacementComplete = async () => {
         setShowPlacementTest(false);
