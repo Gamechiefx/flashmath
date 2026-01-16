@@ -49,11 +49,11 @@ export function RealTimeMatch({
     const [answer, setAnswer] = useState('');
     const [showResult, setShowResult] = useState<'correct' | 'wrong' | null>(null);
     const [lastCorrectAnswer, setLastCorrectAnswer] = useState<number | null>(null); // Show correct answer briefly on wrong
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- eloChange is set but not currently displayed
     const [eloChange, setEloChange] = useState<number | null>(null);
     const [coinsEarned, setCoinsEarned] = useState<number | null>(null);
     const [hasSavedResult, setHasSavedResult] = useState(false);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Match result data type
     const [resultData, setResultData] = useState<any>(null);
     const savingRef = useRef(false); // Prevent double-save during HMR
 
@@ -328,7 +328,7 @@ export function RealTimeMatch({
         }
 
         saveResult();
-    }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation, router, update]);
+    }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation, router, update, matchIntegrity, performanceStats]);
 
     // Ref to track if we're currently processing an answer to prevent double submission
     const isProcessingRef = useRef(false);
@@ -450,7 +450,7 @@ export function RealTimeMatch({
             soundEngine.playOpponentScore();
         }
         prevOpponentScore.current = opponent?.odScore || 0;
-    }, [opponent?.odScore]);
+    }, [opponent]);
     
     // Check friendship status when match ends (for non-AI opponents)
     useEffect(() => {
@@ -528,10 +528,13 @@ export function RealTimeMatch({
         const oppScore = finalStats?.opponentScore ?? opponent?.odScore ?? 0;
         const isWinner = wonByForfeit || yourScore > oppScore;
         const isTie = !wonByForfeit && yourScore === oppScore;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- resultText, winnerBase, loserBase may be used in future
         const resultText = wonByForfeit ? 'VICTORY' : isTie ? 'DRAW' : isWinner ? 'VICTORY' : 'DEFEAT';
 
         // Determine winner and loser data for display
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const winnerBase = isWinner ? you : opponent;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const loserBase = isWinner ? opponent : you;
 
         // Use fresh stats if available, otherwise fallback to initial data

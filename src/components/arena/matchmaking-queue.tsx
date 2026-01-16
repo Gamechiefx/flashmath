@@ -36,7 +36,7 @@ interface PracticeProblem {
     answer: number;
 }
 
-function RankBadge({ rank, division }: { rank: string; division: string }) {
+function _RankBadge({ rank, division }: { rank: string; division: string }) {
     const rankColors: Record<string, { bg: string; border: string; glow: string }> = {
         Bronze: { bg: 'from-amber-700 to-amber-900', border: 'border-amber-500/50', glow: 'shadow-amber-500/20' },
         Silver: { bg: 'from-slate-400 to-slate-600', border: 'border-slate-300/50', glow: 'shadow-slate-300/20' },

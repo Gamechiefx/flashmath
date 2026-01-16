@@ -994,7 +994,7 @@ export interface PersistentTeamLeaderboardResult {
  * Team mode uses overall ELO only (no operation-specific ELO)
  */
 export async function getPersistentTeamLeaderboard(
-    mode: '5v5' = '5v5',
+    _mode: '5v5' = '5v5',
     sortBy: 'elo' | 'wins' = 'elo',
     limit: number = 100
 ): Promise<PersistentTeamLeaderboardResult> {

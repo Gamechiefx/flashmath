@@ -29,11 +29,11 @@ interface RoundStartCountdownProps {
 export function RoundStartCountdown({
     round,
     half,
-    isVisible,
+    isVisible: _isVisible,
     countdownSeconds = 5,
     onComplete,
-    myTeamName = 'Your Team',
-    opponentTeamName = 'Opponent',
+    myTeamName: _myTeamName = 'Your Team',
+    opponentTeamName: _opponentTeamName = 'Opponent',
 }: RoundStartCountdownProps) {
     const [countdown, setCountdown] = useState(countdownSeconds);
     const [showGo, setShowGo] = useState(false);
@@ -56,9 +56,9 @@ export function RoundStartCountdown({
             try {
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-            } catch (e) {
-                console.warn('[RoundCountdown] Failed to create AudioContext:', e);
-            }
+                } catch (_e) {
+                    console.warn('[RoundCountdown] Failed to create AudioContext:', _e);
+                }
         }
         
         return () => {
@@ -78,6 +78,7 @@ export function RoundStartCountdown({
     }, []);
     
     // Play countdown beep - memoized to avoid recreation
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- playBeep may be used in future
     const playBeep = useCallback((frequency: number, duration: number, volume: number = 0.15) => {
         const ctx = audioContextRef.current;
         if (!ctx || ctx.state === 'closed' || !isMountedRef.current) return;
@@ -102,7 +103,7 @@ export function RoundStartCountdown({
                     
                     oscillator.start(ctx.currentTime);
                     oscillator.stop(ctx.currentTime + duration);
-                } catch (e) {
+                } catch (_e) {
                     // Ignore audio errors silently
                 }
             };
@@ -112,7 +113,7 @@ export function RoundStartCountdown({
             } else {
                 doPlay();
             }
-        } catch (e) {
+        } catch (_e) {
             // Ignore audio errors
         }
     }, []);
@@ -171,6 +172,7 @@ export function RoundStartCountdown({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Only run on mount
     
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const roundInHalf = half === 1 ? round : round - 4;
     const isFirstRound = round === 1 || round === 5;
 

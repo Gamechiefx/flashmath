@@ -20,11 +20,10 @@ import {
     getFullArenaStats,
     updatePlayerOperationElo,
     updatePlayerTeamOperationElo,
-    getRankFromElo,
-    type FullArenaStats,
 } from "@/lib/arena/arena-db";
 
 // Redis client for matchmaking
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Redis client type
 let redisClient: any = null;
 
 async function getRedis() {
@@ -407,7 +406,7 @@ export async function joinQueue(params: {
             playerElo = pgEloData.elo;
             console.log(`[Matchmaking] Using PostgreSQL ELO: ${playerElo} (client sent: ${params.elo})`);
         }
-    } catch (error) {
+    } catch (_error) {
         console.warn(`[Matchmaking] PostgreSQL unavailable, using client ELO: ${params.elo}`);
     }
 
@@ -888,7 +887,7 @@ export async function getMatch(matchId: string): Promise<{
 /**
  * Clear match data after game ends
  */
-export async function clearMatch(matchId: string): Promise<{ success: boolean }> {
+export async function clearMatch(_matchId: string): Promise<{ success: boolean }> {
     const session = await auth();
     if (!session?.user) {
         return { success: false };
@@ -902,7 +901,7 @@ export async function clearMatch(matchId: string): Promise<{ success: boolean }>
         await redis.del(`${MATCH_PREFIX}player:${userId}`);
         // Don't delete the match itself - keep for history
         return { success: true };
-    } catch (error) {
+    } catch (_error) {
         return { success: false };
     }
 }
@@ -1102,7 +1101,7 @@ function calculateEloChange(
  * Legacy wrapper for backward compatibility
  * Converts old-style parameters to new format
  */
-function calculateEloChangeLegacy(
+function _calculateEloChangeLegacy(
     playerElo: number,
     opponentElo: number,
     won: boolean,
@@ -1148,7 +1147,7 @@ function getEloColumnName(mode: string, operation: string): string {
 /**
  * Calculate average ELO from operation-specific ELOs
  */
-function calculateAverageElo(elos: Record<string, number>): number {
+function _calculateAverageElo(elos: Record<string, number>): number {
     const values = RANKED_OPERATIONS.map(op => elos[op] || 300);
     return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
 }
@@ -1255,7 +1254,7 @@ export async function saveMatchResult(params: {
     }
 
     try {
-        const { execute, getDatabase } = await import("@/lib/db");
+        const { getDatabase } = await import("@/lib/db");
         const db = getDatabase();
 
         console.log(`[Match] saveMatchResult: matchId=${params.matchId}, mode=${params.mode}, op=${params.operation}, ranked=${isRanked}`);
@@ -1430,7 +1429,7 @@ export async function saveMatchResult(params: {
                     try {
                         const tiers = JSON.parse(humanPlayerData.math_tiers);
                         playerTier = tiers[params.operation] || 0;
-                    } catch (e) { /* ignore parse errors */ }
+                    } catch (_e) { /* ignore parse errors */ }
                 }
                 
                 if (playerTier > BOT_ELO_TIER_CAP) {
@@ -1843,7 +1842,7 @@ export async function sendMatchEmoji(matchId: string, emoji: string) {
         await redis.rpush(chatKey, message);
         await redis.expire(chatKey, 300); // 5 minutes expiry
         return { success: true };
-    } catch (error) {
+    } catch (_error) {
         return { success: false };
     }
 }
@@ -1859,7 +1858,7 @@ export async function getMatchEmojis(matchId: string) {
     try {
         const messages = await redis.lrange(chatKey, 0, -1);
         return messages.map((m: string) => JSON.parse(m));
-    } catch (error) {
+    } catch (_error) {
         return [];
     }
 }
@@ -2068,7 +2067,7 @@ export async function getTeamMatchHistoryForUser(limit: number = 10): Promise<{
 
         // Get user names from SQLite for display
         const userNameCache: Record<string, string> = {};
-        const getUserName = (odUserId: string): string => {
+        const _getUserName = (odUserId: string): string => {
             if (userNameCache[odUserId]) return userNameCache[odUserId];
             if (odUserId?.startsWith('ai_bot_')) return 'AI Bot';
             try {

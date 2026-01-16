@@ -10,6 +10,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { AchievementsPanel } from "@/components/achievements-panel";
 
 interface AuthHeaderProps {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session type
     session?: any;
 }
 

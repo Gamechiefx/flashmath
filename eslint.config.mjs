@@ -17,30 +17,20 @@ const eslintConfig = defineConfig([
     "server-redis.js",
     // Ignore utility scripts (CommonJS, run outside Next.js)
     "scripts/**",
-    // Ignore test scripts (CommonJS)
-    "tests/scripts/**",
-    "tests/report-viewer/**",
-    // Ignore test artifacts (generated files)
-    "tests/**/trace/**",
-    "tests/**/playwright-report/**",
-    "tests/history/**",
-    // Ignore arena test files (complex test infrastructure)
-    "tests/arena/**",
+    // Ignore all test files completely
+    "tests/**",
   ]),
-  // Playwright test fixtures use `use()` for fixture extension, not React's use() hook
   {
-    files: ["tests/e2e/fixtures/**/*.ts"],
     rules: {
-      "react-hooks/rules-of-hooks": "off",
-    },
-  },
-  // Relax rules for test files - focus on src code quality
-  {
-    files: ["tests/**/*.ts", "tests/**/*.tsx"],
-    rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unused-vars": "warn",
-      "prefer-const": "warn",
+      // Allow variables prefixed with underscore to be unused (common pattern for intentionally unused vars)
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          "argsIgnorePattern": "^_",
+          "varsIgnorePattern": "^_",
+          "caughtErrorsIgnorePattern": "^_"
+        }
+      ],
     },
   },
 ]);

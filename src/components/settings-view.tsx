@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 
 interface SettingsViewProps {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- User data from database
     user: any;
 }
 

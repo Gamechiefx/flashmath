@@ -2,7 +2,6 @@
 import { auth } from "@/auth";
 import { queryOne, loadData, type UserRow } from "@/lib/db";
 import { getDailyShopSelection } from "@/lib/shop-engine";
-import { ITEMS } from "@/lib/items";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 import { ShoppingBag, Coins, RefreshCw } from "lucide-react";
@@ -53,7 +52,7 @@ export default async function ShopPage() {
     const inventory = loadData().inventory.filter(i => i.user_id === userId).map(i => i.item_id);
 
     // Get daily selection and strip icons for serialization
-    const dailySelection = getDailyShopSelection().map(({ icon, ...rest }) => {
+    const dailySelection = getDailyShopSelection().map(({ icon: _icon, ...rest }) => {
         // Icon removed for serialization
         return rest;
     });

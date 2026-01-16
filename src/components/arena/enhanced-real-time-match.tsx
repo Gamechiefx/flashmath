@@ -445,7 +445,7 @@ export function EnhancedRealTimeMatch({
             soundEngine.playOpponentScore();
         }
         prevOpponentScore.current = opponent?.odScore || 0;
-    }, [opponent?.odScore]);
+    }, [opponent]);
     
     // Friend request handling (same as original)
     useEffect(() => {

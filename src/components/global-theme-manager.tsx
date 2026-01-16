@@ -79,7 +79,7 @@ export function GlobalThemeManager({ equippedItems, availableItems = ITEMS }: Gl
             soundEngine.setPack(soundItem.assetValue);
         }
 
-    }, [equippedItems]);
+    }, [equippedItems, availableItems]);
 
 
 

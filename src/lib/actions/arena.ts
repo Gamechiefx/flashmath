@@ -1,7 +1,7 @@
 'use server';
 
 import { auth } from "@/auth";
-import { queryOne, query, getDatabase, type UserRow } from "@/lib/db";
+import { queryOne, getDatabase, type UserRow } from "@/lib/db";
 import { ITEMS } from "@/lib/items";
 import { getDecayStatus } from "@/lib/arena/decay";
 
@@ -367,7 +367,7 @@ export async function getMatchmakingData() {
     let mathTiers = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
     try {
         mathTiers = JSON.parse(user.math_tiers || '{}');
-    } catch (e) {
+    } catch (_e) {
         // Keep defaults
     }
 

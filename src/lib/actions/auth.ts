@@ -1,10 +1,9 @@
 "use server";
 
-import { execute, queryOne, initSchema, getDatabase, type UserRow } from "@/lib/db";
+import { queryOne, initSchema, getDatabase, type UserRow } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { signIn, auth } from "@/auth";
 import { AuthError } from "next-auth";
-import { redirect } from "next/navigation";
 import { v4 as uuidv4 } from "uuid";
 import { createToken, verifyToken, markTokenUsed, deleteToken } from "@/lib/auth/tokens";
 import { sendEmail } from "@/lib/email";
@@ -106,7 +105,7 @@ export async function registerUser(formData: FormData) {
         try {
             db.prepare("ALTER TABLE users ADD COLUMN dob TEXT").run();
             console.log('[Auth] Added dob column to users table');
-        } catch (e) {
+        } catch (_e) {
             // Column likely already exists - this is expected
         }
 

@@ -65,6 +65,7 @@ const connectionMetrics = new Map<string, ConnectionMetrics>();
 const initializationTimeouts = new Map<string, NodeJS.Timeout>();
 
 // Enhanced logging function
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Logging details can be any type
 function logArenaEvent(level: 'info' | 'warn' | 'error', matchId: string, event: string, details?: any) {
     const timestamp = new Date().toISOString();
     const logEntry = {
@@ -362,6 +363,7 @@ export function initializeSocketServer(httpServer: HTTPServer): SocketIOServer {
             if (data.matchId) {
                 const match = activeMatches.get(data.matchId);
                 if (match) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Match state can be any type
                     const states: Record<string, any> = {};
                     Object.keys(match.players).forEach(playerId => {
                         const metrics = connectionMetrics.get(playerId);

@@ -153,7 +153,7 @@ function PlayerCard({ player, compact }: { player: OpponentPlayerStats; compact?
     );
 }
 
-function RecentMatchBadge({ result, score, daysAgo }: { result: 'win' | 'loss' | 'draw'; score: string; daysAgo: number }) {
+function RecentMatchBadge({ result, score, daysAgo: _daysAgo }: { result: 'win' | 'loss' | 'draw'; score: string; daysAgo: number }) {
     const colors = {
         win: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
         loss: 'bg-rose-500/20 border-rose-500/50 text-rose-400',

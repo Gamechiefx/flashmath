@@ -11,8 +11,8 @@
  * - Mobile-friendly tap-to-select alternative
  */
 
-import { useState, useCallback } from 'react';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { 
     GripVertical, 

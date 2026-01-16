@@ -19,6 +19,7 @@ type TabType = "sessions" | "daily" | "monthly" | "topSpeeds";
 export function OperationStatsModal({ operation, isOpen, onClose }: OperationStatsModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>("sessions");
     const [data, setData] = useState<any>(null);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [loading, setLoading] = useState(true);
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; data: any } | null>(null);
 

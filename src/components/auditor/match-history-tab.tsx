@@ -10,10 +10,8 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronDown,
-    ChevronUp,
     Trophy,
     X as XIcon,
-    Clock,
     Target,
     Zap,
     Bot,
@@ -33,7 +31,7 @@ import {
     User,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getCombinedMatchHistory, type MatchHistoryEntry, type MatchReasoning, type MatchFactor } from '@/lib/actions/matchmaking';
+import { getCombinedMatchHistory, type MatchHistoryEntry, type MatchFactor } from '@/lib/actions/matchmaking';
 
 type MatchFilter = 'all' | 'solo' | 'team';
 
@@ -72,6 +70,7 @@ function getImpactIcon(impact: MatchFactor['impact']) {
     }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- getImpactColor may be used in future
 function getImpactColor(impact: MatchFactor['impact']): string {
     switch (impact) {
         case 'positive':
@@ -474,6 +473,7 @@ export function MatchHistoryTab() {
     // Calculate stats based on displayed matches
     const wins = displayedMatches.filter(m => m.isWin && !m.isDraw).length;
     const losses = displayedMatches.filter(m => !m.isWin && !m.isDraw).length;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const draws = displayedMatches.filter(m => m.isDraw).length;
     const totalEloChange = displayedMatches.reduce((sum, m) => sum + m.eloChange, 0);
     const totalCoins = displayedMatches.reduce((sum, m) => sum + (m.coinsEarned || 0), 0);

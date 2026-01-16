@@ -181,8 +181,8 @@ function CumulativeScoreLine({
     rounds,
     team1Name,
     team2Name,
-    team1Color,
-    team2Color,
+    team1Color: _team1Color,
+    team2Color: _team2Color,
 }: {
     rounds: RoundScore[];
     team1Name: string;

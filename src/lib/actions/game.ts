@@ -4,7 +4,7 @@ import { execute, loadData, saveData, queryOne, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { syncLeagueState } from "@/lib/league-engine";
-import { generateProblemForSession, checkProgression, MathOperation, generateMasteryTest } from "@/lib/math-tiers";
+import { generateProblemForSession, MathOperation, generateMasteryTest } from "@/lib/math-tiers";
 import { MAX_TIER, isAtBandBoundary, getBandForTier, checkMilestoneReward, isMasteryTestAvailable } from "@/lib/tier-system";
 
 export async function getNextProblems(operation: string, count: number = 20) {
@@ -154,6 +154,7 @@ export async function saveSession(sessionData: {
     return { success: true };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stats array from database
 export async function updateMastery(stats: any[]) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };

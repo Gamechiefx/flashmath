@@ -148,7 +148,7 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
                 clearInterval(countdownRef.current);
             }
         };
-    }, [matchAlert]);
+    }, [matchAlert, handleJoinMatch]);
 
     const handleJoinMatch = useCallback(() => {
         // Read from ref to get the latest value, avoiding stale closure

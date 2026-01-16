@@ -2,7 +2,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Zap,
@@ -63,6 +63,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
     // Session History
     const [sessionStats, setSessionStats] = useState<any[]>([]);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [attempts, setAttempts] = useState(0);
     const [streak, setStreak] = useState(0);
     const [maxStreak, setMaxStreak] = useState(0);
@@ -77,8 +78,10 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [showPlacementTest, setShowPlacementTest] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [currentExplanation, setCurrentExplanation] = useState("");
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [pausedTime, setPausedTime] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [isLoadingProblems, setIsLoadingProblems] = useState(false);
     const [currentTier, setCurrentTier] = useState(1);
     const [showMasteryTest, setShowMasteryTest] = useState(false);
@@ -91,7 +94,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [tiltScore, setTiltScore] = useState(0);
     const [echoQueueSize, setEchoQueueSize] = useState(0);
     const [echoItemsResolved, setEchoItemsResolved] = useState(0);
-    const [isAIMode, setIsAIMode] = useState(true);  // AI mode enabled by default
+    const [isAIMode] = useState(true);  // AI mode enabled by default
     const [prefetchedQuestion, setPrefetchedQuestion] = useState<{ question: ContentItem; stats: any } | null>(null);
     const [tierAdvanced, setTierAdvanced] = useState<{ from: number; to: number } | null>(null);
     const [aiAnalysis, setAiAnalysis] = useState<{
@@ -253,6 +256,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                     setAiSessionId(null);
                 }
 
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const result = await saveSession({
                     operation: selectedOp,
                     correctCount: finalScore,
@@ -278,7 +282,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
         setIsSaving(false);
         soundEngine.playComplete();
-    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState, aiSessionId, maxStreak, tiltScore, echoQueueSize, hintsReceivedCount]);
+    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState, aiSessionId, maxStreak, tiltScore, echoQueueSize, hintsReceivedCount, echoItemsResolved, update]);
 
     // Timer logic - use setInterval for reliable timing independent of state changes
     const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -501,7 +505,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isError, problemQueue, selectedOp, continueKey]);
+    }, [isError, problemQueue, selectedOp, continueKey, handleHelpNext]);
 
 
     const getSymbol = () => {

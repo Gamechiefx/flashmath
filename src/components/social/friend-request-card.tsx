@@ -5,7 +5,6 @@
  * Displays incoming or outgoing friend request with actions
  */
 
-import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Check, X, Clock } from 'lucide-react';
 import { UserAvatar } from '@/components/user-avatar';

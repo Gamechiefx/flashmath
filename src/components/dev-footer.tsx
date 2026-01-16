@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, ChevronUp, Hammer } from "lucide-react";
+import { ChevronDown, Hammer } from "lucide-react";
 
 /**
  * DevFooter - A subtle development environment indicator

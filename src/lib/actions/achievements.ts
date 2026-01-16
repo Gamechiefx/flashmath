@@ -3,9 +3,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
 
 import { auth } from "@/auth";
-import { queryOne, loadData, execute, getDatabase, generateId, now, type UserRow } from "@/lib/db";
+import { queryOne, loadData, getDatabase, generateId, now, type UserRow } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { ACHIEVEMENTS, Achievement, getAchievementById } from "@/lib/achievements";
+import { ACHIEVEMENTS, getAchievementById } from "@/lib/achievements";
 
 // Serializable version for client components (no icon functions)
 export interface SerializedAchievement {
@@ -160,6 +160,7 @@ export async function claimAchievement(achievementId: string) {
         const existingItem = db.prepare('SELECT id FROM shop_items WHERE id = ?').get(titleId);
         if (!existingItem) {
             // Import ITEMS to get the title data
+            // eslint-disable-next-line @typescript-eslint/no-require-imports -- Dynamic import for items
             const { ITEMS } = require('@/lib/items');
             const titleItem = ITEMS.find((i: any) => i.id === titleId);
             if (titleItem) {

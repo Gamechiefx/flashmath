@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 import { motion, useInView } from "framer-motion";
-import { ArrowLeft, Trophy, Zap, Target, Clock, Activity } from "lucide-react";
+import { ArrowLeft, Trophy, Zap, Target, Activity } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { OperationStatsModal } from "@/components/operation-stats-modal";
@@ -317,7 +317,7 @@ export function CareerStatsView({ stats }: CareerStatsViewProps) {
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.6 }}
                     >
-                        {(['2v2', '3v3', '4v4', '5v5'] as const).map((mode, idx) => {
+                        {(['2v2', '3v3', '4v4', '5v5'] as const).map((mode) => {
                             const modeStats = stats.arenaStats.team?.modes?.[mode];
                             const modeColors = {
                                 '2v2': 'text-blue-400',

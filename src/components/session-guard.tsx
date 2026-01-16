@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 
 export function SessionGuard() {
-    const { data: session, status } = useSession();
+    const { data: _session, status } = useSession();
     const router = useRouter();
     const pathname = usePathname();
 

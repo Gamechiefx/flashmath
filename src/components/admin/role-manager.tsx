@@ -21,7 +21,7 @@ const ROLE_ICONS: Record<Role, React.ReactNode> = {
     [Role.SUPER_ADMIN]: <Crown size={14} />,
 };
 
-export function RoleManager({ userId, userName, currentRole, managerRole, onRoleChanged }: RoleManagerProps) {
+export function RoleManager({ userId, userName: _userName, currentRole, managerRole, onRoleChanged }: RoleManagerProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);

@@ -7,7 +7,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { useSession } from 'next-auth/react';
-import { getConfidenceBreakdown, type ConfidenceResult } from '@/lib/actions/confidence';
+import { getConfidenceBreakdown } from '@/lib/actions/confidence';
 
 // Types for the auditor context
 export interface AuditorStats {
@@ -44,6 +44,7 @@ interface AuditorContextType {
     hasWarning: boolean; // True if decay phase is not 'active'
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- defaultStats may be used in future
 const defaultStats: AuditorStats = {
     confidence: {
         overall: 0,

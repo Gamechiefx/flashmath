@@ -20,16 +20,14 @@ import {
     getTeamElo as getTeamEloFromPostgres,
     getPlayerElo,
     getOrCreateArenaPlayer,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- getOrCreateArenaTeam is imported but not currently used
     getOrCreateArenaTeam
 } from "@/lib/arena/arena-db";
 import {
     getParty,
     updateQueueState,
-    setMatchFound,
     toggleReady as togglePartyReady,
     refreshPartyTTL,
-    type PartyState,
-    type PartyMember,
 } from "@/lib/party/party-redis";
 import { checkPartyArenaEligibility } from "@/lib/actions/arena";
 

@@ -236,7 +236,7 @@ export function PointsFeedFAB({
     team1Name,
     team2Name,
     team1Id,
-    team2Id,
+    team2Id: _team2Id,
     team1Score,
     team2Score,
     myTeamId,
@@ -304,7 +304,6 @@ export function PointsFeedFAB({
         }
         
         return { team1Breakdown: t1, team2Breakdown: t2 };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- team2Id is not needed in deps
     }, [events, team1Id]);
     
     // Determine which team is "my team"

@@ -4,12 +4,9 @@
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { motion } from "framer-motion";
 import {
     Activity,
     ArrowLeft,
-    Clock,
-    Target,
     Zap,
     AlertTriangle,
     CheckCircle2

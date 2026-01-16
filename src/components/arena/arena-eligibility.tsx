@@ -6,7 +6,7 @@ import {
     AnimatePresence
 } from 'framer-motion';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp, Zap, AlertTriangle, Activity, Award } from 'lucide-react';
+import { ChevronDown, ChevronUp, Zap, AlertTriangle, Activity } from 'lucide-react';
 import { useAuditor } from '@/components/auditor';
 import type { ConfidenceBreakdown, DecayInfo } from './flash-auditor';
 
@@ -43,7 +43,6 @@ export function ArenaEligibility({
 
     // Check eligibility - simplified since confidence is no longer a gate
     const hasEnoughPractice = practiceStats.totalSessions >= MIN_SESSIONS;
-    const hasGoodAccuracy = practiceStats.totalSessions === 0 || (practiceStats.recentAccuracy ?? 0) >= MIN_ACCURACY;
     const meetsAge = isAdmin || (userAge !== null && userAge >= MIN_AGE);
 
     useEffect(() => {

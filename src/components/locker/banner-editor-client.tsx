@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { PlayerBanner } from '@/components/arena/player-banner';
 import { equipItem } from '@/lib/actions/shop';
 import { cn } from '@/lib/utils';
-import { ITEMS, ItemType, RARITY_COLORS } from '@/lib/items';
+import { ITEMS, RARITY_COLORS } from '@/lib/items';
 
 interface BannerEditorClientProps {
     userName: string;
@@ -34,7 +34,7 @@ export function BannerEditorClient({
     rank,
     division,
     equippedTitle,
-    equippedFrame,
+    equippedFrame: _equippedFrame,
     equippedBanner,
     ownedBannerIds
 }: BannerEditorClientProps) {

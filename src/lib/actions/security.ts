@@ -17,6 +17,7 @@ export interface SecurityActivity {
     action: string;
     ip_address: string | null;
     user_agent: string | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Security log details can be any type
     details: any;
     created_at: string;
 }

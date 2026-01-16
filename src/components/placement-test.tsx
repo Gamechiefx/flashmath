@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { generateProblemForSession, MathProblem } from "@/lib/math-tiers";
-import { BANDS, getBandForTier } from "@/lib/tier-system";
+import { BANDS } from "@/lib/tier-system";
 import { updateTiers } from "@/lib/actions/game";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, ChevronRight, XCircle, Zap, Target, X } from "lucide-react";
@@ -159,7 +159,7 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
                 }
             }
         }, 500);
-    }, [currentTimeLimit, currentBandIndex, currentOp, currentOpIndex, results]);
+    }, [currentTimeLimit, currentBandIndex, currentOp, currentOpIndex, results, calculateFinalTiers]);
 
     // Auto-fail if time runs out
     useEffect(() => {

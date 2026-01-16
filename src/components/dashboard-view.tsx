@@ -11,7 +11,6 @@ import {
     History,
     ChevronRight,
     Activity,
-    Coins,
     BarChart3,
     ShoppingBag,
     ArrowRight,
@@ -21,9 +20,8 @@ import Link from "next/link";
 
 import { PlacementTest } from "@/components/placement-test";
 import { useState, useEffect, useRef } from "react";
-import { updateTiers } from "@/lib/actions/game";
 import { useRouter } from "next/navigation";
-import { getBandForTier, getTierWithinBand, getProgressWithinBand, formatTierShort } from "@/lib/tier-system";
+import { getBandForTier, getTierWithinBand, getProgressWithinBand } from "@/lib/tier-system";
 
 interface DashboardViewProps {
     stats: any;
@@ -128,7 +126,7 @@ const cardHover = {
     transition: { duration: 0.2 }
 };
 
-export function DashboardView({ stats, userName }: DashboardViewProps) {
+export function DashboardView({ stats, userName: _userName }: DashboardViewProps) {
     const [isOperationsOpen, setIsOperationsOpen] = useState(true);
     const [selectedOp, setSelectedOp] = useState<string | null>(null);
     const [showPlacementTest, setShowPlacementTest] = useState(false);
@@ -139,7 +137,7 @@ export function DashboardView({ stats, userName }: DashboardViewProps) {
     // Refresh session on mount to get latest emailVerified status
     useEffect(() => {
         update();
-    }, []);
+    }, [update]);
 
     const handlePlacementComplete = async () => {
         setShowPlacementTest(false);

@@ -35,7 +35,7 @@ export default async function AdminPage() {
 // I'll make a unified solution if I can, or separate.
 
 // I will create `src/components/admin/item-editor.tsx` first, then the page.
-import { Check, Save, Loader2 } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 
 export function ItemEditorRow({ item }: { item: Item }) {
     const [name, setName] = useState(item.name);

@@ -12,8 +12,7 @@
 import { auth } from "@/auth";
 import { getDatabase } from "@/lib/db/sqlite";
 import * as partyRedis from "@/lib/party/party-redis";
-import type { FullPartyData, PartyState, PartyMember, PartyQueueState } from "@/lib/party/party-redis";
-import type { UserRow } from "@/lib/db";
+import type { FullPartyData, PartyQueueState } from "@/lib/party/party-redis";
 
 // Re-export types
 export type { FullPartyData, PartyState, PartyMember, PartyQueueState };

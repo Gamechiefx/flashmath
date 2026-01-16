@@ -169,6 +169,8 @@ export function IGLControls({
                             {[1, 2, 3].map(r => {
                                 const isPast = r < nextRound;
                                 const isCurrent = r === nextRound;
+                                // eslint-disable-next-line @typescript-eslint/no-unused-vars -- roundInHalf may be used in future
+                                const roundInHalf = half === 1 ? r : r - 4;
                                 const isAvailable = r >= nextRound && r <= 3;
                                 return (
                                     <span key={r} className={cn(

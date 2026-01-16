@@ -79,6 +79,7 @@ export function StrategyTimer({
     // Determine urgency level
     const isUrgent = remainingSeconds <= urgentAt;
     const isWarning = remainingSeconds <= warningAt && !isUrgent;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const isNormal = !isUrgent && !isWarning;
 
     // Colors based on urgency

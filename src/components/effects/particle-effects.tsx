@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { usePathname } from "next/navigation";
 
 interface ParticleEffectsProps {
@@ -10,10 +10,11 @@ interface ParticleEffectsProps {
 
 export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Particle array type
     const particles = useRef<any[]>([]);
     const pathname = usePathname();
 
-    const getTargetPosition = () => {
+    const getTargetPosition = useCallback(() => {
         let x = window.innerWidth / 2;
         let y = window.innerHeight / 2;
         let width = 0;
@@ -49,10 +50,10 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
             }
         }
         return { x, y, width, height };
-    };
+    }, [previewRect]);
 
-    const spawnFragments = () => {
-        const { x, y, width, height } = getTargetPosition();
+    const spawnFragments = useCallback(() => {
+        const { x, y, width } = getTargetPosition();
         // Spread a bit based on width/height
         const spreadX = width ? width / 2 : 20;
 
@@ -69,9 +70,9 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
                 size: 2 + Math.random() * 4
             });
         }
-    };
+    }, [getTargetPosition]);
 
-    const spawnGlitch = () => {
+    const spawnGlitch = useCallback(() => {
         const { x: cx, y: cy, width, height } = getTargetPosition();
 
         // Spawn near target
@@ -87,9 +88,9 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
                 color: `rgba(${Math.random() > 0.5 ? 255 : 0}, ${Math.random() * 255}, ${Math.random() > 0.5 ? 255 : 0}, 0.6)`
             });
         }
-    };
+    }, [getTargetPosition]);
 
-    const spawnBinary = () => {
+    const spawnBinary = useCallback(() => {
         const { x, y, width, height } = getTargetPosition();
         // console.log("Spawning binary", { x, y, height });
         const spreadX = width ? width / 2 : 50;
@@ -106,9 +107,9 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
                 size: 20 + Math.random() * 12 // Bigger text
             });
         }
-    };
+    }, [getTargetPosition]);
 
-    const spawnExplosion = () => {
+    const spawnExplosion = useCallback(() => {
         const { x, y } = getTargetPosition();
         // Math symbols instead of BAM POW
         const symbols = ["+", "-", "×", "÷", "=", "√", "%"];
@@ -134,9 +135,9 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
             color: color,
             size: 32 + Math.random() * 16
         });
-    };
+    }, [getTargetPosition]);
 
-    const spawnVortex = () => {
+    const spawnVortex = useCallback(() => {
         const { x, y } = getTargetPosition();
 
         for (let i = 0; i < 6; i++) {
@@ -154,7 +155,7 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
                 size: 3 + Math.random() * 3
             });
         }
-    };
+    }, [getTargetPosition]);
 
     // 1. INPUT LISTENER EFFECT
     useEffect(() => {
@@ -185,7 +186,7 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Event handler type compatibility
             window.removeEventListener('keydown', handleInput as any);
         };
-    }, [effectType, pathname, previewRect]);
+    }, [effectType, pathname, previewRect, spawnFragments, spawnGlitch, spawnBinary, spawnExplosion, spawnVortex]);
 
     // 2. ANIMATION LOOP
     useEffect(() => {
@@ -299,7 +300,7 @@ export function ParticleEffects({ effectType, previewRect }: ParticleEffectsProp
             if (effectType.includes('explosion')) spawnExplosion();
             if (effectType.includes('vortex')) spawnVortex();
         }
-    }, [effectType, pathname, previewRect]);
+    }, [effectType, pathname, previewRect, spawnFragments, spawnGlitch, spawnBinary, spawnExplosion, spawnVortex]);
 
     return (
         <canvas

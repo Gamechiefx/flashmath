@@ -9,7 +9,6 @@ import {
     TrendingDown, 
     Minus, 
     Target, 
-    Zap, 
     Award, 
     Share2,
     Download,

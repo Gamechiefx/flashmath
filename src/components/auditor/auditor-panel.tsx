@@ -14,7 +14,6 @@ import {
     Activity,
     Calendar,
     Clock,
-    TrendingUp,
     TrendingDown,
     AlertTriangle,
     CheckCircle2,

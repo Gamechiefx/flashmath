@@ -70,12 +70,12 @@ export function TacticalBreakPanel({
     insights,
     isIGL,
     half,
-    usedDoubleCallinHalf1,
-    usedDoubleCallinHalf2,
-    timeoutsRemaining,
-    availableSlots,
-    onDoubleCallin,
-    onTimeout,
+    usedDoubleCallinHalf1: _usedDoubleCallinHalf1,
+    usedDoubleCallinHalf2: _usedDoubleCallinHalf2,
+    timeoutsRemaining: _timeoutsRemaining,
+    availableSlots: _availableSlots,
+    onDoubleCallin: _onDoubleCallin,
+    onTimeout: _onTimeout,
     onComplete,
 }: TacticalBreakPanelProps) {
     const [remainingMs, setRemainingMs] = useState(durationMs);

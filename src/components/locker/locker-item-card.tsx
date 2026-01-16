@@ -1,6 +1,6 @@
 "use client";
 
-import { Item, ItemType, RARITY_COLORS, ITEMS } from "@/lib/items";
+import { Item, ItemType, RARITY_COLORS } from "@/lib/items";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Shield } from "lucide-react";
 import { EquipButton } from "./equip-button";

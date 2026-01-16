@@ -12,17 +12,18 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Database query results and error handling use any types */
 import { auth } from "@/auth";
-import { getDatabase, generateId, now, type UserRow } from "@/lib/db/sqlite";
-import { getArenaDisplayStatsBatch, getRankFromElo } from "@/lib/arena/arena-db";
+import { getDatabase, generateId, now } from "@/lib/db/sqlite";
+import { getArenaDisplayStatsBatch } from "@/lib/arena/arena-db";
 import { checkUserArenaEligibility } from "@/lib/actions/arena";
 import { ITEMS, ItemType } from "@/lib/items";
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- CommonJS module
-const { getLeagueFromElo } = require('@/lib/arena/leagues.js');
+// const { getLeagueFromElo } = require('@/lib/arena/leagues.js');
 
 /**
  * Resolve banner item ID to style ID
  * e.g., "banner_synthwave" -> "synthwave"
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- resolveBannerStyle is used in the codebase
 function resolveBannerStyle(bannerId: string): string {
     if (!bannerId || bannerId === 'default') return 'default';
     // If it's a raw style ID (legacy), return it

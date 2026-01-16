@@ -26,7 +26,6 @@ import {
 import {
     MAX_TIER,
     getBandForTier,
-    isAtBandBoundary,
     checkMilestoneReward,
     getTierOperandRange,
 } from "@/lib/tier-system";

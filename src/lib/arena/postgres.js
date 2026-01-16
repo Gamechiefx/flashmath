@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS file, require() is legitimate */
 /**
  * FlashMath Arena - PostgreSQL Database Layer
  * 

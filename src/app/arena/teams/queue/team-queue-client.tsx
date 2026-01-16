@@ -60,7 +60,6 @@ export function TeamQueueClient({
     const router = useRouter();
     
     // Debug: Log initial mount state
-    const mountTime = useRef(Date.now());
     console.log('[TeamQueue] === COMPONENT MOUNT ===');
     console.log('[TeamQueue] partyId:', partyId);
     console.log('[TeamQueue] party.queueStatus:', party.queueStatus);
@@ -129,10 +128,6 @@ export function TeamQueueClient({
     };
 
     const isLeader = party.leaderId === currentUserId;
-    const partySize = party.members.length;
-    // Get team size from mode (e.g., '2v2' -> 2, '5v5' -> 5)
-    const teamSize = parseInt(mode.charAt(0)) || 5;
-    const needsTeammates = partySize < teamSize;
     
     // Real-time presence for queue status updates
     // Pass userId/userName to avoid useSession dependency during navigation transitions
@@ -242,7 +237,7 @@ export function TeamQueueClient({
             // Clear from set after navigation completes
             setTimeout(() => redirectingParties.delete(partyId), 5000);
         }
-    }, [latestQueueStatusUpdate, partyId, router, clearQueueStatusUpdate]);
+    }, [latestQueueStatusUpdate, partyId, router, clearQueueStatusUpdate, mode]);
     
     useEffect(() => {
         console.log('[TeamQueue] === NON-LEADER POLL EFFECT ===');

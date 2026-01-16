@@ -519,6 +519,8 @@ export function TeamMatchClient({
     const [opponentDoubleAnchorSlot, setOpponentDoubleAnchorSlot] = useState<string | null>(null);
     const [opponentDoubleAnchorForRound, setOpponentDoubleAnchorForRound] = useState<number | null>(null);
     const [opponentDoubleAnchorPlayerName, setOpponentDoubleAnchorPlayerName] = useState<string | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- opponentDoubleAnchorBenchedPlayer is set but not currently used
+    const [opponentDoubleAnchorBenchedPlayer, setOpponentDoubleAnchorBenchedPlayer] = useState<string | null>(null); // Who is benched
     const [phaseInitialDuration, setPhaseInitialDuration] = useState(0); // Initial duration when phase starts
     const lastPhaseRef = useRef<string | null>(null);
     
@@ -804,7 +806,6 @@ export function TeamMatchClient({
             // Demo Mode: Use MockMatchSimulator instead of Socket.io
             console.log('[TeamMatch] Demo mode enabled - using MockMatchSimulator');
             mockSimulatorRef.current = new MockMatchSimulator();
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: initializing demo mode state
             setConnected(true);
             
             // Convert mock state to match state format
@@ -2281,7 +2282,6 @@ export function TeamMatchClient({
             if (matchState.phase === 'break' || matchState.phase === 'halftime' || 
                 matchState.phase === 'strategy' || matchState.phase === 'pre_match' ||
                 matchState.phase === 'round_countdown') {
-                // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: syncing with server state
                 setPhaseInitialDuration(matchState.relayClockMs || 0);
             }
             
@@ -2322,7 +2322,6 @@ export function TeamMatchClient({
             // This is non-blocking - the QuestionAnswerCard shows immediately
             if (isIncomingCurrentUser) {
                 soundEngine.playYourTurn();
-                // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: responding to slot change
                 setYourTurnStarting(true);
                 // Short notification duration - doesn't block input
                 setTimeout(() => setYourTurnStarting(false), 1500);

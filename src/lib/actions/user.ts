@@ -31,7 +31,6 @@ export async function getDashboardStats() {
         [key: string]: unknown;
     }
     const userSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
-    const userMastery = (db.mastery_stats as MasteryRow[]).filter((s: MasteryRow) => s.user_id === userId);
 
     const totalCorrect = userSessions.reduce((acc: number, s: SessionRow) => acc + (s.correct_count || 0), 0);
     const totalAttempted = userSessions.reduce((acc: number, s: SessionRow) => acc + (s.total_count || 0), 0);
@@ -127,6 +126,7 @@ export async function getDashboardStats() {
     const titleId = equippedItems?.title;
     let equippedTitle = "";
     if (titleId && titleId !== 'default') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- Dynamic import for items
         const { ITEMS } = require("@/lib/items");
         // Prefer DB items if available to reflect dynamic changes
         interface ShopItem {

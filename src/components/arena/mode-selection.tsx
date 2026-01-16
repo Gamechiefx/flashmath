@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { soundEngine } from '@/lib/sound-engine';
-import { Trophy, ChevronRight, Users, AlertCircle, X } from 'lucide-react';
+import { Trophy, ChevronRight, Users, X } from 'lucide-react';
 import { getPartyData } from '@/lib/actions/social';
 
 interface GameMode {
@@ -152,7 +152,7 @@ function ParticleBackground({ analyser }: { analyser: AnalyserNode | null }) {
     );
 }
 
-function RankBadge({ rank, division, elo }: { rank: string; division: string; elo: number }) {
+function RankBadge({ rank, division, elo: _elo }: { rank: string; division: string; elo: number }) {
     const rankColors: Record<string, { bg: string; border: string; glow: string }> = {
         Bronze: { bg: 'from-amber-700 to-amber-900', border: 'border-amber-500/50', glow: 'shadow-amber-500/20' },
         Silver: { bg: 'from-slate-400 to-slate-600', border: 'border-slate-300/50', glow: 'shadow-slate-300/20' },
@@ -593,7 +593,8 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     const [selectedOperation, setSelectedOperation] = useState<Operation>('mixed');
     const [isRankFabExpanded, setIsRankFabExpanded] = useState(false);
     const [isInParty, setIsInParty] = useState(false);
-    const [partyId, setPartyId] = useState<string | null>(null);
+    const [_partyId, setPartyId] = useState<string | null>(null);
+    // partyId is set but may be used in future party features
     const [isBannerDismissed, setIsBannerDismissed] = useState(false);
     const [audioAnalyser, setAudioAnalyser] = useState<AnalyserNode | null>(null);
 
@@ -727,6 +728,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     }, []);
 
     // Determine if duel or team mode is selected (for operation-specific ELO display on mode cards)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const isDuel = selectedMode === '1v1';
 
     // Build modes with dynamic ELO based on selected operation

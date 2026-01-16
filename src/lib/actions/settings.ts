@@ -1,9 +1,7 @@
 "use server";
 
 import { auth, signOut } from "@/auth";
-import { getDatabase, generateId, now } from "@/lib/db";
-import { revalidatePath } from "next/cache";
-import type { UserRow } from "@/lib/db";
+import { getDatabase, now } from "@/lib/db";
 
 export async function resetUserData() {
     const session = await auth();
@@ -103,7 +101,7 @@ export async function resetUserData() {
                     updated_at = ?
                 WHERE id = ?
             `).run(now(), userId);
-        } catch (e) {
+        } catch (_e) {
             // Fallback for databases without new columns
             console.log('[SETTINGS] Using fallback reset (new columns may not exist)');
             db.prepare(`
@@ -130,7 +128,7 @@ export async function resetUserData() {
             if (redis) {
                 await redis.del(`arena:queue:${userId}`);
             }
-        } catch (e) {
+        } catch (_e) {
             // Redis may not be available
         }
 

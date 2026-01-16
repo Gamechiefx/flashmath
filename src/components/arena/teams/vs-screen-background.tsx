@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
 interface VSScreenBackgroundProps {
@@ -96,8 +96,8 @@ function FloatingMathSymbols() {
 
 export function VSScreenBackground({
     variant = 'versus',
-    teamColor = 'cyan',
-    opponentColor = 'rose',
+    teamColor: _teamColor = 'cyan',
+    opponentColor: _opponentColor = 'rose',
     className,
     children,
     showFloatingNumbers = true,
@@ -464,6 +464,7 @@ export function TeamBannerHeader({
     align?: 'left' | 'center' | 'right';
     className?: string;
 }) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const baseColor = isMyTeam ? 'cyan' : 'rose';
     const alignClass = align === 'left' ? 'text-left' : align === 'right' ? 'text-right' : 'text-center';
     

@@ -533,9 +533,10 @@ export async function declineTeamInvite(
     const db = getDatabase();
     const userId = session.user.id;
 
-    const invite = db.prepare(`
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Database query result
+    const invite = (db.prepare(`
         SELECT id, invitee_id, status FROM team_invites WHERE id = ?
-    `).get(inviteId) as any;
+    `).get(inviteId) as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- Database query result
 
     if (!invite) {
         return { error: 'Invite not found' };

@@ -1,0 +1,10 @@
+---
+alwaysApply: true
+---
+# Overview
+
+Please fix the code quality and bugs in the codebase using eslint and typescript.
+npm run lint:fix to fix the issues.
+before git committing, please run npm run lint:fix to fix the issues and warnings.
+code must be clean and free of errors and warnings.
+please refer to LINT_ISSUES.md for the previous issues and warnings.

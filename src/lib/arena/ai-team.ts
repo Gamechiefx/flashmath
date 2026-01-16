@@ -211,6 +211,7 @@ export function isAITeam(teamId: string | null): boolean {
 /**
  * Get bot config from a member (if it's a bot)
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Member type from team data
 export function getBotConfig(member: any): BotConfig | null {
     if (member?.isBot && member?.botConfig) {
         return member.botConfig;

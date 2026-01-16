@@ -1,6 +1,6 @@
 "use server";
 
-import { loadData, saveData, getDatabase } from "@/lib/db";
+import { getDatabase } from "@/lib/db";
 import { ITEMS } from "@/lib/items";
 import { revalidatePath } from "next/cache";
 

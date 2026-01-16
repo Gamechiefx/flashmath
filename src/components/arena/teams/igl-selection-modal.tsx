@@ -35,14 +35,6 @@ export interface TeamMember {
     willingToAnchor?: boolean;
 }
 
-// Helper to resolve banner ID to style key
-function resolveBannerStyle(bannerId: string | undefined): string {
-    if (!bannerId || bannerId === 'default') return 'default';
-    if (!bannerId.startsWith('banner_')) return bannerId;
-    // Extract style from "banner_synthwave" -> "synthwave"
-    return bannerId.replace('banner_', '');
-}
-
 interface IGLSelectionModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -63,7 +55,7 @@ interface IGLSelectionModalProps {
 
 export function IGLSelectionModal({
     isOpen,
-    onClose,
+    onClose: _onClose,
     members,
     currentUserId,
     currentIGL,

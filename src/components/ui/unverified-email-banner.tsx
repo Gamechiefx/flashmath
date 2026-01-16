@@ -83,7 +83,7 @@ export function UnverifiedEmailBanner({ email }: UnverifiedEmailBannerProps) {
                 setCode(["", "", "", "", "", ""]);
                 document.getElementById("banner-code-0")?.focus();
             }
-        } catch (err) {
+        } catch (_err) {
             setError("Failed to verify code");
             setCode(["", "", "", "", "", ""]);
         }

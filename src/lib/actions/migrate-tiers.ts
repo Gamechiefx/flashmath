@@ -14,7 +14,7 @@
  */
 
 import { getDatabase } from '@/lib/db';
-import { migrateTier, migrateMathTiers, MathOperation } from '@/lib/tier-system';
+import { migrateTier } from '@/lib/tier-system';
 import { auth } from '@/auth';
 
 interface MigrationResult {
@@ -305,7 +305,7 @@ export async function rollbackTierMigration(): Promise<MigrationResult> {
 
                     updateStmt.run(JSON.stringify(oldTiers), user.id);
                     usersUpdated++;
-                } catch (err) {
+                } catch (_err) {
                     errors.push(`Failed to rollback user ${user.id}`);
                 }
             }

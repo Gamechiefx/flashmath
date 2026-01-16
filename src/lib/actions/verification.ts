@@ -1,7 +1,7 @@
 'use server';
 
 import { auth } from '@/auth';
-import { queryOne, type UserRow } from '@/lib/db';
+import { queryOne } from '@/lib/db';
 
 /**
  * Check if the current user has verified their email

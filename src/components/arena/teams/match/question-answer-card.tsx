@@ -419,7 +419,7 @@ export function QuestionCardSpectator({
     playerName,
     currentInput,
     streak,
-    slotLabel,
+    slotLabel: _slotLabel,
     questionNumber,
     totalQuestions,
 }: {

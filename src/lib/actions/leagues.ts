@@ -5,7 +5,6 @@
 import { query, queryOne, execute, loadData, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import { syncLeagueState } from "@/lib/league-engine";
-import { revalidatePath } from "next/cache";
 
 import { ITEMS, ItemType } from "@/lib/items";
 

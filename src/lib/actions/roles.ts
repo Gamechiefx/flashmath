@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { getDatabase, generateId, now, type UserRow } from "@/lib/db";
-import { Role, Permission, hasPermission, canManageRole, parseRole, ROLE_HIERARCHY } from "@/lib/rbac";
+import { Role, Permission, hasPermission, canManageRole, parseRole } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -131,7 +131,7 @@ export async function getUsersWithRoles(): Promise<Array<{
 /**
  * Log role change to security activity
  */
-async function logRoleChange(
+async function _logRoleChange(
     actorId: string,
     targetUserId: string,
     oldRole: Role,

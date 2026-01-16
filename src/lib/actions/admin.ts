@@ -1,6 +1,6 @@
 "use server";
 
-import { getDatabase, type UserRow } from "@/lib/db";
+import { getDatabase } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 
