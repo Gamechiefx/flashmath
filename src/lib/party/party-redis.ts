@@ -30,10 +30,6 @@ import { v4 as uuidv4 } from 'uuid';
 let redisClient: any = null;
 
 export async function getRedis() {
-    // #region agent log
-    const startTime = Date.now();
-    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'party-redis.ts:getRedis',message:'getRedis called',data:{hasExistingClient:!!redisClient},timestamp:startTime,sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     if (redisClient) return redisClient;
 
     try {
@@ -45,12 +41,10 @@ export async function getRedis() {
             maxRetriesPerRequest: 3,
         });
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'party-redis.ts:getRedis',message:'Redis client created',data:{durationMs:Date.now()-startTime,host:process.env.REDIS_HOST||'localhost'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         return redisClient;
     } catch (error) {
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'party-redis.ts:getRedis',message:'Redis connection FAILED',data:{error:String(error),durationMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         console.error('[PartyRedis] Redis connection failed:', error);
         return null;

@@ -458,10 +458,6 @@ export async function getArenaDisplayStats(userId: string): Promise<ArenaDisplay
 export async function getArenaDisplayStatsBatch(
     userIds: string[]
 ): Promise<Map<string, ArenaDisplayStats>> {
-    // #region agent log
-    const startTime = Date.now();
-    fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arena-db.ts:getArenaDisplayStatsBatch',message:'getArenaDisplayStatsBatch called',data:{userCount:userIds.length},timestamp:startTime,sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     const result = new Map<string, ArenaDisplayStats>();
     
     if (userIds.length === 0) return result;
@@ -508,7 +504,6 @@ export async function getArenaDisplayStatsBatch(
     
     try {
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arena-db.ts:getArenaDisplayStatsBatch',message:'Calling getPlayersBatch',data:{uncachedCount:uncachedIds.length,durationSoFarMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
         // Fetch uncached players in one query
         const players = await arenaPostgres.getPlayersBatch(uncachedIds);
@@ -546,7 +541,6 @@ export async function getArenaDisplayStatsBatch(
         }
     } catch (error) {
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'arena-db.ts:getArenaDisplayStatsBatch',message:'getArenaDisplayStatsBatch CATCH ERROR',data:{error:String(error),durationMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
         // #endregion
         console.error(`[ArenaDB] Failed to batch get display stats:`, error);
         // Return defaults for uncached on error

@@ -106,6 +106,8 @@ export function useArenaSocket({
 }: UseArenaSocketOptions) {
     const socketRef = useRef<Socket | null>(null);
     const [connected, setConnected] = useState(false);
+    const connectedRef = useRef(false); // Track connected state without triggering re-renders
+    const isCleaningUpRef = useRef(false); // Prevent race conditions during cleanup
     const [players, setPlayers] = useState<Record<string, Player>>({});
     const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
     const [timeLeft, setTimeLeft] = useState(60);
@@ -117,11 +119,54 @@ export function useArenaSocket({
     const [connectionStates, setConnectionStates] = useState<ConnectionStates>({});
     const [matchIntegrity, setMatchIntegrity] = useState<ConnectionState>('GREEN');
 
+    // Store callbacks in refs to avoid triggering effect re-runs
+    const callbacksRef = useRef({
+        onMatchStart,
+        onAnswerResult,
+        onNewQuestion,
+        onTimeUpdate,
+        onMatchEnd,
+        onPlayerJoined,
+        onPlayerLeft,
+        onPlayerForfeit,
+        onConnectionStatesUpdate,
+    });
+
+    // Keep refs updated with latest callbacks
     useEffect(() => {
+        callbacksRef.current = {
+            onMatchStart,
+            onAnswerResult,
+            onNewQuestion,
+            onTimeUpdate,
+            onMatchEnd,
+            onPlayerJoined,
+            onPlayerLeft,
+            onPlayerForfeit,
+            onConnectionStatesUpdate,
+        };
+    });
+
+    useEffect(() => {
+        // Prevent re-initialization if socket already exists and is connected/connecting
+        if (socketRef.current && (connectedRef.current || socketRef.current.connected)) {
+            console.log('[Arena Socket] Socket already exists, skipping initialization');
+            return;
+        }
+
+        // Reset cleanup flag when effect runs
+        isCleaningUpRef.current = false;
+
         // Enhanced connection with retry logic and better error handling
         const connectWithRetry = (attempt = 1) => {
+            // Don't retry if we're cleaning up
+            if (isCleaningUpRef.current) {
+                console.log('[Arena Socket] Cleanup in progress, aborting connection attempt');
+                return;
+            }
+
             console.log(`[Arena Socket] Connection attempt ${attempt}`);
-            
+
             const socket = io({
                 path: '/api/socket/arena',
                 transports: ['websocket', 'polling'],
@@ -137,13 +182,13 @@ export function useArenaSocket({
 
             // Connection timeout handler
             const connectionTimeout = setTimeout(() => {
-                if (!connected) {
+                if (!connectedRef.current && !isCleaningUpRef.current) {
                     console.log('[Arena Socket] Connection timeout, retrying...');
                     socket.disconnect();
-                    
-                    if (attempt < 3) {
+
+                    if (attempt < 3 && !isCleaningUpRef.current) {
                         setTimeout(() => connectWithRetry(attempt + 1), 2000);
-                    } else {
+                    } else if (!isCleaningUpRef.current) {
                         console.error('[Arena Socket] Failed to connect after 3 attempts');
                         // Could emit an error event here for UI handling
                     }
@@ -153,6 +198,7 @@ export function useArenaSocket({
             socket.on('connect', () => {
                 console.log('[Arena Socket] Connected successfully');
                 clearTimeout(connectionTimeout);
+                connectedRef.current = true;
                 setConnected(true);
 
                 // Join the match with enhanced data
@@ -174,10 +220,11 @@ export function useArenaSocket({
             socket.on('connect_error', (error) => {
                 console.error('[Arena Socket] Connection error:', error.message);
                 clearTimeout(connectionTimeout);
+                connectedRef.current = false;
                 setConnected(false);
-                
-                // Retry logic for connection errors
-                if (attempt < 3) {
+
+                // Retry logic for connection errors (only if not cleaning up)
+                if (attempt < 3 && !isCleaningUpRef.current) {
                     setTimeout(() => connectWithRetry(attempt + 1), 2000 * attempt);
                 }
             });
@@ -185,10 +232,11 @@ export function useArenaSocket({
             socket.on('disconnect', (reason) => {
                 console.log('[Arena Socket] Disconnected:', reason);
                 clearTimeout(connectionTimeout);
+                connectedRef.current = false;
                 setConnected(false);
-                
-                // Auto-reconnect for certain disconnect reasons
-                if (reason === 'io server disconnect' || reason === 'transport close') {
+
+                // Auto-reconnect for certain disconnect reasons (only if not cleaning up)
+                if (!isCleaningUpRef.current && (reason === 'io server disconnect' || reason === 'transport close')) {
                     setTimeout(() => connectWithRetry(1), 1000);
                 }
             });
@@ -201,6 +249,7 @@ export function useArenaSocket({
 
             socket.on('reconnect', (attemptNumber) => {
                 console.log(`[Arena Socket] Reconnected after ${attemptNumber} attempts`);
+                connectedRef.current = true;
                 setConnected(true);
             });
 
@@ -222,7 +271,7 @@ export function useArenaSocket({
                 console.log('[Arena Socket] Player joined:', data);
                 setPlayers(data.players);
                 setWaitingForOpponent(Object.keys(data.players).length < 2);
-                onPlayerJoined?.(data);
+                callbacksRef.current.onPlayerJoined?.(data);
             });
 
             socket.on('match_start', (data) => {
@@ -232,7 +281,7 @@ export function useArenaSocket({
                 setPlayers(data.players);
                 setCurrentQuestion(data.question);
                 setTimeLeft(data.timeLeft);
-                onMatchStart?.(data);
+                callbacksRef.current.onMatchStart?.(data);
             });
 
             socket.on('answer_result', (data) => {
@@ -249,13 +298,13 @@ export function useArenaSocket({
                     });
                     return newPlayers;
                 });
-                onAnswerResult?.(data);
+                callbacksRef.current.onAnswerResult?.(data);
             });
 
             socket.on('new_question', (data) => {
                 console.log('[Arena Socket] New question:', data);
                 setCurrentQuestion(data.question);
-                onNewQuestion?.(data);
+                callbacksRef.current.onNewQuestion?.(data);
             });
 
             socket.on('opponent_question_update', (data) => {
@@ -274,7 +323,7 @@ export function useArenaSocket({
 
             socket.on('time_update', (data) => {
                 setTimeLeft(data.timeLeft);
-                onTimeUpdate?.(data);
+                callbacksRef.current.onTimeUpdate?.(data);
             });
 
             // Connection quality ping/pong
@@ -286,7 +335,7 @@ export function useArenaSocket({
             // Connection states update from server
             socket.on('connection_states', (data: { states: ConnectionStates }) => {
                 setConnectionStates(data.states);
-                onConnectionStatesUpdate?.(data.states);
+                callbacksRef.current.onConnectionStatesUpdate?.(data.states);
             });
 
             socket.on('match_end', (data) => {
@@ -299,7 +348,7 @@ export function useArenaSocket({
                 if (data.matchIntegrity) {
                     setMatchIntegrity(data.matchIntegrity);
                 }
-                onMatchEnd?.(data);
+                callbacksRef.current.onMatchEnd?.(data);
             });
 
             socket.on('player_left', (data) => {
@@ -309,14 +358,14 @@ export function useArenaSocket({
                     delete newPlayers[data.odUserId];
                     return newPlayers;
                 });
-                onPlayerLeft?.(data);
+                callbacksRef.current.onPlayerLeft?.(data);
             });
 
             socket.on('player_forfeit', (data) => {
                 console.log('[Arena Socket] Player forfeited:', data);
                 setMatchEnded(true);
                 setOpponentForfeited(data.odForfeitedUserName);
-                onPlayerForfeit?.(data);
+                callbacksRef.current.onPlayerForfeit?.(data);
             });
         };
 
@@ -324,12 +373,17 @@ export function useArenaSocket({
         connectWithRetry(1);
 
         return () => {
+            console.log('[Arena Socket] Cleanup running');
+            isCleaningUpRef.current = true;
             if (socketRef.current) {
                 socketRef.current.emit('leave_match', { matchId, userId });
                 socketRef.current.disconnect();
+                socketRef.current = null;
             }
+            connectedRef.current = false;
         };
-    }, [matchId, userId, userName, operation, isAiMatch, connected, onAnswerResult, onConnectionStatesUpdate, onMatchEnd, onMatchStart, onNewQuestion, onPlayerForfeit, onPlayerJoined, onPlayerLeft, onTimeUpdate, userBanner, userDivision, userLevel, userRank, userTitle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks handled via refs, user data intentionally excluded to prevent reconnection
+    }, [matchId, userId, userName, operation, isAiMatch]);
 
     const submitAnswer = useCallback((userAnswer: number) => {
         if (socketRef.current && connected) {
