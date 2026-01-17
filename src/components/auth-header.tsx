@@ -3,12 +3,14 @@
 import { useSession, signOut } from "next-auth/react";
 import { LogOut, LayoutDashboard, Settings, Volume2, VolumeX, Trophy, Swords, Maximize2, Minimize2, Shield, Zap } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { soundEngine } from "@/lib/sound-engine";
 import { UserAvatar } from "@/components/user-avatar";
 import { AchievementsPanel } from "@/components/achievements-panel";
-import { FlashMathLogoWithIcon } from "@/components/ui/flashmath-logo";
+import { FlashMathLogo } from "@/components/ui/flashmath-logo";
+import { devLog } from '@/lib/debug';
 
 interface AuthHeaderProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session type
@@ -66,7 +68,7 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                 await document.exitFullscreen();
             }
         } catch (err) {
-            console.error('Fullscreen error:', err);
+            devLog('Fullscreen error:', err);
         }
     };
 
@@ -74,7 +76,8 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
         <nav className="w-full bg-black/40 backdrop-blur-xl border-b border-white/10 relative z-50">
             <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
                 <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
-                    <FlashMathLogoWithIcon size="sm" />
+                    <Image src="/images/logo.gif" alt="FlashMath" width={56} height={56} className="w-14 h-14 -my-2" unoptimized />
+                    <FlashMathLogo size="sm" />
                 </Link>
                 <div className="flex items-center gap-4">
                     <Link href="/auth/login" className="text-sm font-bold uppercase tracking-widest hover:text-primary transition-colors">Login</Link>
@@ -90,7 +93,8 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                     {/* Left side: Logo + Nav Links */}
                     <div className="flex items-center gap-6">
                         <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
-                            <FlashMathLogoWithIcon size="sm" />
+                            <Image src="/images/logo.gif" alt="FlashMath" width={56} height={56} className="w-14 h-14 -my-2" unoptimized />
+                            <FlashMathLogo size="sm" />
                         </Link>
 
                         <div className="h-8 w-[1px] bg-white/10 hidden md:block" />

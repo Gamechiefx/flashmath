@@ -17,6 +17,10 @@
 
 const { Pool } = require('pg');
 
+// Dev-only logging (tree-shaken in production)
+const isDev = process.env.NODE_ENV === 'development';
+const devLog = (...args) => isDev && console.log(...args);
+
 // =============================================================================
 // DATABASE CONNECTION
 // =============================================================================
@@ -60,14 +64,14 @@ function getPool() {
     pool = new Pool(poolConfig);
 
     pool.on('error', (err) => {
-        console.error('[PostgreSQL] Unexpected error:', err);
+        devLog('[PostgreSQL] Unexpected error:', err);
         // #region agent log
         fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'postgres.js:pool.error',message:'PostgreSQL pool error',data:{error:String(err)},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
     });
 
     pool.on('connect', () => {
-        console.log('[PostgreSQL] New client connected');
+        devLog('[PostgreSQL] New client connected');
         // #region agent log
         fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'postgres.js:pool.connect',message:'PostgreSQL client connected',data:{durationMs:Date.now()-startTime},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
@@ -340,10 +344,10 @@ async function initSchema() {
         `);
 
         await client.query('COMMIT');
-        console.log('[PostgreSQL] Arena schema initialized');
+        devLog('[PostgreSQL] Arena schema initialized');
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('[PostgreSQL] Schema initialization error:', err);
+        devLog('[PostgreSQL] Schema initialization error:', err);
         throw err;
     } finally {
         client.release();
@@ -861,7 +865,7 @@ async function recordMatch(matchData) {
         return { success: true };
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('[PostgreSQL] Error recording match:', err);
+        devLog('[PostgreSQL] Error recording match:', err);
         return { success: false, error: err.message };
     } finally {
         client.release();
@@ -1003,7 +1007,7 @@ async function recordTeamMatch(matchData) {
         return { success: true };
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('[PostgreSQL] Error recording team match:', err);
+        devLog('[PostgreSQL] Error recording team match:', err);
         return { success: false, error: err.message };
     } finally {
         client.release();
@@ -1127,7 +1131,7 @@ async function getTeamMatchById(matchId, sqliteDb = null) {
                     }
                 }
             } catch (err) {
-                console.log('[PostgreSQL] Could not get names from SQLite:', err.message);
+                devLog('[PostgreSQL] Could not get names from SQLite:', err.message);
             }
         }
 
@@ -1167,7 +1171,7 @@ async function getTeamMatchById(matchId, sqliteDb = null) {
             players: transformedPlayers,
         };
     } catch (err) {
-        console.error('[PostgreSQL] Error getting team match by ID:', err);
+        devLog('[PostgreSQL] Error getting team match by ID:', err);
         return null;
     }
 }
@@ -1201,7 +1205,7 @@ async function closePool() {
     if (pool) {
         await pool.end();
         pool = null;
-        console.log('[PostgreSQL] Connection pool closed');
+        devLog('[PostgreSQL] Connection pool closed');
     }
 }
 
@@ -1211,10 +1215,10 @@ async function closePool() {
 async function testConnection() {
     try {
         const result = await getPool().query('SELECT NOW()');
-        console.log('[PostgreSQL] Connection test successful:', result.rows[0].now);
+        devLog('[PostgreSQL] Connection test successful:', result.rows[0].now);
         return true;
     } catch (err) {
-        console.error('[PostgreSQL] Connection test failed:', err.message);
+        devLog('[PostgreSQL] Connection test failed:', err.message);
         return false;
     }
 }
