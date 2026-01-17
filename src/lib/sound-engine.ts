@@ -1366,7 +1366,6 @@ class SoundEngine {
         this.strategyLoading = false;
         
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopStrategyMusic',message:'Stop strategy music called',data:{hasSource:!!this.strategySource,fadeOutMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
         
         if (this.strategySource && this.strategyGain && this.ctx) {
@@ -1413,7 +1412,6 @@ class SoundEngine {
         // Don't restart if already playing OR loading (prevents race condition)
         if (this.matchSource || this.matchLoading) {
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playMatchMusic',message:'Skipped - already playing or loading',data:{hasSource:!!this.matchSource,isLoading:this.matchLoading},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
             // #endregion
             return;
         }
@@ -1421,7 +1419,6 @@ class SoundEngine {
         // Set loading flag BEFORE any async operations
         this.matchLoading = true;
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playMatchMusic',message:'Started loading match music',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
 
         try {
@@ -1440,7 +1437,6 @@ class SoundEngine {
             // Check if stop was called while loading - abort if so
             if (this.matchStopped) {
                 // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playMatchMusic',message:'Aborted - stop was called during loading',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
                 // #endregion
                 this.matchLoading = false;
                 return;
@@ -1471,7 +1467,6 @@ class SoundEngine {
             this.matchLoading = false;
             
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playMatchMusic',message:'Match music started playing',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
             // #endregion
 
             source.onended = () => {
@@ -1497,7 +1492,6 @@ class SoundEngine {
         this.matchLoading = false;
         
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopMatchMusic',message:'Stop match music called',data:{hasSource:!!this.matchSource,fadeOutMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
         
         if (this.matchSource && this.matchGain && this.ctx) {
@@ -1780,7 +1774,6 @@ class SoundEngine {
         this.arenaEntranceStopped = false;
         
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic:entry',message:'Play entrance music called',data:{enabled:this.enabled,hasSource:!!this.arenaEntranceSource,isLoading:this.arenaEntranceLoading,isStopped:this.arenaEntranceStopped},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         
         if (!this.enabled) return null;
@@ -1790,7 +1783,6 @@ class SoundEngine {
         // Don't restart if already playing, loading, OR fading out (prevents overlap during fade)
         if (this.arenaEntranceSource || this.arenaEntranceLoading || this.arenaEntranceFadingOut) {
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic:skip',message:'Skipped - already playing, loading, or fading',data:{hasSource:!!this.arenaEntranceSource,isLoading:this.arenaEntranceLoading,isFadingOut:this.arenaEntranceFadingOut},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
             // #endregion
             return this.arenaEntranceAnalyser;
         }
@@ -1809,7 +1801,6 @@ class SoundEngine {
             // Check if stop was called while we were loading - abort if so
             if (this.arenaEntranceStopped) {
                 // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic',message:'Aborted - stop was called during loading',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
                 // #endregion
                 this.arenaEntranceLoading = false;
                 return null;
@@ -1848,7 +1839,6 @@ class SoundEngine {
             this.arenaEntranceLoading = false;
             
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic:started',message:'Arena entrance music started playing',data:{sourceId:Date.now()},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'})}).catch(()=>{});
             // #endregion
 
             // NOTE: For looped audio, onended should only fire when we explicitly stop() it.
@@ -1858,7 +1848,6 @@ class SoundEngine {
             // 3. Clearing here would allow duplicate music to start
             source.onended = () => {
                 // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:playArenaEntranceMusic:onended',message:'Source onended fired (no-op for looped audio)',data:{isCurrentSource:this.arenaEntranceSource===source,arenaEntranceStopped:this.arenaEntranceStopped},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'D'})}).catch(()=>{});
                 // #endregion
                 // Only clear if this was an intentional stop (arenaEntranceStopped is true)
                 // This prevents unexpected onended events from clearing the source
@@ -1886,7 +1875,6 @@ class SoundEngine {
 
     stopArenaEntranceMusic(fadeOutMs: number = 1500) {
         // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopArenaEntranceMusic:entry',message:'Stop arena entrance music called',data:{hasSource:!!this.arenaEntranceSource,hasGain:!!this.arenaEntranceGain,fadeOutMs},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
         // #endregion
         
         // Clear the desired ambient music tracker (user/component explicitly stopped this)
@@ -1914,7 +1902,6 @@ class SoundEngine {
             this.arenaEntranceFadingOut = true;
             
             // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopArenaEntranceMusic:fading',message:'Starting fade out',data:{fadeOutMs,fadingOut:true},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
             // #endregion
             
             // Clear the source references now (for state tracking)
@@ -1924,7 +1911,6 @@ class SoundEngine {
             
             setTimeout(() => {
                 // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sound-engine.ts:stopArenaEntranceMusic:stopped',message:'Fade complete, clearing fadingOut flag',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
                 // Clear fading flag - new music can start now
                 this.arenaEntranceFadingOut = false;

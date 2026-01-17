@@ -107,6 +107,7 @@ export function useArenaSocket({
     const socketRef = useRef<Socket | null>(null);
     const [connected, setConnected] = useState(false);
     const connectedRef = useRef(false); // Track connected state without triggering re-renders
+    const isCleaningUpRef = useRef(false); // Prevent race conditions during cleanup
     const [players, setPlayers] = useState<Record<string, Player>>({});
     const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
     const [timeLeft, setTimeLeft] = useState(60);
@@ -147,10 +148,25 @@ export function useArenaSocket({
     });
 
     useEffect(() => {
+        // Prevent re-initialization if socket already exists and is connected/connecting
+        if (socketRef.current && (connectedRef.current || socketRef.current.connected)) {
+            console.log('[Arena Socket] Socket already exists, skipping initialization');
+            return;
+        }
+
+        // Reset cleanup flag when effect runs
+        isCleaningUpRef.current = false;
+
         // Enhanced connection with retry logic and better error handling
         const connectWithRetry = (attempt = 1) => {
+            // Don't retry if we're cleaning up
+            if (isCleaningUpRef.current) {
+                console.log('[Arena Socket] Cleanup in progress, aborting connection attempt');
+                return;
+            }
+
             console.log(`[Arena Socket] Connection attempt ${attempt}`);
-            
+
             const socket = io({
                 path: '/api/socket/arena',
                 transports: ['websocket', 'polling'],
@@ -166,13 +182,13 @@ export function useArenaSocket({
 
             // Connection timeout handler
             const connectionTimeout = setTimeout(() => {
-                if (!connectedRef.current) {
+                if (!connectedRef.current && !isCleaningUpRef.current) {
                     console.log('[Arena Socket] Connection timeout, retrying...');
                     socket.disconnect();
-                    
-                    if (attempt < 3) {
+
+                    if (attempt < 3 && !isCleaningUpRef.current) {
                         setTimeout(() => connectWithRetry(attempt + 1), 2000);
-                    } else {
+                    } else if (!isCleaningUpRef.current) {
                         console.error('[Arena Socket] Failed to connect after 3 attempts');
                         // Could emit an error event here for UI handling
                     }
@@ -206,9 +222,9 @@ export function useArenaSocket({
                 clearTimeout(connectionTimeout);
                 connectedRef.current = false;
                 setConnected(false);
-                
-                // Retry logic for connection errors
-                if (attempt < 3) {
+
+                // Retry logic for connection errors (only if not cleaning up)
+                if (attempt < 3 && !isCleaningUpRef.current) {
                     setTimeout(() => connectWithRetry(attempt + 1), 2000 * attempt);
                 }
             });
@@ -218,9 +234,9 @@ export function useArenaSocket({
                 clearTimeout(connectionTimeout);
                 connectedRef.current = false;
                 setConnected(false);
-                
-                // Auto-reconnect for certain disconnect reasons
-                if (reason === 'io server disconnect' || reason === 'transport close') {
+
+                // Auto-reconnect for certain disconnect reasons (only if not cleaning up)
+                if (!isCleaningUpRef.current && (reason === 'io server disconnect' || reason === 'transport close')) {
                     setTimeout(() => connectWithRetry(1), 1000);
                 }
             });
@@ -357,10 +373,14 @@ export function useArenaSocket({
         connectWithRetry(1);
 
         return () => {
+            console.log('[Arena Socket] Cleanup running');
+            isCleaningUpRef.current = true;
             if (socketRef.current) {
                 socketRef.current.emit('leave_match', { matchId, userId });
                 socketRef.current.disconnect();
+                socketRef.current = null;
             }
+            connectedRef.current = false;
         };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks handled via refs, user data intentionally excluded to prevent reconnection
     }, [matchId, userId, userName, operation, isAiMatch]);

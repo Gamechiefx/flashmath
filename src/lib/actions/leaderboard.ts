@@ -303,7 +303,6 @@ export async function getDuelLeaderboard(
             
             // #region agent log
             console.log('[Leaderboard] PostgreSQL leaderboard data:', pgData?.length || 0, 'players');
-            fetch('http://127.0.0.1:7244/ingest/4a4de7d5-4d23-445b-a4cf-5b63e9469b33',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'leaderboard.ts:getDuelLeaderboard',message:'Leaderboard data fetched',data:{totalPlayers:pgData?.length,firstPlayer:pgData?.[0]?{elo:pgData[0].elo,user_id:pgData[0].user_id,wins:pgData[0].matches_won,losses:pgData[0].matches_lost}:null,currentUserId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'B'})}).catch(()=>{});
             // #endregion
             
             totalPlayers = pgData?.length || 0;
