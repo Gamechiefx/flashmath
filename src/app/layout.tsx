@@ -35,8 +35,10 @@ import { DevFooter } from "@/components/dev-footer";
 import { SocialProvider, SocialFAB, SocialPanel } from "@/components/social";
 import { AuditorProvider, AuditorPanel, AuditorFab } from "@/components/auditor";
 import { Toaster } from "sonner";
+import { DevConsoleFilter } from "@/components/dev-console-filter";
 import { MatchAlertProvider } from "@/components/arena/match-alert-provider";
 import { PartyProvider } from "@/lib/socket/party-context";
+import { VersionBadge } from "@/components/version-badge";
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -57,6 +59,9 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <DevConsoleFilter />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} ${pressStart2P.variable} antialiased`} suppressHydrationWarning>
         <AuthProvider session={session}>
           <AudioSettingsProvider>
@@ -106,6 +111,7 @@ export default async function RootLayout({
             </ItemPreviewProvider>
           </AudioSettingsProvider>
         </AuthProvider>
+        <VersionBadge />
         <DevFooter />
       </body>
     </html>
