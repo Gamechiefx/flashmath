@@ -355,9 +355,59 @@ export const execute = (text: string, params: any[] = []): { changes: number } =
 };
 
 /**
- * Initialize schema and seed data
+ * Check if we're in a Next.js build phase.
+ * During build, we should not perform database writes to avoid lock contention.
+ * 
+ * Uses multiple detection methods for robustness:
+ * 1. SKIP_DB_INIT environment variable (explicit, set in Dockerfile)
+ * 2. NEXT_PHASE environment variable (set by Next.js during build)
+ * 3. npm_lifecycle_event (set during npm script execution)
  */
+function isBuildPhase(): boolean {
+    // Explicit skip via environment variable (most reliable for Docker)
+    if (process.env.SKIP_DB_INIT === 'true' || process.env.SKIP_DB_INIT === '1') {
+        return true;
+    }
+    
+    // NEXT_PHASE is set during next build
+    const phase = process.env.NEXT_PHASE;
+    if (phase === 'phase-production-build') {
+        return true;
+    }
+    
+    // Check npm lifecycle event
+    const npmEvent = process.env.npm_lifecycle_event;
+    if (npmEvent === 'build') {
+        return true;
+    }
+    
+    // Also check for common CI environment variables
+    if (process.env.CI === 'true' || process.env.GITEA_ACTIONS === 'true' || process.env.GITHUB_ACTIONS === 'true') {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * Initialize schema and seed data
+ * This is called lazily on first database access during runtime,
+ * NOT during Next.js build phase to avoid lock contention.
+ */
+let shopItemsSynced = false;
+
 export const initSchema = () => {
+    // Skip during build phase to avoid database lock contention
+    if (isBuildPhase()) {
+        console.log('[DB] Skipping shop items sync during build phase');
+        return;
+    }
+    
+    // Only sync once per process
+    if (shopItemsSynced) {
+        return;
+    }
+    
     const database = ensureDb();
 
     // Sync shop items from static definition to database
@@ -372,11 +422,14 @@ export const initSchema = () => {
         }
     })();
     console.log(`[DB] Synced ${ITEMS.length} shop items to database.`);
-
+    shopItemsSynced = true;
 };
 
-// Initialize on module load
-initSchema();
+// Initialize lazily - will be called on first actual database operation at runtime
+// NOT during module import (which happens during Next.js build phase)
+if (!isBuildPhase()) {
+    initSchema();
+}
 
 // =============================================================================
 // BATCH QUERY HELPERS (N→1 query optimization)
