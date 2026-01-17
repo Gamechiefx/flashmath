@@ -9,6 +9,8 @@ import { createToken, verifyToken, markTokenUsed, deleteToken } from "@/lib/auth
 import { sendEmail } from "@/lib/email";
 import { verificationEmailTemplate } from "@/lib/email/templates/verification";
 import { passwordResetEmailTemplate } from "@/lib/email/templates/password-reset";
+import { welcomeEmailTemplate } from "@/lib/email/templates/welcome";
+import { newSigninEmailTemplate } from "@/lib/email/templates/new-signin";
 import { unlockEmailVerifiedAchievement } from "@/lib/actions/achievements";
 
 // Ensure schema exists on first action call
@@ -263,10 +265,22 @@ export async function verifyEmailCode(
 
     await markTokenUsed(code);
 
-    // Get user ID to unlock achievement
-    const user = db.prepare('SELECT id FROM users WHERE email = ?').get(email) as { id: string } | undefined;
+    // Get user to unlock achievement and send welcome email
+    const user = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email) as { id: string; name: string } | undefined;
     if (user) {
         await unlockEmailVerifiedAchievement(user.id);
+        
+        // Send welcome email (fire-and-forget)
+        const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+        const welcomeTemplate = welcomeEmailTemplate(user.name, `${baseUrl}/dashboard`);
+        sendEmail({
+            to: email,
+            subject: welcomeTemplate.subject,
+            html: welcomeTemplate.html,
+            text: welcomeTemplate.text,
+        }).catch(err => {
+            console.error('[Auth] Failed to send welcome email:', err);
+        });
     }
 
     console.log(`[Auth] Email verified for ${email}`);
@@ -471,4 +485,61 @@ export async function isAccountLocked(email: string): Promise<{ locked: boolean;
 
     db.prepare('UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE email = ?').run(email);
     return { locked: false };
+}
+
+// ============================================
+// NEW SIGN-IN ALERT
+// ============================================
+
+interface SignInDetails {
+    device?: string;
+    browser?: string;
+    location?: string;
+    ip?: string;
+}
+
+/**
+ * Send a new sign-in alert email to the user
+ * Call this after successful authentication when a new device/location is detected
+ */
+export async function sendNewSigninAlert(
+    userId: string,
+    details: SignInDetails
+): Promise<{ success: boolean; error?: string }> {
+    const db = getDatabase();
+    
+    const user = db.prepare('SELECT email, name FROM users WHERE id = ?').get(userId) as { email: string; name: string } | undefined;
+    
+    if (!user) {
+        return { success: false, error: 'User not found' };
+    }
+    
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const template = newSigninEmailTemplate(user.name, {
+        ...details,
+        time: new Date().toLocaleString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZoneName: 'short'
+        }),
+    }, `${baseUrl}/settings/security`);
+    
+    const result = await sendEmail({
+        to: user.email,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+    });
+    
+    if (!result.success) {
+        console.error('[Auth] Failed to send new sign-in alert:', result.error);
+        return { success: false, error: 'Failed to send email' };
+    }
+    
+    console.log(`[Auth] New sign-in alert sent to ${user.email}`);
+    return { success: true };
 }

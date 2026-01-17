@@ -19,6 +19,8 @@ const COLORS = {
     pink: '#ec4899',
     green: '#10b981',
     amber: '#f59e0b',
+    yellow: '#eab308',
+    orange: '#f97316',
     red: '#ef4444',
     
     // Text
@@ -72,8 +74,15 @@ function getResponsiveStyles(): string {
                 font-weight: 800;
                 src: url(https://fonts.gstatic.com/s/outfit/v11/QGYyz_MVcBeNP4NjuGObqx1XmO1I4QGyC4S-EiAou6Y.woff2) format('woff2');
             }
+            @font-face {
+                font-family: 'Outfit';
+                font-style: normal;
+                font-weight: 900;
+                src: url(https://fonts.gstatic.com/s/outfit/v11/QGYyz_MVcBeNP4NjuGObqx1XmO1I4RuzC4S-EiAou6Y.woff2) format('woff2');
+            }
             .fm-font { font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; }
             .fm-mono { font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace !important; }
+            .fm-logo { font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important; font-weight: 900 !important; font-style: italic !important; }
         }
         
         /* Apple link color fix */
@@ -98,6 +107,10 @@ function getResponsiveStyles(): string {
 
 /**
  * Email header with FlashMath logo
+ * Styled to match the Flash Arena title aesthetic:
+ * - "FLASH" in cyan gradient with glow
+ * - "MATH" in amber/gold gradient with glow
+ * - Italic, ultra-heavy font weight
  */
 function emailHeader(): string {
     return `
@@ -106,12 +119,13 @@ function emailHeader(): string {
     <td align="center" style="padding: 40px 20px 32px 20px;">
         <table role="presentation" cellspacing="0" cellpadding="0" border="0">
             <tr>
-                <!-- Logo Icon -->
-                <td style="width: 52px; height: 52px; background: linear-gradient(135deg, ${COLORS.cyan}, ${COLORS.purple}); border-radius: 14px; text-align: center; vertical-align: middle; box-shadow: 0 8px 32px rgba(6, 182, 212, 0.3);">
-                    <span style="color: white; font-size: 26px; line-height: 52px;">⚡</span>
-                </td>
-                <td style="padding-left: 14px;">
-                    <span class="fm-font" style="color: ${COLORS.textWhite}; font-size: 28px; font-weight: 800; letter-spacing: -0.5px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">FLASHMATH</span>
+                <td align="center">
+                    <!-- FlashMath Logo - Styled like Flash Arena -->
+                    <h1 class="fm-logo" style="margin: 0; font-size: 36px; font-weight: 900; font-style: italic; letter-spacing: -1px; font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+                        <span style="color: ${COLORS.cyan}; text-shadow: 0 0 30px rgba(6, 182, 212, 0.5), 0 0 60px rgba(6, 182, 212, 0.3);">FLASH</span><span style="color: ${COLORS.amber}; text-shadow: 0 0 30px rgba(251, 191, 36, 0.5), 0 0 60px rgba(251, 191, 36, 0.3);">MATH</span>
+                    </h1>
+                    <!-- Decorative accent line -->
+                    <div style="width: 80px; height: 3px; background: linear-gradient(90deg, ${COLORS.cyan}, ${COLORS.amber}); border-radius: 2px; margin-top: 8px;"></div>
                 </td>
             </tr>
         </table>

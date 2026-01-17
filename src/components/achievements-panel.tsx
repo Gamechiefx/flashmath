@@ -2,23 +2,39 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, X, Gift, Lock, Check, Coins, Star, Crown, Flame, Medal, Zap, Target, TrendingUp, ShoppingBag, Music, LucideIcon } from "lucide-react";
+import { X, Gift, Lock, Check, Coins, Star, Crown, Flame, Medal, Zap, Target, TrendingUp, ShoppingBag, Music, LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getUserAchievements, claimAchievement, UserAchievement } from "@/lib/actions/achievements";
 import type { AchievementCategory } from "@/lib/achievements";
+// Dual-tone icons for premium achievement display
+import { DtTrophy, DtStar, DtBolt, DtTarget, DtTrendingUp, DtCertificate, ICON_THEMES, type DualToneIconProps } from "@/components/icons/dual-tone";
 
 interface AchievementsPanelProps {
     isOpen: boolean;
     onClose: () => void;
 }
 
-// Map icon names to components
-const ICON_MAP: Record<string, LucideIcon> = {
-    Trophy, Star, Crown, Flame, Medal, Zap, Target, TrendingUp, ShoppingBag, Music, Coins
+// Map icon names to Lucide components (fallback)
+const LUCIDE_ICON_MAP: Record<string, LucideIcon> = {
+    Star, Crown, Flame, Medal, Zap, Target, TrendingUp, ShoppingBag, Music, Coins
 };
 
-const getIcon = (iconName: string): LucideIcon => {
-    return ICON_MAP[iconName] || Trophy;
+// Map icon names to Dual-Tone components (premium)
+const DUAL_TONE_ICON_MAP: Record<string, React.ComponentType<DualToneIconProps>> = {
+    Trophy: DtTrophy,
+    Star: DtStar,
+    Zap: DtBolt,
+    Target: DtTarget,
+    TrendingUp: DtTrendingUp,
+    Medal: DtCertificate,
+};
+
+const getLucideIcon = (iconName: string): LucideIcon => {
+    return LUCIDE_ICON_MAP[iconName] || Star;
+};
+
+const getDualToneIcon = (iconName: string): React.ComponentType<DualToneIconProps> | null => {
+    return DUAL_TONE_ICON_MAP[iconName] || null;
 };
 
 const CATEGORY_LABELS: Record<AchievementCategory, string> = {
@@ -102,8 +118,12 @@ export function AchievementsPanel({ isOpen, onClose }: AchievementsPanelProps) {
                     {/* Header */}
                     <div className="p-6 border-b border-white/10 flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                                <Trophy className="text-accent" size={20} />
+                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-500/10 flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.15)]">
+                                <DtTrophy 
+                                    size={28} 
+                                    primaryColor={ICON_THEMES.amber.primary}
+                                    secondaryColor={ICON_THEMES.amber.secondary}
+                                />
                             </div>
                             <div>
                                 <h2 className="text-xl font-black uppercase tracking-tight">Achievements</h2>
@@ -134,9 +154,21 @@ export function AchievementsPanel({ isOpen, onClose }: AchievementsPanelProps) {
                                     </h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {group.items.map(item => {
-                                            const Icon = getIcon(item.achievement.iconName);
+                                            const DtIcon = getDualToneIcon(item.achievement.iconName);
+                                            const LucideIcon = getLucideIcon(item.achievement.iconName);
                                             const canClaim = item.unlocked && !item.claimed;
                                             const isClaiming = claiming === item.achievement.id;
+
+                                            // Determine theme based on category
+                                            const categoryTheme: Record<string, keyof typeof ICON_THEMES> = {
+                                                level: 'amber',
+                                                milestone: 'cyan',
+                                                mastery: 'purple',
+                                                league: 'cyanPurple',
+                                                wealth: 'amberOrange',
+                                                dedication: 'green',
+                                            };
+                                            const theme = ICON_THEMES[categoryTheme[item.achievement.category] || 'amber'];
 
                                             return (
                                                 <div
@@ -152,17 +184,27 @@ export function AchievementsPanel({ isOpen, onClose }: AchievementsPanelProps) {
                                                 >
                                                     <div className="flex items-start gap-3">
                                                         <div className={cn(
-                                                            "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                                                            "w-11 h-11 rounded-xl flex items-center justify-center shrink-0",
                                                             item.unlocked
                                                                 ? item.claimed
-                                                                    ? "bg-green-500/20 text-green-400"
-                                                                    : "bg-accent/20 text-accent"
-                                                                : "bg-white/5 text-muted-foreground"
+                                                                    ? "bg-green-500/20"
+                                                                    : "bg-gradient-to-br from-accent/20 to-accent/5"
+                                                                : "bg-white/5"
                                                         )}>
                                                             {item.unlocked ? (
-                                                                item.claimed ? <Check size={20} /> : <Icon size={20} />
+                                                                item.claimed ? (
+                                                                    <Check size={22} className="text-green-400" />
+                                                                ) : DtIcon ? (
+                                                                    <DtIcon 
+                                                                        size={24} 
+                                                                        primaryColor={theme.primary}
+                                                                        secondaryColor={theme.secondary}
+                                                                    />
+                                                                ) : (
+                                                                    <LucideIcon size={22} className="text-accent" />
+                                                                )
                                                             ) : (
-                                                                <Lock size={16} />
+                                                                <Lock size={16} className="text-muted-foreground" />
                                                             )}
                                                         </div>
                                                         <div className="flex-1 min-w-0">
