@@ -365,6 +365,7 @@ export async function runDecayJob(): Promise<{
     usersDecayed: number;
     totalEloDecayed: number;
     newReturningPlayers: number;
+    newReturningPlayerIds: string[];
 }> {
     const db = getDatabase();
     
@@ -382,6 +383,7 @@ export async function runDecayJob(): Promise<{
     let usersDecayed = 0;
     let totalEloDecayed = 0;
     let newReturningPlayers = 0;
+    const newReturningPlayerIds: string[] = [];
     
     for (const user of eligibleUsers) {
         const result = await applyDecayToUser(user.id);
@@ -390,6 +392,7 @@ export async function runDecayJob(): Promise<{
             totalEloDecayed += result.eloDecayed;
             if (result.becameReturning) {
                 newReturningPlayers++;
+                newReturningPlayerIds.push(user.id);
             }
         }
     }
@@ -400,7 +403,8 @@ export async function runDecayJob(): Promise<{
         usersProcessed: eligibleUsers.length,
         usersDecayed,
         totalEloDecayed,
-        newReturningPlayers
+        newReturningPlayers,
+        newReturningPlayerIds
     };
 }
 
@@ -542,13 +546,20 @@ export async function recordPlacementMatch(userId: string): Promise<{
 /**
  * Update last arena activity timestamp
  * Called after every arena match
+ * Also resets decay email flags since user is now active
  */
 export async function updateArenaActivity(userId: string): Promise<void> {
     const db = getDatabase();
     const now = new Date().toISOString();
     
+    // Reset activity timestamp AND clear decay email flags
+    // This allows fresh email notifications if user becomes inactive again
     db.prepare(`
-        UPDATE users SET last_arena_activity = ?
+        UPDATE users SET 
+            last_arena_activity = ?,
+            decay_warning_sent = NULL,
+            decay_started_email_sent = NULL,
+            severe_decay_email_sent = NULL
         WHERE id = ?
     `).run(now, userId);
 }

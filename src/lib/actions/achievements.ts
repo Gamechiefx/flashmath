@@ -6,6 +6,8 @@ import { auth } from "@/auth";
 import { queryOne, loadData, getDatabase, generateId, now, type UserRow } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { ACHIEVEMENTS, getAchievementById } from "@/lib/achievements";
+import { sendEmail } from "@/lib/email";
+import { achievementEmailTemplate } from "@/lib/email/templates/achievement";
 
 // Serializable version for client components (no icon functions)
 export interface SerializedAchievement {
@@ -492,4 +494,146 @@ export async function unlockEmailVerifiedAchievement(userId: string) {
     }
 
     console.log(`[Achievements] Unlocked "Welcome to FlashMath" for user ${userId}`);
+}
+
+// ============================================
+// ACHIEVEMENT EMAIL NOTIFICATIONS
+// ============================================
+
+// Map achievement icon names to emoji
+const ICON_TO_EMOJI: Record<string, string> = {
+    'Trophy': '🏆',
+    'Star': '⭐',
+    'Zap': '⚡',
+    'Target': '🎯',
+    'Flame': '🔥',
+    'Award': '🥇',
+    'Crown': '👑',
+    'Medal': '🎖️',
+    'Rocket': '🚀',
+    'Gem': '💎',
+    'Shield': '🛡️',
+    'Brain': '🧠',
+    'Calculator': '🧮',
+    'Clock': '⏱️',
+    'Lightning': '⚡',
+    'Fire': '🔥',
+    'Sparkles': '✨',
+    'default': '🏆',
+};
+
+// Map achievement categories to rarity
+const CATEGORY_TO_RARITY: Record<string, 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'> = {
+    'getting_started': 'common',
+    'progression': 'uncommon',
+    'mastery': 'rare',
+    'special': 'epic',
+    'secret': 'legendary',
+};
+
+/**
+ * Send an achievement unlocked email notification
+ * Call this after an achievement is unlocked
+ */
+export async function sendAchievementEmail(
+    userId: string,
+    achievementId: string
+): Promise<{ success: boolean; error?: string }> {
+    try {
+        const db = getDatabase();
+        const user = db.prepare('SELECT name, email FROM users WHERE id = ?').get(userId) as { name: string; email: string } | undefined;
+        
+        if (!user || !user.email) {
+            return { success: false, error: 'User not found' };
+        }
+        
+        const achievement = getAchievementById(achievementId);
+        if (!achievement) {
+            return { success: false, error: 'Achievement not found' };
+        }
+        
+        const iconName = achievement.icon?.displayName || achievement.icon?.name || 'Trophy';
+        const emoji = ICON_TO_EMOJI[iconName] || ICON_TO_EMOJI['default'];
+        const rarity = CATEGORY_TO_RARITY[achievement.category] || 'common';
+        
+        const template = achievementEmailTemplate(user.name, {
+            name: achievement.name,
+            description: achievement.description,
+            icon: emoji,
+            rarity,
+            xpReward: achievement.reward.coins,
+            unlockedAt: new Date().toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+            }),
+        });
+        
+        const result = await sendEmail({
+            to: user.email,
+            subject: template.subject,
+            html: template.html,
+            text: template.text,
+        });
+        
+        if (!result.success) {
+            console.error('[Achievements] Failed to send achievement email:', result.error);
+            return { success: false, error: 'Failed to send email' };
+        }
+        
+        console.log(`[Achievements] Achievement email sent to ${user.email} for "${achievement.name}"`);
+        return { success: true };
+    } catch (err) {
+        console.error('[Achievements] Error sending achievement email:', err);
+        return { success: false, error: 'Email send failed' };
+    }
+}
+
+/**
+ * Unlock an achievement and optionally send email notification
+ * This is a unified function for unlocking achievements with email support
+ */
+export async function unlockAchievementWithEmail(
+    userId: string,
+    achievementId: string,
+    sendNotification: boolean = true
+): Promise<{ success: boolean; alreadyUnlocked?: boolean }> {
+    const db = getDatabase();
+    const achievement = getAchievementById(achievementId);
+    if (!achievement) return { success: false };
+
+    interface UserAchievementRow {
+        id: string;
+        unlocked_at?: string | null;
+    }
+    const existing = db.prepare(
+        'SELECT id, unlocked_at FROM user_achievements WHERE user_id = ? AND achievement_id = ?'
+    ).get(userId, achievementId) as UserAchievementRow | undefined;
+
+    if (existing?.unlocked_at) {
+        return { success: true, alreadyUnlocked: true };
+    }
+
+    if (existing) {
+        db.prepare(
+            'UPDATE user_achievements SET progress = ?, unlocked_at = ? WHERE id = ?'
+        ).run(achievement.requirement.target, now(), existing.id);
+    } else {
+        db.prepare(`
+            INSERT INTO user_achievements (id, user_id, achievement_id, progress, unlocked_at)
+            VALUES (?, ?, ?, ?, ?)
+        `).run(generateId(), userId, achievementId, achievement.requirement.target, now());
+    }
+
+    console.log(`[Achievements] Unlocked "${achievement.name}" for user ${userId}`);
+
+    // Send email notification (fire-and-forget)
+    if (sendNotification) {
+        sendAchievementEmail(userId, achievementId).catch(err => {
+            console.error('[Achievements] Failed to send email notification:', err);
+        });
+    }
+
+    return { success: true };
 }

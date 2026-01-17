@@ -2050,7 +2050,14 @@ export function TeamMatchClient({
             }
         });
 
-        socket.on('round_start', (data) => {
+        socket.on('round_start', (data: {
+            round: number;
+            half: number;
+            currentSlot?: number;
+            slotOperation?: string;
+            team1ActivePlayerId?: string;
+            team2ActivePlayerId?: string;
+        }) => {
             console.log('[TeamMatch] Round start:', data);
 
             // If starting second half, transition from halftime music to match music
@@ -2097,6 +2104,21 @@ export function TeamMatchClient({
                 for (const playerId of Object.keys(newState.team2.players)) {
                     newState.team2.players[playerId].isComplete = false;
                 }
+                
+                // CRITICAL: Set isActive for the active players based on server data
+                // This ensures opponent status panel shows "Now Answering" instead of "Waiting..."
+                if (data.team1ActivePlayerId) {
+                    for (const playerId of Object.keys(newState.team1.players)) {
+                        newState.team1.players[playerId].isActive = (playerId === data.team1ActivePlayerId);
+                    }
+                }
+                if (data.team2ActivePlayerId) {
+                    for (const playerId of Object.keys(newState.team2.players)) {
+                        newState.team2.players[playerId].isActive = (playerId === data.team2ActivePlayerId);
+                    }
+                }
+                
+                console.log('[TeamMatch] Round start active players - Team1:', data.team1ActivePlayerId, 'Team2:', data.team2ActivePlayerId);
                 
                 return newState;
             });

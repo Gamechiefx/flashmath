@@ -4,6 +4,8 @@
 
 import { query, queryOne, execute, type UserRow } from "./db";
 import { v4 as uuid } from "uuid";
+import { sendEmail } from "@/lib/email";
+import { leaguePromotionEmailTemplate } from "@/lib/email/templates/league-promotion";
 
 const LEAGUE_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (weekly cycle)
 const TIERS = ['neon-league', 'cobalt-league', 'plasma-league', 'void-league', 'apex-league'];
@@ -43,10 +45,20 @@ export async function syncLeagueState() {
     }
 }
 
+// Map tier IDs to league names for email template
+const TIER_TO_LEAGUE_NAME: Record<string, 'neon' | 'plasma' | 'quantum' | 'nova' | 'apex'> = {
+    'neon-league': 'neon',
+    'cobalt-league': 'plasma', // cobalt maps to plasma in email
+    'plasma-league': 'quantum', // plasma maps to quantum in email
+    'void-league': 'nova',
+    'apex-league': 'apex',
+};
+
 async function processLeagueReset() {
     for (const tierId of TIERS) {
         const participants = query('SELECT * FROM league_participants WHERE league_id = ?', [tierId]);
         const sorted = [...participants].sort((a, b) => b.weekly_xp - a.weekly_xp);
+        const totalPlayers = sorted.filter(p => !p.user_id.startsWith('ghost-')).length || sorted.length;
 
         // Process Promotions (Top 3)
         const top3 = sorted.slice(0, 3);
@@ -57,6 +69,14 @@ async function processLeagueReset() {
             if (nextTierIdx < TIERS.length) {
                 const nextTier = TIERS[nextTierIdx];
                 await promoteUser(winner.user_id, nextTier);
+                
+                // Send promotion email
+                const rank = sorted.findIndex(p => p.user_id === winner.user_id) + 1;
+                await sendLeaguePromotionEmail(winner.user_id, nextTier, {
+                    weeklyXp: winner.weekly_xp,
+                    rank,
+                    totalPlayers,
+                });
             }
 
             // Prize: Coins for being top 3
@@ -111,6 +131,37 @@ async function processLeagueReset() {
 
 async function promoteUser(userId: string, targetTier: string) {
     execute('UPDATE users SET current_league_id = ? WHERE id = ?', [targetTier, userId]);
+}
+
+async function sendLeaguePromotionEmail(
+    userId: string, 
+    newTier: string, 
+    stats: { weeklyXp: number; rank: number; totalPlayers: number }
+) {
+    try {
+        const user = queryOne('SELECT name, email FROM users WHERE id = ?', [userId]) as { name: string; email: string } | null;
+        if (!user || !user.email) return;
+        
+        const leagueName = TIER_TO_LEAGUE_NAME[newTier];
+        if (!leagueName) return;
+        
+        const template = leaguePromotionEmailTemplate(user.name, leagueName, {
+            weeklyXp: stats.weeklyXp,
+            rank: stats.rank,
+            totalPlayers: stats.totalPlayers,
+        });
+        
+        await sendEmail({
+            to: user.email,
+            subject: template.subject,
+            html: template.html,
+            text: template.text,
+        });
+        
+        console.log(`[LEAGUE] Promotion email sent to ${user.email} for ${leagueName} league`);
+    } catch (err) {
+        console.error('[LEAGUE] Failed to send promotion email:', err);
+    }
 }
 
 async function awardPrize(userId: string, amount: number) {

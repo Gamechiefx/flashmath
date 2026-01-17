@@ -1,10 +1,12 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Zap, Brain, Trophy, ArrowLeft } from "lucide-react";
+import { Brain, ArrowLeft } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
+// Dual-tone icons for premium marketing display
+import { DtBolt, DtTrophy, ICON_THEMES } from "@/components/icons/dual-tone";
 
 export default function WhyFlashMath() {
     return (
@@ -34,9 +36,13 @@ export default function WhyFlashMath() {
                     </h1>
 
                     <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-                        <GlassCard className="text-left">
-                            <div className="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center mb-4 text-primary">
-                                <Zap size={24} />
+                        <GlassCard className="text-left group hover:border-cyan-500/30 transition-all duration-300">
+                            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-600/5 flex items-center justify-center mb-4 shadow-[0_0_25px_rgba(6,182,212,0.15)] group-hover:shadow-[0_0_35px_rgba(6,182,212,0.25)] transition-shadow">
+                                <DtBolt 
+                                    size={32} 
+                                    primaryColor={ICON_THEMES.cyan.primary}
+                                    secondaryColor={ICON_THEMES.cyan.secondary}
+                                />
                             </div>
                             <h3 className="text-xl font-bold mb-2 text-foreground">Fluency First</h3>
                             <p className="text-sm text-muted-foreground">
@@ -44,9 +50,9 @@ export default function WhyFlashMath() {
                             </p>
                         </GlassCard>
 
-                        <GlassCard className="text-left border-accent/20">
-                            <div className="w-12 h-12 rounded-lg bg-accent/20 flex items-center justify-center mb-4 text-accent">
-                                <Brain size={24} />
+                        <GlassCard className="text-left border-accent/20 group hover:border-purple-500/30 transition-all duration-300">
+                            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/5 flex items-center justify-center mb-4 shadow-[0_0_25px_rgba(139,92,246,0.15)] group-hover:shadow-[0_0_35px_rgba(139,92,246,0.25)] transition-shadow">
+                                <Brain size={28} className="text-purple-400" />
                             </div>
                             <h3 className="text-xl font-bold mb-2 text-foreground">Adaptive AI</h3>
                             <p className="text-sm text-muted-foreground">
@@ -54,9 +60,13 @@ export default function WhyFlashMath() {
                             </p>
                         </GlassCard>
 
-                        <GlassCard className="text-left">
-                            <div className="w-12 h-12 rounded-lg bg-primary/20 flex items-center justify-center mb-4 text-primary">
-                                <Trophy size={24} />
+                        <GlassCard className="text-left group hover:border-amber-500/30 transition-all duration-300">
+                            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-500/5 flex items-center justify-center mb-4 shadow-[0_0_25px_rgba(245,158,11,0.15)] group-hover:shadow-[0_0_35px_rgba(245,158,11,0.25)] transition-shadow">
+                                <DtTrophy 
+                                    size={32} 
+                                    primaryColor={ICON_THEMES.amber.primary}
+                                    secondaryColor={ICON_THEMES.amber.secondary}
+                                />
                             </div>
                             <h3 className="text-xl font-bold mb-2 text-foreground">Gamified Mastery</h3>
                             <p className="text-sm text-muted-foreground">

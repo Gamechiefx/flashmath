@@ -2,7 +2,7 @@
  * Decay Cron Job API Route
  * 
  * This endpoint should be called daily by a cron job (e.g., Vercel Cron, GitHub Actions, etc.)
- * to apply ELO decay to inactive players.
+ * to apply ELO decay to inactive players and send appropriate notification emails.
  * 
  * Authentication: Requires CRON_SECRET header to prevent unauthorized access.
  * 
@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runDecayJob } from '@/lib/arena/decay';
+import { processDecayEmails } from '@/lib/actions/decay-emails';
 
 export async function POST(request: NextRequest) {
     // Verify cron secret - CRON_SECRET must be configured
@@ -32,13 +33,30 @@ export async function POST(request: NextRequest) {
     try {
         console.log('[Cron/Decay] Starting decay job...');
         
-        const result = await runDecayJob();
+        // Step 1: Apply ELO decay
+        const decayResult = await runDecayJob();
+        console.log('[Cron/Decay] Decay applied:', decayResult);
         
-        console.log('[Cron/Decay] Job completed:', result);
+        // Step 2: Send decay notification emails (including to new returning players)
+        console.log('[Cron/Decay] Processing decay emails...');
+        const emailResult = await processDecayEmails(decayResult.newReturningPlayerIds);
+        console.log('[Cron/Decay] Emails sent:', emailResult);
         
         return NextResponse.json({
             success: true,
-            ...result,
+            decay: {
+                usersProcessed: decayResult.usersProcessed,
+                usersDecayed: decayResult.usersDecayed,
+                totalEloDecayed: decayResult.totalEloDecayed,
+                newReturningPlayers: decayResult.newReturningPlayers,
+            },
+            emails: {
+                warningsSent: emailResult.warningsSent,
+                decayStartedSent: emailResult.decayStartedSent,
+                severeSent: emailResult.severeSent,
+                returningSent: emailResult.returningSent,
+                errorCount: emailResult.errors.length,
+            },
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -55,10 +73,27 @@ export async function GET() {
     // In development, allow GET without auth for testing
     if (process.env.NODE_ENV === 'development') {
         try {
-            const result = await runDecayJob();
+            // Step 1: Apply ELO decay
+            const decayResult = await runDecayJob();
+            
+            // Step 2: Send decay notification emails (including to new returning players)
+            const emailResult = await processDecayEmails(decayResult.newReturningPlayerIds);
+            
             return NextResponse.json({
                 success: true,
-                ...result,
+                decay: {
+                    usersProcessed: decayResult.usersProcessed,
+                    usersDecayed: decayResult.usersDecayed,
+                    totalEloDecayed: decayResult.totalEloDecayed,
+                    newReturningPlayers: decayResult.newReturningPlayers,
+                },
+                emails: {
+                    warningsSent: emailResult.warningsSent,
+                    decayStartedSent: emailResult.decayStartedSent,
+                    severeSent: emailResult.severeSent,
+                    returningSent: emailResult.returningSent,
+                    errorCount: emailResult.errors.length,
+                },
                 timestamp: new Date().toISOString(),
                 mode: 'development'
             });

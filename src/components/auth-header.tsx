@@ -1,13 +1,14 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { Zap, LogOut, LayoutDashboard, Settings, Volume2, VolumeX, Trophy, Swords, Maximize2, Minimize2, Shield } from "lucide-react";
+import { LogOut, LayoutDashboard, Settings, Volume2, VolumeX, Trophy, Swords, Maximize2, Minimize2, Shield, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { soundEngine } from "@/lib/sound-engine";
 import { UserAvatar } from "@/components/user-avatar";
 import { AchievementsPanel } from "@/components/achievements-panel";
+import { FlashMathLogoWithIcon } from "@/components/ui/flashmath-logo";
 
 interface AuthHeaderProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session type
@@ -72,11 +73,8 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
     if (!session) return (
         <nav className="w-full bg-black/40 backdrop-blur-xl border-b border-white/10 relative z-50">
             <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-                <Link href="/" className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary border border-primary/20">
-                        <Zap size={20} />
-                    </div>
-                    <span className="font-black tracking-tighter text-lg">FLASHMATH</span>
+                <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                    <FlashMathLogoWithIcon size="sm" />
                 </Link>
                 <div className="flex items-center gap-4">
                     <Link href="/auth/login" className="text-sm font-bold uppercase tracking-widest hover:text-primary transition-colors">Login</Link>
@@ -91,11 +89,8 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
                 <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
                     {/* Left side: Logo + Nav Links */}
                     <div className="flex items-center gap-6">
-                        <Link href="/" className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary border border-primary/20">
-                                <Zap size={20} />
-                            </div>
-                            <span className="font-black tracking-tighter text-lg uppercase tracking-widest text-primary">FlashMath</span>
+                        <Link href="/" className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                            <FlashMathLogoWithIcon size="sm" />
                         </Link>
 
                         <div className="h-8 w-[1px] bg-white/10 hidden md:block" />
@@ -218,10 +213,10 @@ export function AuthHeader({ session: initialSession }: AuthHeaderProps) {
 
                                     {/* Logout */}
                                     <button
-                                        onClick={async () => {
+                                        onClick={() => {
                                             handleNavAwayFromArena();
-                                            await signOut({ redirect: false });
-                                            window.location.href = "/";
+                                            // Use callbackUrl to let NextAuth handle the full sign-out flow
+                                            signOut({ callbackUrl: "/" });
                                         }}
                                         className="w-full flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors text-left"
                                     >

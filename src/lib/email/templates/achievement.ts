@@ -8,8 +8,6 @@ import {
     baseTemplate, 
     emailHero, 
     emailButton, 
-    emailParagraph,
-    emailUsername,
     emailDivider,
     emailInfoBox,
     COLORS
@@ -63,7 +61,7 @@ export function achievementEmailTemplate(
 `.trim();
 
     const content = `
-${emailHero('🏆', 'Achievement Unlocked!', `Way to go, ${emailUsername(username)}!`, rarity.color)}
+${emailHero('🏆', 'Achievement Unlocked!', `Way to go, <strong style="color: #ffffff;">${username}</strong>!`, rarity.color)}
 
 ${badgeHtml}
 

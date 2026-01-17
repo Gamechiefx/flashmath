@@ -1,10 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Zap, Trophy, ArrowRight, Play, AlertTriangle } from "lucide-react";
+import { ArrowRight, Play, AlertTriangle } from "lucide-react";
 import { NeonButton } from "@/components/ui/neon-button";
 import Link from "next/link";
 import { AuthHeader } from "@/components/auth-header";
+import { FlashMathLogo } from "@/components/ui/flashmath-logo";
+// Dual-tone icons for premium hero display
+import { DtBolt, DtTrophy, ICON_THEMES } from "@/components/icons/dual-tone";
 
 interface HomeViewProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session type
@@ -53,32 +56,17 @@ export function HomeView({ session, maintenanceMode = false, maintenanceMessage 
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.8 }}
                 >
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-6">
-                        <Zap className="w-4 h-4" />
-                        <span>Next-Gen Speed Math</span>
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/20 text-sm font-medium mb-6">
+                        <DtBolt 
+                            size={18} 
+                            primaryColor={ICON_THEMES.cyan.primary}
+                            secondaryColor={ICON_THEMES.purple.primary}
+                        />
+                        <span className="bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent font-bold">Next-Gen Speed Math</span>
                     </div>
 
-                    <h1 className="text-6xl md:text-8xl font-black mb-6 tracking-tighter text-foreground">
-                        <motion.span
-                            animate={{
-                                backgroundPosition: ["200% center", "-200% center"],
-                            }}
-                            transition={{
-                                duration: 6,
-                                repeat: Infinity,
-                                ease: "linear"
-                            }}
-                            style={{
-                                backgroundImage: "linear-gradient(90deg, var(--color-primary) 0%, var(--color-accent) 25%, #ffffff 50%, var(--color-accent) 75%, var(--color-primary) 100%)",
-                                backgroundSize: "200% auto",
-                                WebkitBackgroundClip: "text",
-                                WebkitTextFillColor: "transparent",
-                            }}
-                            className="inline-block"
-                        >
-                            FLASH
-                        </motion.span>
-                        MATH
+                    <h1 className="mb-6">
+                        <FlashMathLogo size="hero" animated />
                     </h1>
 
                     <p className="max-w-2xl mx-auto text-lg md:text-xl text-muted-foreground mb-10 text-balance font-medium">
@@ -148,8 +136,12 @@ export function HomeView({ session, maintenanceMode = false, maintenanceMessage 
                     </div>
 
                     <div className="mt-12">
-                        <Link href="/why-flash-math" className="text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-2 font-semibold text-xs tracking-widest uppercase">
-                            <Trophy className="w-4 h-4" />
+                        <Link href="/why-flash-math" className="text-muted-foreground hover:text-amber-400 transition-colors flex items-center justify-center gap-2 font-semibold text-xs tracking-widest uppercase group">
+                            <DtTrophy 
+                                size={18} 
+                                primaryColor="currentColor"
+                                className="group-hover:text-amber-400 transition-colors"
+                            />
                             Project Info
                             <ArrowRight className="w-3 h-3" />
                         </Link>

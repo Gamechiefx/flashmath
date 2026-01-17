@@ -11,16 +11,11 @@ export default function SignOutPage() {
     const router = useRouter();
     const [isSigningOut, setIsSigningOut] = useState(false);
 
-    const handleSignOut = async () => {
+    const handleSignOut = () => {
         setIsSigningOut(true);
-        try {
-            await signOut({ redirect: false });
-            // Redirect to home page after sign out
-            window.location.href = "/";
-        } catch (error) {
-            console.error("Sign out error:", error);
-            setIsSigningOut(false);
-        }
+        // Use callbackUrl to let NextAuth handle the full sign-out flow
+        // This properly clears cookies and session before redirecting
+        signOut({ callbackUrl: "/" });
     };
 
     return (
