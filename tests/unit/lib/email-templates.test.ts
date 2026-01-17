@@ -19,7 +19,9 @@ describe('Base Template', () => {
 
         it('should include FlashMath branding', () => {
             const html = baseTemplate('<p>Test</p>');
-            expect(html).toContain('FLASHMATH');
+            // Logo is split into two styled spans: FLASH + MATH
+            expect(html).toContain('FLASH');
+            expect(html).toContain('MATH');
         });
 
         it('should include content', () => {
@@ -247,9 +249,11 @@ describe('Template Consistency', () => {
         const verification = verificationEmailTemplate('User', '123456');
         const passwordReset = passwordResetEmailTemplate('User', 'https://example.com');
 
-        // Both should have FLASHMATH branding
-        expect(verification.html).toContain('FLASHMATH');
-        expect(passwordReset.html).toContain('FLASHMATH');
+        // Both should have FlashMath branding (logo split into FLASH + MATH spans)
+        expect(verification.html).toContain('FLASH');
+        expect(verification.html).toContain('MATH');
+        expect(passwordReset.html).toContain('FLASH');
+        expect(passwordReset.html).toContain('MATH');
 
         // Both should have footer
         expect(verification.html).toContain('© ');
