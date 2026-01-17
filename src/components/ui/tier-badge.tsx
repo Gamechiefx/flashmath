@@ -4,7 +4,6 @@ import { cn } from '@/lib/utils';
 import {
     getBandForTier,
     getTierWithinBand,
-    formatTierDisplay,
     formatTierShort,
 } from '@/lib/tier-system';
 
@@ -19,7 +18,7 @@ interface TierBadgeProps {
 
 export function TierBadge({
     tier,
-    operation,
+    operation: _operation,
     showBandName = true,
     size = 'md',
     variant = 'default',

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
@@ -9,7 +8,6 @@ import { requestPasswordReset } from "@/lib/actions/auth";
 import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
 
 export default function ForgotPasswordPage() {
-    const router = useRouter();
     const [email, setEmail] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -47,7 +45,7 @@ export default function ForgotPasswordPage() {
                         <h1 className="text-2xl font-bold text-white mb-2">Check Your Email</h1>
                         <p className="text-muted-foreground mb-6">
                             If an account exists with <span className="text-white">{email}</span>,
-                            you'll receive a password reset link shortly.
+                            you&apos;ll receive a password reset link shortly.
                         </p>
                         <Link href="/auth/login">
                             <NeonButton variant="secondary">Back to Login</NeonButton>
@@ -69,7 +67,7 @@ export default function ForgotPasswordPage() {
                             </div>
                             <h1 className="text-2xl font-bold text-white mb-2">Forgot Password?</h1>
                             <p className="text-muted-foreground">
-                                Enter your email and we'll send you a link to reset your password.
+                                Enter your email and we&apos;ll send you a link to reset your password.
                             </p>
                         </div>
 

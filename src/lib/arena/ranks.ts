@@ -18,7 +18,9 @@
  * - Then promote to next rank and reset
  */
 
-import { getBandForTier, BANDS } from '@/lib/tier-system';
+ 
+
+import { getBandForTier } from '@/lib/tier-system';
 
 export interface ArenaRank {
     rank: string;
@@ -56,7 +58,7 @@ export const MODE_BASE_ELO: Record<string, number> = {
 };
 
 // Rank order (lowest to highest)
-const RANKS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master'];
+const _RANKS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Master'];
 const DIVISIONS = ['I', 'II', 'III'];
 
 // Band to rank bracket mapping (based on 100-tier system)

@@ -8,6 +8,7 @@ import { sendEmail } from '@/lib/email';
 import { adminMfaEmailTemplate } from '@/lib/email/templates/admin-mfa';
 import { parseRole, hasPermission, Permission } from '@/lib/rbac';
 import crypto from 'crypto';
+import type { UserRow } from '@/lib/db';
 
 const ADMIN_MFA_COOKIE = 'admin_mfa_session';
 const ADMIN_MFA_EXPIRY_HOURS = 1; // Session valid for 1 hour
@@ -26,7 +27,7 @@ export async function sendAdminMfaCode(): Promise<AdminMfaResult> {
         return { success: false, error: 'Not authenticated' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const email = session.user.email;
     const name = session.user.name || 'Admin';
 
@@ -36,7 +37,7 @@ export async function sendAdminMfaCode(): Promise<AdminMfaResult> {
 
     // Verify user has admin permissions
     const db = getDatabase();
-    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?').get(userId) as any;
+    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?').get(userId) as UserRow | undefined;
 
     if (!user) {
         return { success: false, error: 'User not found' };
@@ -82,7 +83,7 @@ export async function verifyAdminMfaCode(code: string): Promise<AdminMfaResult> 
         return { success: false, error: 'Not authenticated' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     // Verify the token
     const result = await verifyToken(code, 'admin_mfa');
@@ -147,7 +148,7 @@ export async function checkAdminMfaSession(): Promise<boolean> {
         return false;
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     // Check cookie
     const cookieStore = await cookies();

@@ -1,17 +1,16 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
-import { motion, useSpring, useTransform, useInView } from "framer-motion";
+import { motion, useInView, type Variants } from "framer-motion";
 import { cn } from "@/lib/utils";
 import {
-    Zap,
     Trophy,
-    Target,
     History,
     ChevronRight,
     Activity,
-    Coins,
     BarChart3,
     ShoppingBag,
     ArrowRight,
@@ -21,13 +20,13 @@ import Link from "next/link";
 
 import { PlacementTest } from "@/components/placement-test";
 import { useState, useEffect, useRef } from "react";
-import { updateTiers } from "@/lib/actions/game";
 import { useRouter } from "next/navigation";
-import { getBandForTier, getTierWithinBand, getProgressWithinBand, formatTierShort } from "@/lib/tier-system";
+import { getBandForTier, getTierWithinBand, getProgressWithinBand } from "@/lib/tier-system";
 
 interface DashboardViewProps {
     stats: any;
     userName: string;
+    initialEmailVerified?: boolean;
 }
 
 import { useSession } from "next-auth/react";
@@ -100,7 +99,7 @@ function AnimatedProgressBar({
 }
 
 // Stagger container variants
-const containerVariants = {
+const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
         opacity: 1,
@@ -111,7 +110,7 @@ const containerVariants = {
     }
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     visible: {
         opacity: 1,
@@ -128,17 +127,23 @@ const cardHover = {
     transition: { duration: 0.2 }
 };
 
-export function DashboardView({ stats, userName }: DashboardViewProps) {
+export function DashboardView({ stats, userName: _userName, initialEmailVerified }: DashboardViewProps) {
     const [isOperationsOpen, setIsOperationsOpen] = useState(true);
     const [selectedOp, setSelectedOp] = useState<string | null>(null);
     const [showPlacementTest, setShowPlacementTest] = useState(false);
     const router = useRouter();
     const { data: session, update } = useSession();
-    const isEmailVerified = (session?.user as any)?.emailVerified;
+    
+    // Use server-side value as initial truth, then client session for updates
+    const sessionEmailVerified = (session?.user as { emailVerified?: boolean })?.emailVerified;
+    const isEmailVerified = sessionEmailVerified ?? initialEmailVerified ?? false;
 
     // Refresh session on mount to get latest emailVerified status
+    // Note: Empty dependency array intentionally used to run only once on mount
+    // Using [update] could cause infinite loops if update changes reference
     useEffect(() => {
         update();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const handlePlacementComplete = async () => {

@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
 import { PlayerBanner } from '@/components/arena/player-banner';
 import { soundEngine } from '@/lib/sound-engine';
 import { sendMatchEmoji, getMatchEmojis } from '@/lib/actions/matchmaking';
-import { cn } from '@/lib/utils';
 
 interface Player {
     id: string;
@@ -118,6 +117,7 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
     const handleSendEmoji = async (emoji: string) => {
         soundEngine.playChat();
         // Optimistic update
+        // eslint-disable-next-line react-hooks/purity -- Safe in event handler
         const newMessage = { emoji, senderId: currentUserId, timestamp: Date.now() };
         setChatMessages(prev => [...prev.slice(-10), newMessage]);
 
@@ -153,7 +153,6 @@ export function MatchLobby({ matchId, players, currentUserId, operation = 'mixed
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="6"
-                            strokeDasharray="327"
                             strokeDasharray="327"
                             initial={{ strokeDashoffset: 0 }}
                             animate={{ strokeDashoffset: 327 * (1 - countdown / 15) }}

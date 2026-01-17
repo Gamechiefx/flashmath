@@ -80,6 +80,7 @@ function SlotAvatar({ slot, index }: { slot: TeamSlot; index: number }) {
                 {slot.status === 'filled' ? (
                     <>
                         {slot.avatarUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- Avatar URLs may be external
                             <img 
                                 src={slot.avatarUrl} 
                                 alt={slot.playerName} 

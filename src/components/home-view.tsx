@@ -7,6 +7,7 @@ import Link from "next/link";
 import { AuthHeader } from "@/components/auth-header";
 
 interface HomeViewProps {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- NextAuth session type
     session: any;
     maintenanceMode?: boolean;
     maintenanceMessage?: string | null;

@@ -4,7 +4,7 @@
  * Two-Factor Authentication Actions
  */
 
-import { getDatabase } from "@/lib/db";
+import { getDatabase, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import {
     generateTOTPSecret,
@@ -31,7 +31,7 @@ export async function setup2FA(): Promise<{
     }
 
     const db = getDatabase();
-    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(session.user.email) as any;
+    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(session.user.email) as UserRow | undefined;
 
     if (!user) {
         return { success: false, error: "User not found" };
@@ -65,7 +65,7 @@ export async function enable2FA(code: string): Promise<{
     }
 
     const db = getDatabase();
-    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(session.user.email) as any;
+    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(session.user.email) as UserRow | undefined;
 
     if (!user || !user.two_factor_secret) {
         return { success: false, error: "2FA setup not started" };
@@ -76,7 +76,7 @@ export async function enable2FA(code: string): Promise<{
     }
 
     // Verify the code
-    if (!verifyTOTPCode(user.two_factor_secret, code)) {
+    if (!user.two_factor_secret || !verifyTOTPCode(user.two_factor_secret, code)) {
         return { success: false, error: "Invalid verification code" };
     }
 
@@ -107,14 +107,14 @@ export async function disable2FA(code: string): Promise<{ success: boolean; erro
     }
 
     const db = getDatabase();
-    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(session.user.email) as any;
+    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(session.user.email) as UserRow | undefined;
 
     if (!user || !user.two_factor_enabled) {
         return { success: false, error: "2FA is not enabled" };
     }
 
     // Verify the code
-    if (!verifyTOTPCode(user.two_factor_secret, code)) {
+    if (!user.two_factor_secret || !verifyTOTPCode(user.two_factor_secret, code)) {
         return { success: false, error: "Invalid verification code" };
     }
 
@@ -139,20 +139,20 @@ export async function verify2FACode(
     code: string
 ): Promise<{ success: boolean; error?: string }> {
     const db = getDatabase();
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as any;
+    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as UserRow | undefined;
 
     if (!user || !user.two_factor_enabled) {
         return { success: false, error: "2FA is not enabled" };
     }
 
     // Try TOTP code first
-    if (verifyTOTPCode(user.two_factor_secret, code)) {
+    if (user.two_factor_secret && verifyTOTPCode(user.two_factor_secret, code)) {
         return { success: true };
     }
 
     // Try recovery code
-    const recoveryCodes = user.two_factor_recovery_codes
-        ? JSON.parse(user.two_factor_recovery_codes)
+    const recoveryCodes = (user.two_factor_recovery_codes && typeof user.two_factor_recovery_codes === 'string')
+        ? JSON.parse(user.two_factor_recovery_codes) as string[]
         : [];
 
     const recoveryIndex = verifyRecoveryCode(code, recoveryCodes);
@@ -184,7 +184,10 @@ export async function get2FAStatus(): Promise<{
 
     const db = getDatabase();
     const user = db.prepare("SELECT two_factor_enabled, two_factor_recovery_codes FROM users WHERE email = ?")
-        .get(session.user.email) as any;
+        .get(session.user.email) as {
+            two_factor_enabled?: number;
+            two_factor_recovery_codes?: string | null;
+        } | undefined;
 
     if (!user) {
         return { enabled: false, hasRecoveryCodes: false };
@@ -214,14 +217,14 @@ export async function regenerateRecoveryCodes(code: string): Promise<{
     }
 
     const db = getDatabase();
-    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(session.user.email) as any;
+    const user = db.prepare("SELECT * FROM users WHERE email = ?").get(session.user.email) as UserRow | undefined;
 
     if (!user || !user.two_factor_enabled) {
         return { success: false, error: "2FA is not enabled" };
     }
 
     // Verify current code
-    if (!verifyTOTPCode(user.two_factor_secret, code)) {
+    if (!user.two_factor_secret || !verifyTOTPCode(user.two_factor_secret, code)) {
         return { success: false, error: "Invalid verification code" };
     }
 

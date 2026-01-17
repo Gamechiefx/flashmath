@@ -17,13 +17,13 @@ export default function MaintenancePage() {
                     </h1>
                     <p className="text-muted-foreground text-lg">
                         FlashMath is currently undergoing scheduled maintenance.
-                        We'll be back shortly!
+                        We&apos;ll be back shortly!
                     </p>
                 </div>
 
                 <div className="p-6 rounded-xl bg-white/5 border border-white/10 space-y-2">
                     <p className="text-sm text-muted-foreground">
-                        We're working hard to improve your experience.
+                        We&apos;re working hard to improve your experience.
                         Please check back in a few minutes.
                     </p>
                 </div>

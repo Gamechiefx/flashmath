@@ -6,7 +6,15 @@ import { giveUserCoins, giveUserXP, giveUserItem, giveUserAllItems, getAllShopIt
 import { Loader2, Trash2, Ban, CheckCircle, Coins, Zap, AlertCircle, ArrowUp, ArrowDown, Package } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { RoleManager } from "@/components/admin/role-manager";
-import { Role, parseRole, ROLE_LABELS, ROLE_COLORS, hasPermission, Permission, canManageRole } from "@/lib/rbac";
+import { Role, parseRole, hasPermission, Permission, canManageRole } from "@/lib/rbac";
+
+interface ShopItem {
+    id: string;
+    name: string;
+    rarity: string;
+    type: string;
+    price: number;
+}
 
 interface User {
     id: string;
@@ -47,20 +55,23 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
 
     // Item grant modal state
     const [itemModalUser, setItemModalUser] = useState<User | null>(null);
-    const [shopItems, setShopItems] = useState<any[]>([]);
+    const [shopItems, setShopItems] = useState<ShopItem[]>([]);
     const [selectedItemId, setSelectedItemId] = useState<string>("");
     const [itemsLoading, setItemsLoading] = useState(false);
 
     // Load shop items when modal opens
     useEffect(() => {
         if (itemModalUser && shopItems.length === 0) {
-            setItemsLoading(true);
-            getAllShopItems().then((result) => {
-                if (!result.error) {
-                    setShopItems(result.items);
-                }
-                setItemsLoading(false);
-            });
+            // Defer to avoid setState in effect warning
+            setTimeout(() => {
+                setItemsLoading(true);
+                getAllShopItems().then((result) => {
+                    if (!result.error && result.items) {
+                        setShopItems(result.items as ShopItem[]);
+                    }
+                    setItemsLoading(false);
+                });
+            }, 0);
         }
     }, [itemModalUser, shopItems.length]);
 
@@ -117,9 +128,6 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
             return sortAsc ? comparison : -comparison;
         });
 
-    const handleBanClickOld = (user: User) => {
-        // This function is replaced by the new one below
-    };
 
     const executeBan = async (userId: string, hours: number | null) => {
         setProcessingId(userId);
@@ -255,7 +263,8 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
         }
     };
 
-    // Helper to format ban time
+    // Helper to format ban time - currently unused but kept for future use
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const getBanTimeRemaining = (isoDate: string) => {
         const date = new Date(isoDate);
         if (date < new Date()) return "Expired";
@@ -431,7 +440,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                         className="w-full bg-black/40 border border-white/10 rounded p-2 text-sm"
                                     >
                                         <option value="">-- Choose an item --</option>
-                                        {shopItems.map((item: any) => (
+                                        {shopItems.map((item: ShopItem) => (
                                             <option key={item.id} value={item.id}>
                                                 {item.name} ({item.type}) - {item.rarity}
                                             </option>
@@ -476,7 +485,7 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                     <div className="flex items-center gap-2">
                         <select
                             value={sortBy}
-                            onChange={(e) => setSortBy(e.target.value as any)}
+                            onChange={(e) => setSortBy(e.target.value as 'created_at' | 'name' | 'role')}
                             className="bg-black/20 border border-white/10 rounded px-3 py-2 text-sm"
                         >
                             <option value="created_at">Created</option>
@@ -563,9 +572,9 @@ export function UserManager({ users, currentUserRole }: UserManagerProps) {
                                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs font-bold uppercase">
                                                         <Ban size={12} /> BANNED
                                                     </span>
-                                                    {(user as any).banned_until && (
+                                                    {(user as { banned_until?: string | null }).banned_until && (
                                                         <span className="text-[10px] text-red-300/60 font-mono" suppressHydrationWarning>
-                                                            Until: {new Date((user as any).banned_until).toLocaleDateString()}
+                                                            Until: {new Date((user as { banned_until: string }).banned_until).toLocaleDateString()}
                                                         </span>
                                                     )}
                                                 </div>

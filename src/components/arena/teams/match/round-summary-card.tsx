@@ -14,7 +14,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { ChevronDown, ChevronUp, Trophy, Zap, Target } from 'lucide-react';
+import { ChevronDown, Trophy, Zap, Target } from 'lucide-react';
 
 interface PlayerRoundStats {
     userId: string;

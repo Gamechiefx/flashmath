@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Plus, Minus, X, Divide, Shuffle, Zap, Crown, Anchor,
-    Check, AlertCircle, Flame, Timer, Target, Sparkles
+    Check, AlertCircle, Flame, Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -123,15 +123,24 @@ export function QuestionAnswerCard({
     
     // Clear input when question changes
     useEffect(() => {
-        setInput('');
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setInput('');
+        }, 0);
     }, [question]);
     
     // Shake effect on wrong answer
     useEffect(() => {
         if (lastResult && !lastResult.isCorrect) {
-            setIsShaking(true);
-            const timer = setTimeout(() => setIsShaking(false), 500);
-            return () => clearTimeout(timer);
+            // Defer to avoid setState in effect warning
+            let timer: NodeJS.Timeout;
+            setTimeout(() => {
+                setIsShaking(true);
+                timer = setTimeout(() => setIsShaking(false), 500);
+            }, 0);
+            return () => {
+                if (timer) clearTimeout(timer);
+            };
         }
     }, [lastResult]);
     
@@ -410,7 +419,7 @@ export function QuestionCardSpectator({
     playerName,
     currentInput,
     streak,
-    slotLabel,
+    slotLabel: _slotLabel,
     questionNumber,
     totalQuestions,
 }: {

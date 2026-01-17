@@ -1,8 +1,8 @@
 "use server";
 
-import { auth, signOut } from "@/auth";
-import { getDatabase, generateId, now } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { auth, signOut } from "@/auth";
+import { getDatabase, now } from "@/lib/db";
 
 export async function resetUserData() {
     const session = await auth();
@@ -10,7 +10,7 @@ export async function resetUserData() {
         return { error: "Unauthorized" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         const db = getDatabase();
@@ -102,7 +102,7 @@ export async function resetUserData() {
                     updated_at = ?
                 WHERE id = ?
             `).run(now(), userId);
-        } catch (e) {
+        } catch (_e) {
             // Fallback for databases without new columns
             console.log('[SETTINGS] Using fallback reset (new columns may not exist)');
             db.prepare(`
@@ -122,14 +122,17 @@ export async function resetUserData() {
             `).run(now(), userId);
         }
 
-        // Clear user from Redis queue  if any
+        // Clear user from Redis queue if any
         try {
-            const { getRedis } = await import("@/lib/redis");
-            const redis = getRedis();
-            if (redis) {
-                await redis.del(`arena:queue:${userId}`);
-            }
-        } catch (e) {
+            const Redis = (await import('ioredis')).default;
+            const redis = new Redis({
+                host: process.env.REDIS_HOST || 'localhost',
+                port: parseInt(process.env.REDIS_PORT || '6379'),
+                maxRetriesPerRequest: 1,
+            });
+            await redis.del(`arena:queue:${userId}`);
+            await redis.quit();
+        } catch {
             // Redis may not be available
         }
 
@@ -160,7 +163,7 @@ export async function deleteUserAccount() {
         return { error: "Unauthorized" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         const db = getDatabase();
@@ -201,7 +204,7 @@ export async function updateUsername(newUsername: string) {
         return { error: "Unauthorized" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     // Validate username format, profanity, and reserved words
     const { validateUsername, isUsernameAvailable } = await import("@/lib/username-validator");
@@ -215,7 +218,7 @@ export async function updateUsername(newUsername: string) {
         const db = getDatabase();
 
         // Check 3-month rate limit for username changes
-        const user = db.prepare('SELECT name, updated_at FROM users WHERE id = ?').get(userId) as any;
+        const user = db.prepare('SELECT name, updated_at FROM users WHERE id = ?').get(userId) as { name: string; updated_at?: string } | undefined;
         if (user?.updated_at) {
             const lastUpdate = new Date(user.updated_at);
             const daysSinceUpdate = (Date.now() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24);

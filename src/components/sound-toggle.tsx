@@ -8,7 +8,10 @@ export function SoundToggle() {
     const [enabled, setEnabled] = useState(true);
 
     useEffect(() => {
-        setEnabled(soundEngine.isEnabled());
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setEnabled(soundEngine.isEnabled());
+        }, 0);
     }, []);
 
     const toggle = () => {

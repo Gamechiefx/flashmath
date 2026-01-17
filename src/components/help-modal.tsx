@@ -2,7 +2,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowRight, BookOpen, RefreshCw } from "lucide-react";
+import { ArrowRight, BookOpen } from "lucide-react";
 
 interface HelpModalProps {
     explanation: string;

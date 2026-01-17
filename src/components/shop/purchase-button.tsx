@@ -1,6 +1,5 @@
 "use client";
 
-import { Item } from "@/lib/items";
 import { NeonButton } from "@/components/ui/neon-button";
 import { purchaseItem } from "@/lib/actions/shop";
 import { useState } from "react";
@@ -35,7 +34,7 @@ export function PurchaseButton({ itemId, price, userCoins }: PurchaseButtonProps
                 await update();
                 router.refresh();
             }
-        } catch (err) {
+        } catch (_err) {
             setError("Purchase failed");
         } finally {
             setLoading(false);

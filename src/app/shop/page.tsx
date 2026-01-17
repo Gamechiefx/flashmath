@@ -1,8 +1,6 @@
-
 import { auth } from "@/auth";
-import { queryOne, loadData } from "@/lib/db";
+import { queryOne, loadData, type UserRow } from "@/lib/db";
 import { getDailyShopSelection } from "@/lib/shop-engine";
-import { ITEMS, RARITY_COLORS, Rarity, ItemType } from "@/lib/items";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 import { ShoppingBag, Coins, RefreshCw } from "lucide-react";
@@ -11,6 +9,7 @@ import { ShopItemCard } from "@/components/shop/shop-item-card";
 import { ShopTimer } from "@/components/shop/shop-timer";
 import { AuthHeader } from "@/components/auth-header";
 import { unstable_noStore as noStore } from 'next/cache';
+import { ItemType } from "@/lib/items";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -32,9 +31,9 @@ export default async function ShopPage() {
 
     const session = await auth();
     if (!session?.user) return <div>Please log in</div>;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
 
     if (!user) {
         return (
@@ -50,10 +49,17 @@ export default async function ShopPage() {
         );
     }
 
-    const inventory = loadData().inventory.filter(i => i.user_id === userId).map(i => i.item_id);
+    interface InventoryItem {
+        user_id: string;
+        item_id: string;
+    }
+    const inventory = (loadData().inventory as InventoryItem[]).filter(i => i.user_id === userId).map(i => i.item_id);
 
     // Get daily selection and strip icons for serialization
-    const dailySelection = getDailyShopSelection().map(({ icon, ...rest }) => rest);
+    const dailySelection = getDailyShopSelection().map(({ icon: _icon, ...rest }) => {
+        // Icon removed for serialization
+        return rest;
+    });
 
     return (
         <div className="min-h-screen bg-background text-foreground relative">
@@ -76,10 +82,10 @@ export default async function ShopPage() {
                                 Daily Shop
                             </div>
                             <h1 className="text-4xl md:text-6xl font-black uppercase tracking-tighter text-primary">
-                                Today's Picks
+                                Today&apos;s Picks
                             </h1>
                             <p className="text-muted-foreground mt-2 max-w-lg">
-                                Fresh items every day. Don't miss out!
+                                Fresh items every day. Don&apos;t miss out!
                             </p>
                         </div>
 
@@ -118,7 +124,7 @@ export default async function ShopPage() {
                                         <ShopItemCard
                                             item={item}
                                             isOwned={isOwned}
-                                            userCoins={user.coins}
+                                            userCoins={user.coins ?? 0}
                                             index={index}
                                         />
                                     </div>

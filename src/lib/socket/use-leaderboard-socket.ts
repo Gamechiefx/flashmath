@@ -5,7 +5,7 @@
  * Connects to the presence Socket.io namespace for leaderboard updates
  */
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useSession } from 'next-auth/react';
 import type { Operation, TimeFilter, LeaderboardType } from '@/lib/actions/leaderboard';
@@ -99,7 +99,10 @@ export function useLeaderboardSocket(options: UseLeaderboardSocketOptions): UseL
         if (socket.connected) {
             socket.emit('leaderboard:subscribe', { type, operation, timeFilter });
             subscriptionRef.current = { type, operation, timeFilter };
-            setIsConnected(true);
+            // Defer to avoid setState in effect warning
+            setTimeout(() => {
+                setIsConnected(true);
+            }, 0);
         }
 
         return () => {

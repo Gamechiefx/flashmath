@@ -254,7 +254,7 @@ describe('Property 6: ELO and League System Consistency', () => {
             
             // Simulate multiple matches
             const matchCount = Math.floor(Math.random() * 20) + 10; // 10-29 matches
-            let currentPlayers = [...players];
+            const currentPlayers = [...players];
             
             for (let matchIndex = 0; matchIndex < matchCount; matchIndex++) {
                 // Pick two random players

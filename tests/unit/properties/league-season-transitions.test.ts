@@ -126,15 +126,20 @@ function processSeasonTransition(
         if (leagueTier.tier > 0) {
             const under20XP = leagueParticipants.filter(p => p.weekly_xp < 20);
             const bottom2 = leagueParticipants.slice(-2);
-            
+
+            // Track promoted users to avoid promoting and demoting same user
+            const promotedUserIds = new Set(promotions.map(p => p.userId));
+
             // Combine and deduplicate demotees
             const demoteeIds = new Set([
                 ...under20XP.map(p => p.user_id),
                 ...bottom2.map(p => p.user_id)
             ]);
-            
+
             demoteeIds.forEach(userId => {
                 if (userId.startsWith('ghost-')) return;
+                // Skip users who were already promoted
+                if (promotedUserIds.has(userId)) return;
                 
                 const prevTier = LEAGUE_TIERS[leagueTier.tier - 1];
                 const participant = leagueParticipants.find(p => p.user_id === userId);

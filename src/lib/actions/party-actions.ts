@@ -12,7 +12,7 @@
 import { auth } from "@/auth";
 import { getDatabase } from "@/lib/db/sqlite";
 import * as partyRedis from "@/lib/party/party-redis";
-import type { FullPartyData, PartyState, PartyMember, PartyQueueState } from "@/lib/party/party-redis";
+import type { FullPartyData, PartyQueueState, PartyState, PartyMember } from "@/lib/party/party-redis";
 
 // Re-export types
 export type { FullPartyData, PartyState, PartyMember, PartyQueueState };
@@ -34,14 +34,14 @@ export async function createParty(): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const userName = session.user.name || 'Player';
 
     // Get user data from SQLite (level, equipped items)
     const db = getDatabase();
     const userData = db.prepare(`
         SELECT level, equipped_items FROM users WHERE id = ?
-    `).get(userId) as any;
+    `).get(userId) as { level?: number; equipped_items?: string | null } | undefined;
 
     const equipped = userData?.equipped_items ? JSON.parse(userData.equipped_items) : {};
 
@@ -65,7 +65,7 @@ export async function getMyParty(): Promise<FullPartyData | null> {
         return null;
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
     
     if (!partyId) {
@@ -113,7 +113,7 @@ export async function disbandParty(): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -139,14 +139,14 @@ export async function joinParty(partyId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const userName = session.user.name || 'Player';
 
     // Get user data from SQLite
     const db = getDatabase();
     const userData = db.prepare(`
         SELECT level, equipped_items FROM users WHERE id = ?
-    `).get(userId) as any;
+    `).get(userId) as { level?: number; equipped_items?: string | null } | undefined;
 
     const equipped = userData?.equipped_items ? JSON.parse(userData.equipped_items) : {};
 
@@ -173,7 +173,7 @@ export async function leaveParty(): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -197,7 +197,7 @@ export async function kickFromParty(targetUserId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -225,7 +225,7 @@ export async function togglePartyReady(): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -247,7 +247,7 @@ export async function setPartyIGL(iglUserId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -269,7 +269,7 @@ export async function setPartyAnchor(anchorUserId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -291,7 +291,7 @@ export async function setPreferredOperation(operation: string | null): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -320,7 +320,7 @@ export async function updatePartyQueueStatus(
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -344,7 +344,7 @@ export async function checkPartyReady(): Promise<{
         return { allReady: false, readyCount: 0, totalCount: 0, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -371,7 +371,7 @@ export async function sendPartyInvite(inviteeId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const userName = session.user.name || 'Player';
     const partyId = await partyRedis.getUserParty(userId);
 
@@ -381,7 +381,7 @@ export async function sendPartyInvite(inviteeId: string): Promise<{
 
     // Get invitee name from SQLite
     const db = getDatabase();
-    const invitee = db.prepare(`SELECT name FROM users WHERE id = ?`).get(inviteeId) as any;
+    const invitee = db.prepare(`SELECT name FROM users WHERE id = ?`).get(inviteeId) as { name: string } | undefined;
     const inviteeName = invitee?.name || 'Player';
 
     return await partyRedis.createInvite(partyId, userId, userName, inviteeId, inviteeName);
@@ -399,14 +399,14 @@ export async function acceptPartyInvite(partyId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const userName = session.user.name || 'Player';
 
     // Get user data from SQLite
     const db = getDatabase();
     const userData = db.prepare(`
         SELECT level, equipped_items FROM users WHERE id = ?
-    `).get(userId) as any;
+    `).get(userId) as { level?: number; equipped_items?: string | null } | undefined;
 
     const equipped = userData?.equipped_items ? JSON.parse(userData.equipped_items) : {};
 
@@ -429,7 +429,7 @@ export async function declinePartyInvite(partyId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     return await partyRedis.declineInvite(partyId, userId);
 }
@@ -451,7 +451,7 @@ export async function transferPartyLeadership(newLeaderId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -473,7 +473,7 @@ export async function linkPartyToTeam(teamId: string | null): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {
@@ -486,7 +486,7 @@ export async function linkPartyToTeam(teamId: string | null): Promise<{
     
     if (teamId) {
         const db = getDatabase();
-        const team = db.prepare(`SELECT name, tag FROM teams WHERE id = ?`).get(teamId) as any;
+        const team = db.prepare(`SELECT name, tag FROM teams WHERE id = ?`).get(teamId) as { name: string; tag?: string | null } | undefined;
         if (!team) {
             return { success: false, error: 'Team not found' };
         }
@@ -501,10 +501,10 @@ export async function linkPartyToTeam(teamId: string | null): Promise<{
         }
         
         teamName = team.name;
-        teamTag = team.tag;
+        teamTag = team.tag ?? undefined;
     }
 
-    return await partyRedis.linkToTeam(partyId, userId, teamId, teamName, teamTag);
+    return await partyRedis.linkToTeam(partyId, userId, teamId, teamName, teamTag ?? null);
 }
 
 /**
@@ -519,7 +519,7 @@ export async function setPartyTargetMode(mode: '5v5' | '3v3' | '2v2' | null): Pr
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const partyId = await partyRedis.getUserParty(userId);
 
     if (!partyId) {

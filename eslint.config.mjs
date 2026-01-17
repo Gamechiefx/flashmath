@@ -12,7 +12,27 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Ignore standalone CommonJS server files (legitimate require() usage)
+    "server.js",
+    "server-redis.js",
+    // Ignore utility scripts (CommonJS, run outside Next.js)
+    "scripts/**",
+    // Ignore all test files completely
+    "tests/**",
   ]),
+  {
+    rules: {
+      // Allow variables prefixed with underscore to be unused (common pattern for intentionally unused vars)
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          "argsIgnorePattern": "^_",
+          "varsIgnorePattern": "^_",
+          "caughtErrorsIgnorePattern": "^_"
+        }
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

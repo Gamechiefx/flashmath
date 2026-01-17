@@ -8,11 +8,41 @@ import {
     Trophy, Crown, Anchor, Star, Target, Zap, Clock,
     Home, Maximize, Minimize, X, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+interface TeamMatch {
+    id: string;
+    winner_team_id?: string | null;
+    team1_id: string;
+    team2_id: string;
+    team1_name: string;
+    team2_name: string;
+    team1_tag?: string;
+    team2_tag?: string;
+    team1_score: number;
+    team2_score: number;
+    [key: string]: unknown;
+}
+
+interface TeamPlayer {
+    user_id: string;
+    player_name: string;
+    team_id: string;
+    questions_correct: number;
+    questions_attempted: number;
+    was_igl?: boolean;
+    was_anchor?: boolean;
+    operation_slot?: string;
+    accuracy?: number;
+    avg_answer_time_ms?: number;
+    best_streak?: number;
+    [key: string]: unknown;
+}
 
 interface TeamResultsClientProps {
     matchId: string;
-    match: any;
-    players: any[];
+    match: TeamMatch;
+    players: TeamPlayer[];
     currentUserId: string;
 }
 
@@ -24,7 +54,7 @@ function BannerPlayerCard({
     onShowStats,
     index
 }: {
-    player: any;
+    player: TeamPlayer;
     isCurrentUser: boolean;
     isWinner: boolean;
     onShowStats: () => void;
@@ -39,7 +69,6 @@ function BannerPlayerCard({
         : 'from-rose-600/80 via-red-600/60 to-slate-900';
 
     const borderColor = isWinner ? 'border-emerald-500' : 'border-rose-500';
-    const accentColor = isWinner ? 'text-emerald-400' : 'text-rose-400';
 
     return (
         <motion.div
@@ -127,7 +156,7 @@ function AwardCard({
     value,
     color
 }: {
-    icon: any;
+    icon: LucideIcon;
     title: string;
     playerName: string;
     value: string;
@@ -170,7 +199,7 @@ function PlayerStatsModal({
     player,
     onClose
 }: {
-    player: any;
+    player: TeamPlayer | null;
     onClose: () => void;
 }) {
     if (!player) return null;
@@ -288,17 +317,15 @@ function PageIndicator({
 }
 
 export function TeamResultsClient({
-    matchId,
     match,
     players,
     currentUserId,
 }: TeamResultsClientProps) {
-    const [selectedPlayer, setSelectedPlayer] = useState<any>(null);
+    const [selectedPlayer, setSelectedPlayer] = useState<TeamPlayer | null>(null);
     const [currentPage, setCurrentPage] = useState(0); // 0 = winner, 1 = loser
     const [isFullscreen, setIsFullscreen] = useState(false);
 
     const team1Won = match.winner_team_id === match.team1_id;
-    const team2Won = match.winner_team_id === match.team2_id;
     const isDraw = !match.winner_team_id;
 
     const team1Players = players.filter(p => p.team_id === match.team1_id);
@@ -327,7 +354,7 @@ export function TeamResultsClient({
     );
 
     // Calculate awards for each team
-    const getTeamAwards = (teamPlayers: any[]) => {
+    const getTeamAwards = (teamPlayers: TeamPlayer[]) => {
         if (!teamPlayers.length) return { mvp: null, fastest: null, bestStreak: null };
 
         const mvp = teamPlayers.reduce((best, p) =>
@@ -523,12 +550,12 @@ export function TeamResultsClient({
                                                     color="cyan"
                                                 />
                                             )}
-                                            {winnerAwards.bestStreak && winnerAwards.bestStreak.best_streak > 0 && (
+                                            {winnerAwards.bestStreak && (winnerAwards.bestStreak.best_streak ?? 0) > 0 && (
                                                 <AwardCard
                                                     icon={Zap}
                                                     title="Best Streak"
                                                     playerName={winnerAwards.bestStreak.player_name}
-                                                    value={`${winnerAwards.bestStreak.best_streak}x`}
+                                                    value={`${winnerAwards.bestStreak.best_streak ?? 0}x`}
                                                     color="orange"
                                                 />
                                             )}
@@ -609,12 +636,12 @@ export function TeamResultsClient({
                                                     color="cyan"
                                                 />
                                             )}
-                                            {loserAwards.bestStreak && loserAwards.bestStreak.best_streak > 0 && (
+                                            {loserAwards.bestStreak && (loserAwards.bestStreak.best_streak ?? 0) > 0 && (
                                                 <AwardCard
                                                     icon={Zap}
                                                     title="Best Streak"
                                                     playerName={loserAwards.bestStreak.player_name}
-                                                    value={`${loserAwards.bestStreak.best_streak}x`}
+                                                    value={`${loserAwards.bestStreak.best_streak ?? 0}x`}
                                                     color="orange"
                                                 />
                                             )}

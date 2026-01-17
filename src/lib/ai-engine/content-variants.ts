@@ -492,7 +492,7 @@ export function selectNextRepresentation(
 /**
  * Get all available representations for an operation
  */
-export function getAvailableRepresentations(operation: MathOperation): RepresentationType[] {
+export function getAvailableRepresentations(_operation: MathOperation): RepresentationType[] {
     // All operations support all representations
     return ['direct', 'missing_op1', 'missing_op2', 'word', 'algebraic', 'visual'];
 }

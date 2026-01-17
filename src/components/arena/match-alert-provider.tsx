@@ -111,6 +111,19 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
         return () => clearInterval(interval);
     }, [session?.user?.id, isOnMatchPage, isOnQueuePage]);
 
+    const handleJoinMatch = useCallback(() => {
+        // Read from ref to get the latest value, avoiding stale closure
+        // when called from inside setInterval callback
+        const alert = matchAlertRef.current;
+        if (!alert) return;
+        
+        // Clear the alert
+        setMatchAlert(null);
+        
+        // Navigate to match
+        router.push(`/arena/teams/match/${alert.matchId}?partyId=${alert.partyId}`);
+    }, [router]);
+
     // Handle countdown when match is found
     useEffect(() => {
         if (!matchAlert) {
@@ -148,20 +161,8 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
                 clearInterval(countdownRef.current);
             }
         };
-    }, [matchAlert]);
+    }, [matchAlert, handleJoinMatch]);
 
-    const handleJoinMatch = useCallback(() => {
-        // Read from ref to get the latest value, avoiding stale closure
-        // when called from inside setInterval callback
-        const alert = matchAlertRef.current;
-        if (!alert) return;
-        
-        // Clear the alert
-        setMatchAlert(null);
-        
-        // Navigate to match
-        router.push(`/arena/teams/match/${alert.matchId}?partyId=${alert.partyId}`);
-    }, [router]);
 
     const handleDismiss = useCallback(() => {
         setMatchAlert(null);
@@ -272,4 +273,3 @@ export function MatchAlertProvider({ children }: { children: React.ReactNode }) 
         </>
     );
 }
-

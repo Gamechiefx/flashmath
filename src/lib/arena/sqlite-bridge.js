@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS file, require() is legitimate */
 /**
  * FlashMath Arena - SQLite Practice Data Bridge
  * 
@@ -19,7 +20,6 @@ const {
     TIER_ORDER,
     MATCHMAKING,
     SKILL_TIER_LEVELS,
-    TIER_BANDS,
     getBandForTier,
     getTierDisplayName,
     OPERATIONS
@@ -300,7 +300,7 @@ function getArenaMatchmakingData(userId) {
     let mathTiers = {};
     try {
         mathTiers = JSON.parse(user.math_tiers || '{}');
-    } catch (e) {
+    } catch (_e) {
         mathTiers = {};
     }
 

@@ -10,17 +10,20 @@
  * - Redis: Real-time queue state, parties
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results and error handling use any types */
 import { auth } from "@/auth";
 import { getDatabase, generateId, now } from "@/lib/db/sqlite";
-import { getArenaDisplayStatsBatch, getRankFromElo } from "@/lib/arena/arena-db";
+import { getArenaDisplayStatsBatch } from "@/lib/arena/arena-db";
 import { checkUserArenaEligibility } from "@/lib/actions/arena";
 import { ITEMS, ItemType } from "@/lib/items";
-const { getLeagueFromElo } = require('@/lib/arena/leagues.js');
+ 
+// const { getLeagueFromElo } = require('@/lib/arena/leagues.js');
 
 /**
  * Resolve banner item ID to style ID
  * e.g., "banner_synthwave" -> "synthwave"
  */
+ 
 function resolveBannerStyle(bannerId: string): string {
     if (!bannerId || bannerId === 'default') return 'default';
     // If it's a raw style ID (legacy), return it
@@ -57,7 +60,7 @@ async function getRedis() {
  * Cancel all queue entries for a party
  * Called when party membership changes or party is disbanded
  */
-async function cancelPartyQueues(partyId: string): Promise<void> {
+async function _cancelPartyQueues(partyId: string): Promise<void> {
     try {
         const redis = await getRedis();
         if (!redis) return;
@@ -91,7 +94,7 @@ async function cancelPartyQueues(partyId: string): Promise<void> {
 /**
  * Check if party has an active match found (prevent modifications)
  */
-async function hasActiveMatch(partyId: string): Promise<boolean> {
+async function _hasActiveMatch(partyId: string): Promise<boolean> {
     try {
         const redis = await getRedis();
         if (!redis) return false;
@@ -229,7 +232,7 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
         return { friends: [], error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -244,7 +247,11 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
                 SELECT 1 FROM friendships f2 
                 WHERE f2.user_id = ? AND f2.friend_id = f.user_id
             )
-        `).all(userId, userId) as any[];
+        `).all(userId, userId) as Array<{
+            other_user_id: string;
+            created_at?: string;
+            [key: string]: unknown;
+        }>;
 
         if (missingReverse.length > 0) {
             console.log(`[Social] Auto-repairing ${missingReverse.length} one-way friendships for user ${userId}`);
@@ -274,19 +281,27 @@ export async function getFriendsList(): Promise<{ friends: Friend[]; error?: str
             JOIN users u ON f.friend_id = u.id
             WHERE f.user_id = ?
             ORDER BY u.last_active DESC NULLS LAST
-        `).all(userId) as any[];
+        `).all(userId) as Array<{
+            friendship_id: string;
+            friends_since: string;
+            user_id: string;
+            name: string;
+            level: number;
+            equipped_items: string | null;
+            last_active: string | null;
+        }>;
 
         // Batch fetch ELO data from PostgreSQL (source of truth)
         const friendIds = friends.map(f => f.user_id);
         const arenaStats = await getArenaDisplayStatsBatch(friendIds);
 
         const result: Friend[] = friends.map(f => {
-            let equipped: any = {};
+            let equipped: Record<string, string> = {};
             try {
                 equipped = typeof f.equipped_items === 'string' 
                     ? JSON.parse(f.equipped_items) 
-                    : f.equipped_items || {};
-            } catch { }
+                    : {};
+            } catch { /* ignore */ }
 
             // Get arena stats from PostgreSQL (source of truth)
             const stats = arenaStats.get(f.user_id);
@@ -332,7 +347,7 @@ export async function repairOneWayFriendships(): Promise<{
         return { success: false, repaired: 0, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -346,7 +361,20 @@ export async function repairOneWayFriendships(): Promise<{
                 SELECT 1 FROM friendships f2 
                 WHERE f2.user_id = f.friend_id AND f2.friend_id = f.user_id
             )
-        `).all(userId) as any[];
+        `).all(userId) as Array<{
+            id: string;
+            sender_id: string;
+            receiver_id: string;
+            status?: string;
+            created_at?: string;
+            sender_name?: string;
+            sender_level?: number;
+            sender_equipped?: string | null;
+            receiver_name?: string;
+            receiver_level?: number;
+            receiver_equipped?: string | null;
+            [key: string]: unknown;
+        }>;
 
         // Case 2: User is in friend_id but reverse (user_id -> friend_id) is missing  
         const missingReverse2 = db.prepare(`
@@ -357,7 +385,20 @@ export async function repairOneWayFriendships(): Promise<{
                 SELECT 1 FROM friendships f2 
                 WHERE f2.user_id = f.friend_id AND f2.friend_id = f.user_id
             )
-        `).all(userId) as any[];
+        `).all(userId) as Array<{
+            id: string;
+            sender_id: string;
+            receiver_id: string;
+            status?: string;
+            created_at?: string;
+            sender_name?: string;
+            sender_level?: number;
+            sender_equipped?: string | null;
+            receiver_name?: string;
+            receiver_level?: number;
+            receiver_equipped?: string | null;
+            [key: string]: unknown;
+        }>;
 
         let repaired = 0;
         const timestamp = now();
@@ -408,11 +449,11 @@ export async function repairAllOneWayFriendships(): Promise<{
     }
 
     // Check if user is admin
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
-    const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as any;
+    const user = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string | null } | undefined;
     
-    if (!user || !['admin', 'super_admin'].includes(user.role)) {
+    if (!user || !['admin', 'super_admin'].includes(user.role ?? '')) {
         return { success: false, repaired: 0, error: 'Admin access required' };
     }
 
@@ -464,12 +505,12 @@ export async function sendFriendRequest(email: string): Promise<{
     }
 
     const senderId = (session.user as any).id;
-    const senderName = (session.user as any).name || 'Someone';
+    const senderName = (session.user as { name?: string }).name || 'Someone';
     const db = getDatabase();
 
     try {
         // Find user by email
-        const receiver = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email) as any;
+        const receiver = db.prepare('SELECT id, name FROM users WHERE email = ?').get(email) as { id: string; name: string } | undefined;
         if (!receiver) {
             return { success: false, error: 'User not found with that email' };
         }
@@ -492,7 +533,12 @@ export async function sendFriendRequest(email: string): Promise<{
         const existingRequest = db.prepare(`
             SELECT id, status, sender_id FROM friend_requests 
             WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-        `).get(senderId, receiver.id, receiver.id, senderId) as any;
+        `).get(senderId, receiver.id, receiver.id, senderId) as {
+            id: string;
+            status?: string;
+            sender_id: string;
+            [key: string]: unknown;
+        } | undefined;
 
         if (existingRequest) {
             if (existingRequest.status === 'pending') {
@@ -532,7 +578,7 @@ export async function sendFriendRequestToUser(targetUserId: string): Promise<{
     }
 
     const senderId = (session.user as any).id;
-    const senderName = (session.user as any).name || 'Someone';
+    const senderName = (session.user as { name?: string }).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -541,7 +587,7 @@ export async function sendFriendRequestToUser(targetUserId: string): Promise<{
         }
 
         // Check if target user exists
-        const receiver = db.prepare('SELECT id, name FROM users WHERE id = ?').get(targetUserId) as any;
+        const receiver = db.prepare('SELECT id, name FROM users WHERE id = ?').get(targetUserId) as { id: string; name: string } | undefined;
         if (!receiver) {
             return { success: false, error: 'User not found' };
         }
@@ -560,7 +606,12 @@ export async function sendFriendRequestToUser(targetUserId: string): Promise<{
         const existingRequest = db.prepare(`
             SELECT id, status, sender_id FROM friend_requests 
             WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-        `).get(senderId, targetUserId, targetUserId, senderId) as any;
+        `).get(senderId, targetUserId, targetUserId, senderId) as {
+            id: string;
+            status?: string;
+            sender_id: string;
+            [key: string]: unknown;
+        } | undefined;
 
         if (existingRequest) {
             if (existingRequest.status === 'pending') {
@@ -597,7 +648,7 @@ export async function getPendingRequests(): Promise<{
         return { incoming: [], outgoing: [], error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -616,7 +667,19 @@ export async function getPendingRequests(): Promise<{
             JOIN users sender ON fr.sender_id = sender.id
             WHERE fr.receiver_id = ? AND fr.status = 'pending'
             ORDER BY fr.created_at DESC
-        `).all(userId) as any[];
+        `).all(userId) as Array<{
+            id: string;
+            sender_id: string;
+            receiver_id: string;
+            status: 'pending' | 'accepted' | 'declined';
+            created_at: string;
+            sender_name?: string;
+            sender_level?: number;
+            sender_equipped?: string | null;
+            receiver_name?: string;
+            receiver_level?: number;
+            receiver_equipped?: string | null;
+        }>;
 
         // Outgoing requests
         const outgoing = db.prepare(`
@@ -633,15 +696,40 @@ export async function getPendingRequests(): Promise<{
             JOIN users receiver ON fr.receiver_id = receiver.id
             WHERE fr.sender_id = ? AND fr.status = 'pending'
             ORDER BY fr.created_at DESC
-        `).all(userId) as any[];
+        `).all(userId) as Array<{
+            id: string;
+            sender_id: string;
+            receiver_id: string;
+            status: 'pending' | 'accepted' | 'declined';
+            created_at: string;
+            sender_name?: string;
+            sender_level?: number;
+            sender_equipped?: string | null;
+            receiver_name?: string;
+            receiver_level?: number;
+            receiver_equipped?: string | null;
+        }>;
 
-        const mapRequest = (r: any, isIncoming: boolean): FriendRequest => {
-            let senderEquipped: any = {};
-            let receiverEquipped: any = {};
+        interface FriendRequestRow {
+            id: string;
+            sender_id: string;
+            receiver_id: string;
+            status: 'pending' | 'accepted' | 'declined';
+            created_at: string;
+            sender_name?: string;
+            sender_level?: number;
+            sender_equipped?: string | null;
+            receiver_name?: string;
+            receiver_level?: number;
+            receiver_equipped?: string | null;
+        }
+        const mapRequest = (r: FriendRequestRow, _isIncoming: boolean): FriendRequest => {
+            let senderEquipped: Record<string, string> = {};
+            let receiverEquipped: Record<string, string> = {};
             try {
                 if (r.sender_equipped) senderEquipped = JSON.parse(r.sender_equipped);
                 if (r.receiver_equipped) receiverEquipped = JSON.parse(r.receiver_equipped);
-            } catch { }
+            } catch { /* ignore */ }
 
             return {
                 id: r.id,
@@ -679,7 +767,7 @@ export async function acceptFriendRequest(requestId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const accepterName = (session.user as any).name || 'Someone';
     const db = getDatabase();
 
@@ -746,7 +834,7 @@ export async function declineFriendRequest(requestId: string): Promise<{ success
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -784,7 +872,7 @@ export async function cancelFriendRequest(requestId: string): Promise<{ success:
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -820,8 +908,8 @@ export async function removeFriend(friendId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
-    const removerName = (session.user as any).name || 'Someone';
+    const userId = (session.user as { id: string }).id;
+    const removerName = (session.user as { name?: string }).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -853,8 +941,6 @@ import {
     getParty as getRedisParty,
     getUserParty as getRedisUserParty,
     createParty as createRedisParty,
-    disbandParty as disbandRedisParty,
-    joinParty as joinRedisParty,
     leaveParty as leaveRedisParty,
     kickMember as kickRedisPartyMember,
     toggleReady as toggleRedisPartyReady,
@@ -866,10 +952,7 @@ import {
     declineInvite as declineRedisPartyInvite,
     getUserPendingInvites as getRedisUserPendingInvites,
     validateUserPartyState,
-    type PartyState,
-    type PartyMember as RedisPartyMember,
     type PartyInvite as RedisPartyInvite,
-    type FullPartyData,
 } from "@/lib/party/party-redis";
 
 export async function getPartyData(): Promise<{ party: Party | null; invites: PartyInvite[]; error?: string }> {
@@ -882,7 +965,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
         return { party: null, invites: [], error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -1003,6 +1086,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
         // #region agent log - Log what we're returning
         console.log(`[Social] getPartyData returning: partyId=${party?.id}, queueStatus=${party?.queueStatus}`);
         try {
+            // eslint-disable-next-line @typescript-eslint/no-require-imports -- Debug logging
             const fs = require('fs');
             const logEntry = JSON.stringify({
                 location: 'social.ts:getPartyData',
@@ -1013,7 +1097,7 @@ export async function getPartyData(): Promise<{ party: Party | null; invites: Pa
                 hypothesisId: 'SERVER_RETURN'
             }) + '\n';
             fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', logEntry);
-        } catch (e) { /* ignore logging errors */ }
+        } catch (_e) { /* ignore logging errors */ }
         // #endregion
         
         return result;
@@ -1032,7 +1116,7 @@ export async function createParty(inviteMode: 'open' | 'invite_only' = 'open'): 
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const userName = session.user.name || 'Player';
     const db = getDatabase();
 
@@ -1080,7 +1164,7 @@ export async function updatePartySettings(settings: { inviteMode?: 'open' | 'inv
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Get user's party from Redis
@@ -1135,8 +1219,8 @@ export async function inviteToParty(friendId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
-    const inviterName = (session.user as any).name || 'Someone';
+    const userId = (session.user as { id: string }).id;
+    const inviterName = (session.user as { name?: string }).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -1203,8 +1287,8 @@ export async function acceptPartyInvite(inviteId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
-    const joinerName = (session.user as any).name || 'Someone';
+    const userId = (session.user as { id: string }).id;
+    const joinerName = (session.user as { name?: string }).name || 'Someone';
     const db = getDatabase();
 
     try {
@@ -1248,7 +1332,7 @@ export async function declinePartyInvite(inviteId: string): Promise<{ success: b
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Decline invite via Redis
@@ -1280,8 +1364,8 @@ export async function leaveParty(): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
-    const leaverName = (session.user as any).name || 'Someone';
+    const userId = (session.user as { id: string }).id;
+    const leaverName = (session.user as { name?: string }).name || 'Someone';
 
     try {
         // Get user's party from Redis
@@ -1329,7 +1413,7 @@ export async function kickFromParty(targetUserId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Get user's party from Redis
@@ -1374,7 +1458,7 @@ export async function transferPartyLeadership(newLeaderId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Get user's party from Redis
@@ -1424,7 +1508,7 @@ export async function getSocialStats(): Promise<SocialStats> {
         };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -1434,15 +1518,23 @@ export async function getSocialStats(): Promise<SocialStats> {
             FROM friendships f
             JOIN users u ON f.friend_id = u.id
             WHERE f.user_id = ?
-        `).all(userId) as any[];
+        `).all(userId) as Array<{
+            user_id: string;
+            name: string;
+            level: number;
+            equipped_items?: string | null;
+            last_active?: string | null;
+        }>;
 
-        const friendsOnline = friends.filter(f => isUserOnline(f.last_active)).length;
+        const friendsOnline = friends.filter(f => isUserOnline(f.last_active ?? null)).length;
 
         // Count pending incoming requests
         const pendingCount = db.prepare(`
             SELECT COUNT(*) as count FROM friend_requests 
             WHERE receiver_id = ? AND status = 'pending'
-        `).get(userId) as any;
+        `).get(userId) as {
+            count: number;
+        } | undefined;
 
         // Get party info from Redis (validates and cleans up stale references)
         const partyData = await validateUserPartyState(userId);
@@ -1458,7 +1550,7 @@ export async function getSocialStats(): Promise<SocialStats> {
         return {
             friendsOnline,
             friendsTotal: friends.length,
-            pendingRequests: pendingCount.count,
+            pendingRequests: pendingCount?.count ?? 0,
             partySize,
             partyMaxSize,
             inParty,
@@ -1490,7 +1582,7 @@ export async function checkFriendshipStatus(targetUserId: string): Promise<{
         return { isFriend: false, requestPending: false };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -1509,7 +1601,10 @@ export async function checkFriendshipStatus(targetUserId: string): Promise<{
             SELECT sender_id FROM friend_requests 
             WHERE ((sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?))
             AND status = 'pending'
-        `).get(userId, targetUserId, targetUserId, userId) as any;
+        `).get(userId, targetUserId, targetUserId, userId) as {
+            sender_id?: string;
+            [key: string]: unknown;
+        } | undefined;
 
         if (request) {
             return {
@@ -1544,7 +1639,7 @@ export async function setPartyIGL(iglUserId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Get user's party from Redis
@@ -1582,7 +1677,7 @@ export async function setPartyAnchor(anchorUserId: string): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Get user's party from Redis
@@ -1621,7 +1716,7 @@ export async function togglePartyReady(): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Get user's party from Redis
@@ -1659,6 +1754,7 @@ export async function updatePartyQueueStatus(
     status: 'idle' | 'finding_teammates' | 'finding_opponents' | null
 ): Promise<{ success: boolean; error?: string; partyMemberIds?: string[] }> {
     // #region agent log - HA: Track updatePartyQueueStatus calls
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Debug logging
     const fs = require('fs');
     try {
         fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', JSON.stringify({location:'social.ts:updatePartyQueueStatus',message:'updatePartyQueueStatus CALLED',data:{partyId,status,callerStack:new Error().stack?.split('\n').slice(0,5).join('|')},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'}) + '\n');
@@ -1670,7 +1766,7 @@ export async function updatePartyQueueStatus(
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Get party from Redis to get member IDs
@@ -1733,7 +1829,7 @@ export async function setPartyTargetMode(mode: string | null): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     // Validate mode
     const validModes = ['2v2', '3v3', '4v4', '5v5', null];
@@ -1782,7 +1878,7 @@ export async function linkPartyToTeam(teamId: string | null): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     try {
@@ -1836,7 +1932,7 @@ export async function setPreferredOperation(operation: string | null): Promise<{
         return { success: false, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     // Validate operation
     const validOperations = ['addition', 'subtraction', 'multiplication', 'division', 'mixed', null];
@@ -1885,7 +1981,7 @@ export async function checkPartyReady(): Promise<{
         return { allReady: false, readyCount: 0, totalCount: 0, error: 'Unauthorized' };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     try {
         // Get user's party from Redis

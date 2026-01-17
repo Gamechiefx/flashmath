@@ -34,21 +34,20 @@ export default defineConfig({
                 'src/lib/db/**',       // DB code needs integration tests
                 '**/*.d.ts',
             ],
-            // Coverage thresholds (can be enabled later)
-            // thresholds: {
-            //     lines: 70,
-            //     functions: 70,
-            //     branches: 70,
-            //     statements: 70,
-            // },
+            // Coverage thresholds - fail if coverage drops below current levels
+            thresholds: {
+                statements: 5,
+                branches: 4,
+                functions: 4,
+                lines: 5,
+            },
         },
         
         // Global timeout
         testTimeout: 10000,
         
-        // Watch mode settings
-        watch: true,
-        watchExclude: ['node_modules', '.next'],
+        // Watch mode settings (disabled in CI)
+        watch: !process.env.CI,
         
         // Reporters
         reporters: ['verbose'],

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS file, require() is legitimate */
 /**
  * FlashMath Arena - Redis Client
  * 
@@ -148,7 +149,7 @@ async function getQueueEntries() {
     for (const [key, value] of Object.entries(entries)) {
         try {
             map.set(key, JSON.parse(value));
-        } catch (e) {
+        } catch (_e) {
             // Skip malformed entries
         }
     }

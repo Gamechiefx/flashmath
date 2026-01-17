@@ -1,5 +1,6 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- Icon components use any types */
 
-import { Divide, Hexagon, Keyboard, MousePointerClick, Music, Sparkles, Type, Monitor, Shield, Trophy, Crown, Flame, Zap, Crosshair } from 'lucide-react';
+import { Divide, Hexagon, Keyboard, Music, Sparkles, Type, Monitor, Shield, Trophy, Crown, Flame, Zap, Crosshair } from 'lucide-react';
 
 export enum ItemType {
     THEME = 'theme',

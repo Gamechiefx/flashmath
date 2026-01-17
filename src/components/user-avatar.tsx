@@ -1,9 +1,9 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { User } from "next-auth";
 
 interface UserAvatarProps {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- User type extended with DB fields
     user: any; // Using any for now as our user type is extended with DB fields
     className?: string;
     size?: "sm" | "md" | "lg" | "xl";

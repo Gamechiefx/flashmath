@@ -1,6 +1,6 @@
 "use server";
 
-import { loadData, saveData, getDatabase } from "@/lib/db";
+import { getDatabase } from "@/lib/db";
 import { ITEMS } from "@/lib/items";
 import { revalidatePath } from "next/cache";
 
@@ -37,8 +37,8 @@ export async function forceSeedShop() {
         revalidatePath("/shop");
         revalidatePath("/admin");
         return { success: true, count: ITEMS.length };
-    } catch (e) {
-        console.error("[SEED] Failed:", e);
+    } catch (seedError) {
+        console.error("[SEED] Failed:", seedError);
         return { error: "Failed to seed shop items" };
     }
 }

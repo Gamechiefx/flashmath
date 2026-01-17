@@ -1,5 +1,10 @@
 'use client';
 
+/* eslint-disable react-hooks/immutability, react-hooks/purity */
+/* eslint-disable @typescript-eslint/no-explicit-any -- Socket.IO event handlers and state use any types */
+// TODO: Refactor callback order - callbacks are used before declaration due to complex interdependencies
+// This requires architectural changes to use refs for callbacks or restructure the hook
+
 /**
  * Enhanced Arena WebSocket Hook with Improved Synchronization
  * 
@@ -27,6 +32,8 @@ interface Player {
     odEquippedTitle?: string;
     odLevel?: number;
     odTier?: string;
+    odRank?: string;
+    odDivision?: string;
     odLastUpdateTime?: number;
     odSyncVersion?: number;
 }
@@ -126,14 +133,14 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
         enableLagCompensation = true,
         maxReconnectAttempts = 5,
         syncUpdateInterval = 1000,
-        connectionQualityThreshold = { green: 100, yellow: 300 },
+        connectionQualityThreshold: _connectionQualityThreshold = { green: 100, yellow: 300 },
         onMatchStart,
         onAnswerResult,
         onNewQuestion,
         onTimeUpdate,
         onMatchEnd,
-        onPlayerJoined,
-        onPlayerLeft,
+        onPlayerJoined: _onPlayerJoined,
+        onPlayerLeft: _onPlayerLeft,
         onPlayerForfeit,
         onConnectionStatesUpdate,
         onSyncConflict,
@@ -178,6 +185,7 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
     const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const latencyHistoryRef = useRef<number[]>([]);
     const lastPingTimeRef = useRef<number>(0);
+    const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     
     // State preservation for reconnection
     const preservedStateRef = useRef<{
@@ -187,11 +195,58 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
         matchStarted: boolean;
         syncVersion: number;
     } | null>(null);
+    
+    // Refs for callbacks to avoid dependency issues
+    const callbacksRef = useRef({
+        onMatchStart,
+        onAnswerResult,
+        onNewQuestion,
+        onTimeUpdate,
+        onMatchEnd,
+        onPlayerForfeit,
+        onConnectionStatesUpdate,
+        onReconnectionAttempt,
+    });
+    
+    // Refs for internal callbacks to avoid hoisting issues in useEffect dependencies
+    const internalCallbacksRef = useRef<{
+        stopConnectionMonitoring: () => void;
+        startConnectionMonitoring: () => void;
+        preserveCurrentState: () => void;
+        applyLagCompensation: (data: any) => any;
+        handleStateSynchronization: (data: any) => void;
+        handleStateConflict: (conflict: any) => void;
+        applyTimeCompensation: (serverTime: number) => number;
+        updateSyncState: (version?: number) => void;
+    }>({
+        stopConnectionMonitoring: () => {},
+        startConnectionMonitoring: () => {},
+        preserveCurrentState: () => {},
+        applyLagCompensation: (data) => data,
+        handleStateSynchronization: () => {},
+        handleStateConflict: () => {},
+        applyTimeCompensation: (t) => t,
+        updateSyncState: () => {},
+    });
+    
+    // Keep callbacks ref up to date
+    useEffect(() => {
+        callbacksRef.current = {
+            onMatchStart,
+            onAnswerResult,
+            onNewQuestion,
+            onTimeUpdate,
+            onMatchEnd,
+            onPlayerForfeit,
+            onConnectionStatesUpdate,
+            onReconnectionAttempt,
+        };
+    }, [onMatchStart, onAnswerResult, onNewQuestion, onTimeUpdate, onMatchEnd, onPlayerForfeit, onConnectionStatesUpdate, onReconnectionAttempt]);
 
     // Enhanced connection with improved retry logic and state preservation
     const connectWithEnhancedRetry = useCallback((attempt = 1) => {
         console.log(`[Enhanced Arena Socket] Connection attempt ${attempt}/${maxReconnectAttempts}`);
-        onReconnectionAttempt?.(attempt);
+        callbacksRef.current.onReconnectionAttempt?.(attempt);
         
         const socket = io({
             path: '/api/socket/arena',
@@ -207,7 +262,7 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
         socketRef.current = socket;
 
         // Connection timeout with adaptive timing
-        const connectionTimeout = setTimeout(() => {
+        connectionTimeoutRef.current = setTimeout(() => {
             if (!connected) {
                 console.log('[Enhanced Arena Socket] Connection timeout, retrying...');
                 socket.disconnect();
@@ -218,14 +273,17 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
                 } else {
                     console.error('[Enhanced Arena Socket] Max reconnection attempts reached');
                     // Preserve state for manual reconnection
-                    preserveCurrentState();
+                    internalCallbacksRef.current.preserveCurrentState();
                 }
             }
         }, 15000 + (attempt * 5000)); // Increase timeout with attempts
 
         socket.on('connect', () => {
             console.log('[Enhanced Arena Socket] Connected successfully');
-            clearTimeout(connectionTimeout);
+            if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+                connectionTimeoutRef.current = null;
+            }
             setConnected(true);
             setReconnectAttempts(0);
 
@@ -248,12 +306,15 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
             });
 
             // Start connection quality monitoring
-            startConnectionMonitoring();
+            internalCallbacksRef.current.startConnectionMonitoring();
         });
 
         socket.on('connect_error', (error) => {
             console.error('[Enhanced Arena Socket] Connection error:', error.message);
-            clearTimeout(connectionTimeout);
+            if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+                connectionTimeoutRef.current = null;
+            }
             setConnected(false);
             
             if (attempt < maxReconnectAttempts) {
@@ -263,14 +324,17 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
 
         socket.on('disconnect', (reason) => {
             console.log('[Enhanced Arena Socket] Disconnected:', reason);
-            clearTimeout(connectionTimeout);
+            if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+                connectionTimeoutRef.current = null;
+            }
             setConnected(false);
             
             // Preserve current state before attempting reconnection
-            preserveCurrentState();
+            internalCallbacksRef.current.preserveCurrentState();
             
             // Stop connection monitoring
-            stopConnectionMonitoring();
+            internalCallbacksRef.current.stopConnectionMonitoring();
             
             // Auto-reconnect for certain disconnect reasons
             if (reason === 'io server disconnect' || reason === 'transport close') {
@@ -281,18 +345,18 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
         // Enhanced state synchronization handlers
         socket.on('match_state_sync', (data) => {
             console.log('[Enhanced Arena Socket] Received state sync:', data);
-            handleStateSynchronization(data);
+            internalCallbacksRef.current.handleStateSynchronization(data);
         });
 
         socket.on('state_conflict', (data) => {
             console.log('[Enhanced Arena Socket] State conflict detected:', data);
-            handleStateConflict(data);
+            internalCallbacksRef.current.handleStateConflict(data);
         });
 
         // Enhanced match event handlers with lag compensation
         socket.on('match_start', (data) => {
             console.log('[Enhanced Arena Socket] Match started:', data);
-            const compensatedData = applyLagCompensation(data);
+            const compensatedData = internalCallbacksRef.current.applyLagCompensation(data);
             
             setMatchStarted(true);
             setWaitingForOpponent(false);
@@ -300,13 +364,13 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
             setCurrentQuestion(compensatedData.question);
             setTimeLeft(compensatedData.timeLeft);
             
-            updateSyncState(data.syncVersion || syncState.version + 1);
-            onMatchStart?.(compensatedData);
+            internalCallbacksRef.current.updateSyncState(data.syncVersion || syncState.version + 1);
+            callbacksRef.current.onMatchStart?.(compensatedData);
         });
 
         socket.on('answer_result', (data) => {
             console.log('[Enhanced Arena Socket] Answer result:', data);
-            const compensatedData = applyLagCompensation(data);
+            const compensatedData = internalCallbacksRef.current.applyLagCompensation(data);
             
             // Enhanced player state update with conflict resolution
             setPlayers(prev => {
@@ -333,13 +397,13 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
                 return newPlayers;
             });
             
-            updateSyncState(data.syncVersion);
-            onAnswerResult?.(compensatedData);
+            internalCallbacksRef.current.updateSyncState(data.syncVersion);
+            callbacksRef.current.onAnswerResult?.(compensatedData);
         });
 
         socket.on('new_question', (data) => {
             console.log('[Enhanced Arena Socket] New question:', data);
-            const compensatedData = applyLagCompensation(data);
+            const compensatedData = internalCallbacksRef.current.applyLagCompensation(data);
             
             // Add sync metadata to question
             const enhancedQuestion = {
@@ -349,14 +413,14 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
             };
             
             setCurrentQuestion(enhancedQuestion);
-            updateSyncState(data.syncVersion);
-            onNewQuestion?.(compensatedData);
+            internalCallbacksRef.current.updateSyncState(data.syncVersion);
+            callbacksRef.current.onNewQuestion?.(compensatedData);
         });
 
         socket.on('time_update', (data) => {
-            const compensatedTime = applyTimeCompensation(data.timeLeft);
+            const compensatedTime = internalCallbacksRef.current.applyTimeCompensation(data.timeLeft);
             setTimeLeft(compensatedTime);
-            onTimeUpdate?.({ ...data, timeLeft: compensatedTime });
+            callbacksRef.current.onTimeUpdate?.({ ...data, timeLeft: compensatedTime });
         });
 
         // Connection quality monitoring
@@ -405,7 +469,7 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
             }
             
             setMatchIntegrity(integrity);
-            onConnectionStatesUpdate?.(data.states);
+            callbacksRef.current.onConnectionStatesUpdate?.(data.states);
         });
 
         // Other event handlers remain the same but with enhanced error handling
@@ -423,23 +487,26 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
             // Clear preserved state on match end
             preservedStateRef.current = null;
             
-            onMatchEnd?.(data);
+            callbacksRef.current.onMatchEnd?.(data);
         });
 
         socket.on('player_forfeit', (data) => {
             console.log('[Enhanced Arena Socket] Player forfeited:', data);
             setMatchEnded(true);
             setOpponentForfeited(data.odForfeitedUserName);
-            onPlayerForfeit?.(data);
+            callbacksRef.current.onPlayerForfeit?.(data);
         });
 
         return () => {
-            clearTimeout(connectionTimeout);
-            stopConnectionMonitoring();
+            if (connectionTimeoutRef.current) {
+                clearTimeout(connectionTimeoutRef.current);
+                connectionTimeoutRef.current = null;
+            }
+            internalCallbacksRef.current.stopConnectionMonitoring();
             socket.emit('leave_match', { matchId, userId });
             socket.disconnect();
         };
-    }, [matchId, userId, userName, operation, isAiMatch, maxReconnectAttempts, syncState.version]);
+    }, [matchId, userId, userName, operation, isAiMatch, maxReconnectAttempts, syncState.version, connected, userRank, userDivision, userLevel, userBanner, userTitle]);
 
     // State preservation for reconnection
     const preserveCurrentState = useCallback(() => {
@@ -497,10 +564,10 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
         }
         
         if (serverTimeLeft !== undefined) {
-            setTimeLeft(applyTimeCompensation(serverTimeLeft));
+            setTimeLeft(internalCallbacksRef.current.applyTimeCompensation(serverTimeLeft));
         }
         
-        updateSyncState(syncVersion);
+        internalCallbacksRef.current.updateSyncState(syncVersion);
     }, [syncState.version]);
 
     // Handle state conflicts
@@ -511,7 +578,7 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
         switch (syncState.conflictResolution) {
             case 'server':
                 // Accept server state
-                handleStateSynchronization(conflict.serverState);
+                internalCallbacksRef.current.handleStateSynchronization(conflict.serverState);
                 break;
             case 'client':
                 // Keep client state (risky)
@@ -524,7 +591,7 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
         }
         
         onSyncConflict?.(conflict);
-    }, [syncState.conflictResolution, handleStateSynchronization, onSyncConflict]);
+    }, [syncState.conflictResolution, onSyncConflict]);
 
     // Lag compensation
     const applyLagCompensation = useCallback((data: any) => {
@@ -585,6 +652,21 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
         }
     }, []);
 
+    // Keep internal callbacks ref up to date - this allows the main useEffect
+    // to use stable refs that always point to the latest callback implementations
+    useEffect(() => {
+        internalCallbacksRef.current = {
+            stopConnectionMonitoring,
+            startConnectionMonitoring,
+            preserveCurrentState,
+            applyLagCompensation,
+            handleStateSynchronization,
+            handleStateConflict,
+            applyTimeCompensation,
+            updateSyncState,
+        };
+    }, [stopConnectionMonitoring, startConnectionMonitoring, preserveCurrentState, applyLagCompensation, handleStateSynchronization, handleStateConflict, applyTimeCompensation, updateSyncState]);
+
     // Enhanced submit answer with optimistic updates and conflict resolution
     const submitAnswer = useCallback((userAnswer: number) => {
         if (socketRef.current && connected && currentQuestion) {
@@ -624,8 +706,8 @@ export function useEnhancedArenaSocket(options: UseEnhancedArenaSocketOptions) {
             socketRef.current.emit('leave_match', { matchId, userId });
             socketRef.current.disconnect();
         }
-        stopConnectionMonitoring();
-    }, [matchId, userId, stopConnectionMonitoring]);
+        internalCallbacksRef.current.stopConnectionMonitoring();
+    }, [matchId, userId]);
 
     // Initialize connection
     useEffect(() => {

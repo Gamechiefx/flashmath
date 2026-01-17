@@ -1,13 +1,13 @@
 "use server";
 
-import { loadData, queryOne } from "@/lib/db";
+import { loadData, queryOne, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import { syncLeagueState, ensureLeagueParticipation } from "@/lib/league-engine";
 
 export async function getDashboardStats() {
     const session = await auth();
     if (!session?.user) return null;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     
     // Guard against missing userId
     if (!userId) {
@@ -17,30 +17,41 @@ export async function getDashboardStats() {
 
     await syncLeagueState();
     const db = loadData();
-    const userSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId);
-    const userMastery = (db.mastery_stats as any[]).filter((s: any) => s.user_id === userId);
+    interface SessionRow {
+        user_id: string;
+        correct_count?: number;
+        total_count?: number;
+        avg_speed?: number;
+        operation?: string;
+        [key: string]: unknown;
+    }
+    const userSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
 
-    const totalCorrect = userSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
-    const totalAttempted = userSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0);
+    const totalCorrect = userSessions.reduce((acc: number, s: SessionRow) => acc + (s.correct_count || 0), 0);
+    const totalAttempted = userSessions.reduce((acc: number, s: SessionRow) => acc + (s.total_count || 0), 0);
     const avgSpeed = userSessions.length > 0
-        ? userSessions.reduce((acc: number, s: any) => acc + s.avg_speed, 0) / userSessions.length
+        ? userSessions.reduce((acc: number, s: SessionRow) => acc + (s.avg_speed || 0), 0) / userSessions.length
         : 0;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
 
     // Tiers map
-    let userTiers = user?.math_tiers;
-    if (typeof userTiers === 'string') {
-        try { userTiers = JSON.parse(userTiers); } catch { userTiers = null; }
+    const userTiersRaw = user?.math_tiers;
+    let userTiers: Record<string, number> = { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
+    if (typeof userTiersRaw === 'string') {
+        try { userTiers = JSON.parse(userTiersRaw); } catch { /* use default */ }
+    } else if (userTiersRaw && typeof userTiersRaw === 'object') {
+        userTiers = userTiersRaw as Record<string, number>;
     }
-    userTiers = userTiers || { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
 
     // Skill points for tier completion bar
-    let skillPoints = user?.skill_points;
-    if (typeof skillPoints === 'string') {
-        try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+    const skillPointsRaw = user?.skill_points;
+    let skillPoints: Record<string, number> = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    if (typeof skillPointsRaw === 'string') {
+        try { skillPoints = JSON.parse(skillPointsRaw); } catch { /* use default */ }
+    } else if (skillPointsRaw && typeof skillPointsRaw === 'object') {
+        skillPoints = skillPointsRaw as Record<string, number>;
     }
-    skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
 
     // Calculate mastery % for each op
     // Simple system: 100 skill points = 100% tier completion
@@ -63,18 +74,18 @@ export async function getDashboardStats() {
 
 
     // Career Stats Calculation
-    const careerTotalCorrect = userSessions.length > 0 ? userSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0) : 0;
-    const careerTotalAttempts = userSessions.length > 0 ? userSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0) : 0;
+    const careerTotalCorrect = userSessions.length > 0 ? userSessions.reduce((acc: number, s: SessionRow) => acc + (s.correct_count || 0), 0) : 0;
+    const careerTotalAttempts = userSessions.length > 0 ? userSessions.reduce((acc: number, s: SessionRow) => acc + (s.total_count || 0), 0) : 0;
     const careerAccuracy = careerTotalAttempts > 0 ? (careerTotalCorrect / careerTotalAttempts) * 100 : 0;
 
     // Detailed Operation Stats
     const opStats = ops.map(op => {
-        const opSessions = userSessions.filter((s: any) => s.operation === op);
-        const opCorrect = opSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
-        const opTotal = opSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0);
-        const opXP = opSessions.reduce((acc: number, s: any) => acc + (s.xp_earned || 0), 0);
+        const opSessions = userSessions.filter((s: SessionRow) => s.operation === op);
+        const opCorrect = opSessions.reduce((acc: number, s: SessionRow) => acc + (s.correct_count || 0), 0);
+        const opTotal = opSessions.reduce((acc: number, s: SessionRow) => acc + (s.total_count || 0), 0);
+        const opXP = opSessions.reduce((acc: number, s: SessionRow) => acc + ((s as { xp_earned?: number }).xp_earned || 0), 0);
         const opAvgSpeed = opSessions.length > 0
-            ? opSessions.reduce((acc: number, s: any) => acc + s.avg_speed, 0) / opSessions.length
+            ? opSessions.reduce((acc: number, s: SessionRow) => acc + (s.avg_speed || 0), 0) / opSessions.length
             : 0;
 
         return {
@@ -93,35 +104,63 @@ export async function getDashboardStats() {
         : { op: "None", accuracy: 0 };
 
     // Check if user needs placement (all tiers are 0)
-    const hasPlaced = Object.values(userTiers).some((t: any) => t > 0);
+    const hasPlaced = Object.values(userTiers).some((t: number) => t > 0);
 
     // Accuracy History (Last 10)
-    const accuracyHistory = userSessions.slice(-10).map((s: any) => ({
-        id: s.id,
-        accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
-        xp: s.xp_earned
+    const accuracyHistory = userSessions.slice(-10).map((s: SessionRow) => ({
+        id: s.id as string,
+        accuracy: (s.total_count || 0) > 0 ? ((s.correct_count || 0) / (s.total_count || 1)) * 100 : 0,
+        xp: (s as { xp_earned?: number }).xp_earned || 0
     }));
 
     // Ensure league participation
     await ensureLeagueParticipation(userId, session.user.name || "Pilot");
 
     // Title Lookup
-    const titleId = (user?.equipped_items as any)?.title;
+    interface EquippedItems {
+        title?: string;
+        [key: string]: unknown;
+    }
+    // Handle both string (needs parsing) and object (already parsed) cases
+    let equippedItems: EquippedItems = {};
+    if (user?.equipped_items) {
+        if (typeof user.equipped_items === 'string') {
+            try {
+                equippedItems = JSON.parse(user.equipped_items);
+            } catch {
+                equippedItems = {};
+            }
+        } else if (typeof user.equipped_items === 'object') {
+            equippedItems = user.equipped_items as EquippedItems;
+        }
+    }
+    const titleId = equippedItems?.title;
     let equippedTitle = "";
     if (titleId && titleId !== 'default') {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- Dynamic import for items
         const { ITEMS } = require("@/lib/items");
         // Prefer DB items if available to reflect dynamic changes
-        const dbShopItems = db.shop_items as any[] || [];
-        const item = dbShopItems.find((i: any) => i.id === titleId) || ITEMS.find((i: any) => i.id === titleId);
+        interface ShopItem {
+            id: string;
+            name?: string;
+            assetValue?: string;
+        }
+        const dbShopItems = (db.shop_items as ShopItem[]) || [];
+        const item = dbShopItems.find((i: ShopItem) => i.id === titleId) || ITEMS.find((i: ShopItem) => i.id === titleId);
 
         if (item) equippedTitle = item.name || item.assetValue;
     }
 
     // Calculate user's league rank
     const leagueId = user?.current_league_id || 'neon-league';
-    const leagueParticipants = db.league_participants.filter((p: any) => p.league_id === leagueId);
-    const sortedParticipants = [...leagueParticipants].sort((a: any, b: any) => b.weekly_xp - a.weekly_xp);
-    const userRank = sortedParticipants.findIndex((p: any) => p.user_id === userId) + 1;
+    interface LeagueParticipant {
+        league_id: string;
+        user_id: string;
+        weekly_xp?: number;
+    }
+    const leagueParticipants = (db.league_participants as LeagueParticipant[]).filter((p: LeagueParticipant) => p.league_id === leagueId);
+    const sortedParticipants = [...leagueParticipants].sort((a: LeagueParticipant, b: LeagueParticipant) => (b.weekly_xp || 0) - (a.weekly_xp || 0));
+    const userRank = sortedParticipants.findIndex((p: LeagueParticipant) => p.user_id === userId) + 1;
 
     return {
         accuracy: totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0,
@@ -148,40 +187,60 @@ export async function getDashboardStats() {
 export async function getOperationDetails(operation: string) {
     const session = await auth();
     if (!session?.user) return null;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     const db = loadData();
     // Case-insensitive match for operation
-    const opSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId && s.operation.toLowerCase() === operation.toLowerCase());
-    const opMastery = (db.mastery_stats as any[]).filter((s: any) => s.user_id === userId && s.operation.toLowerCase() === operation.toLowerCase());
+    interface SessionRow {
+        user_id: string;
+        operation?: string;
+        correct_count?: number;
+        total_count?: number;
+        avg_speed?: number;
+        xp_earned?: number;
+        created_at?: string;
+        id?: string;
+        [key: string]: unknown;
+    }
+    interface MasteryRow {
+        user_id: string;
+        operation?: string;
+        mastery_level?: number;
+        fact?: string;
+        attempts?: number;
+        last_practiced?: string;
+        [key: string]: unknown;
+    }
+    const opSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId && s.operation?.toLowerCase() === operation.toLowerCase());
+    const opMastery = (db.mastery_stats as MasteryRow[]).filter((s: MasteryRow) => s.user_id === userId && s.operation?.toLowerCase() === operation.toLowerCase());
 
     // Calculate Summary Stats
-    const totalCorrect = opSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
-    const totalAttempts = opSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0);
-    const totalXP = opSessions.reduce((acc: number, s: any) => acc + (s.xp_earned || 0), 0);
+    const totalCorrect = opSessions.reduce((acc: number, s: SessionRow) => acc + (s.correct_count || 0), 0);
+    const totalAttempts = opSessions.reduce((acc: number, s: SessionRow) => acc + (s.total_count || 0), 0);
+    const totalXP = opSessions.reduce((acc: number, s: SessionRow) => acc + (s.xp_earned || 0), 0);
     const avgSpeed = opSessions.length > 0
-        ? opSessions.reduce((acc: number, s: any) => acc + s.avg_speed, 0) / opSessions.length
+        ? opSessions.reduce((acc: number, s: SessionRow) => acc + (s.avg_speed || 0), 0) / opSessions.length
         : 0;
 
     // Identify Missed Problems (Mastery < 3 means not fully mastered, < 0 means struggling)
     // Sorting by mastery level ascending (lowest first)
     const missedProblems = opMastery
-        .filter((m: any) => m.mastery_level < 3)
-        .sort((a: any, b: any) => a.mastery_level - b.mastery_level)
+        .filter((m: MasteryRow) => (m.mastery_level || 0) < 3)
+        .sort((a: MasteryRow, b: MasteryRow) => (a.mastery_level || 0) - (b.mastery_level || 0))
         .slice(0, 20) // Top 20 needs work
-        .map((m: any) => ({
-            fact: m.fact,
-            mastery: m.mastery_level,
-            attempts: m.attempts,
-            lastPracticed: m.last_practiced
+        .map((m: MasteryRow) => ({
+            fact: m.fact || '',
+            mastery: m.mastery_level || 0,
+            attempts: m.attempts || 0,
+            lastPracticed: m.last_practiced || ''
         }));
 
     // Trend Graph (Last 10 sessions for this op)
-    const trend = opSessions.slice(-10).map((s: any, index: number) => ({
-        id: s.id,
+    const trend = opSessions.slice(-10).map((s: SessionRow, index: number) => ({
+        id: s.id || `session-${index}`,
         date: s.created_at ? new Date(s.created_at).toLocaleDateString() : `Session ${index + 1}`,
-        accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
-        speed: s.avg_speed
+        accuracy: (s.total_count || 0) > 0 ? ((s.correct_count || 0) / (s.total_count || 1)) * 100 : 0,
+        speed: s.avg_speed || 0
     }));
 
     return {
@@ -201,14 +260,24 @@ export async function getOperationDetails(operation: string) {
 export async function getOperationStats(operation: string) {
     const session = await auth();
     if (!session?.user) return null;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     const db = loadData();
     const opLower = operation.toLowerCase();
 
     // Get all sessions for this operation
-    const opSessions = (db.sessions as any[])
-        .filter((s: any) => s.user_id === userId && s.operation?.toLowerCase() === opLower)
+    interface SessionRow {
+        user_id: string;
+        operation?: string;
+        created_at: string;
+        correct_count?: number;
+        total_count?: number;
+        avg_speed?: number;
+        xp_earned?: number;
+        [key: string]: unknown;
+    }
+    const opSessions = (db.sessions as SessionRow[])
+        .filter((s: SessionRow) => s.user_id === userId && s.operation?.toLowerCase() === opLower)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
     // Session logs (last 50)
@@ -216,7 +285,7 @@ export async function getOperationStats(operation: string) {
         index: idx + 1,
         date: s.created_at,
         speed: s.avg_speed || 0,
-        accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
+        accuracy: (s.total_count || 0) > 0 ? ((s.correct_count || 0) / (s.total_count || 1)) * 100 : 0,
         correct: s.correct_count || 0,
         total: s.total_count || 0,
         xp: s.xp_earned || 0,
@@ -269,13 +338,13 @@ export async function getOperationStats(operation: string) {
     // Top speeds (fastest 10 sessions by avg_speed)
     const topSpeeds = [...opSessions]
         .filter(s => s.avg_speed && s.avg_speed > 0)
-        .sort((a, b) => a.avg_speed - b.avg_speed)
+        .sort((a, b) => (a.avg_speed || 0) - (b.avg_speed || 0))
         .slice(0, 10)
         .map((s, idx) => ({
             rank: idx + 1,
             date: s.created_at,
             speed: s.avg_speed,
-            accuracy: s.total_count > 0 ? (s.correct_count / s.total_count) * 100 : 0,
+            accuracy: (s.total_count || 0) > 0 ? ((s.correct_count || 0) / (s.total_count || 1)) * 100 : 0,
         }));
 
     return {

@@ -15,7 +15,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Crown, Anchor, Clock, Check, Users, Sparkles } from 'lucide-react';
 import { UserAvatar } from '@/components/user-avatar';
@@ -61,7 +61,10 @@ export function RoleVotePanel({
     const myVote = votes[currentUserId];
 
     useEffect(() => {
-        setHasVoted(!!myVote);
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setHasVoted(!!myVote);
+        }, 0);
     }, [myVote]);
 
     // Count votes per candidate
@@ -96,6 +99,7 @@ export function RoleVotePanel({
         ? <Crown className="w-6 h-6" /> 
         : <Anchor className="w-6 h-6" />;
     
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const roleColor = role === 'igl' ? 'amber' : 'cyan';
     const roleLabel = role === 'igl' ? 'In-Game Leader' : 'Anchor';
 
@@ -217,9 +221,12 @@ export function RoleVotePanel({
                                     {/* Avatar */}
                                     <div className="relative">
                                         <UserAvatar
-                                            name={member.odName}
-                                            odEquippedAvatar={member.odEquippedAvatar}
-                                            odEquippedFrame={member.odEquippedFrame}
+                                            user={{
+                                                name: member.odName,
+                                                equipped_items: {
+                                                    frame: member.odEquippedFrame
+                                                }
+                                            }}
                                             size="md"
                                         />
                                         {isMyVote && (

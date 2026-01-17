@@ -57,7 +57,6 @@ export function OpponentStatusPanel({
     teamScore,
     currentStreak,
     activePlayer,
-    slotNumber,
     questionInSlot,
     totalQuestionsPerSlot,
     lastAnswerResult,

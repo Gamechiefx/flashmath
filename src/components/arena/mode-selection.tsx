@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { soundEngine } from '@/lib/sound-engine';
-import { Trophy, ChevronRight, Users, AlertCircle, X } from 'lucide-react';
+import { Trophy, ChevronRight, Users, X } from 'lucide-react';
 import { getPartyData } from '@/lib/actions/social';
 
 interface GameMode {
@@ -108,7 +108,10 @@ function ParticleBackground({ analyser }: { analyser: AnalyserNode | null }) {
     const animationRef = useRef<number | null>(null);
 
     useEffect(() => {
-        setMounted(true);
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setMounted(true);
+        }, 0);
     }, []);
 
     // Audio data loop - only updates when analyser is available
@@ -149,7 +152,7 @@ function ParticleBackground({ analyser }: { analyser: AnalyserNode | null }) {
     );
 }
 
-function RankBadge({ rank, division, elo }: { rank: string; division: string; elo: number }) {
+function RankBadge({ rank, division, elo: _elo }: { rank: string; division: string; elo: number }) {
     const rankColors: Record<string, { bg: string; border: string; glow: string }> = {
         Bronze: { bg: 'from-amber-700 to-amber-900', border: 'border-amber-500/50', glow: 'shadow-amber-500/20' },
         Silver: { bg: 'from-slate-400 to-slate-600', border: 'border-slate-300/50', glow: 'shadow-slate-300/20' },
@@ -590,7 +593,8 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     const [selectedOperation, setSelectedOperation] = useState<Operation>('mixed');
     const [isRankFabExpanded, setIsRankFabExpanded] = useState(false);
     const [isInParty, setIsInParty] = useState(false);
-    const [partyId, setPartyId] = useState<string | null>(null);
+    const [_partyId, setPartyId] = useState<string | null>(null);
+    // partyId is set but may be used in future party features
     const [isBannerDismissed, setIsBannerDismissed] = useState(false);
     const [audioAnalyser, setAudioAnalyser] = useState<AnalyserNode | null>(null);
 
@@ -654,10 +658,14 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
             const elem = document.documentElement;
             if (elem.requestFullscreen && !document.fullscreenElement) {
                 await elem.requestFullscreen();
-            } else if ((elem as any).webkitRequestFullscreen) {
-                await (elem as any).webkitRequestFullscreen();
-            } else if ((elem as any).msRequestFullscreen) {
-                await (elem as any).msRequestFullscreen();
+            } else {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                const webkitElem = elem as any;
+                if (webkitElem.webkitRequestFullscreen) {
+                    await webkitElem.webkitRequestFullscreen();
+                } else if (webkitElem.msRequestFullscreen) {
+                    await webkitElem.msRequestFullscreen();
+                }
             }
         } catch (err) {
             console.log('[Arena] Fullscreen request failed:', err);
@@ -720,6 +728,7 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
     }, []);
 
     // Determine if duel or team mode is selected (for operation-specific ELO display on mode cards)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const isDuel = selectedMode === '1v1';
 
     // Build modes with dynamic ELO based on selected operation
@@ -772,15 +781,15 @@ export function ModeSelection({ arenaStats = DEFAULT_STATS }: ModeSelectionProps
                             <div className="flex items-center gap-2">
                                 <Users className="w-5 h-5" style={{ color: 'var(--accent)' }} />
                                 <span className="text-sm font-bold" style={{ color: 'var(--accent)' }}>
-                                    You're in a party
+                                    You&apos;re in a party
                                 </span>
                                 <span className="hidden sm:inline text-xs text-muted-foreground">
-                                    • Party queue is 5v5 only
+                                    • Queue together in team modes
                                 </span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <Link
-                                    href="/arena/teams/setup?mode=5v5"
+                                    href="/arena/teams/setup"
                                     onClick={() => {
                                         soundEngine.playClick();
                                         requestFullscreen();

@@ -1,5 +1,4 @@
 import type { NextAuthConfig } from "next-auth";
-import Credentials from "next-auth/providers/credentials";
 
 export const authConfig = {
     secret: process.env.AUTH_SECRET || "94f17709-3ca3-465a-b7a0-eecf410d5504", // Fallback for dev

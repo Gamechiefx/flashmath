@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp, Hammer } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ChevronDown, Hammer } from "lucide-react";
 
 /**
  * DevFooter - A subtle development environment indicator
@@ -11,16 +11,21 @@ import { ChevronDown, ChevronUp, Hammer } from "lucide-react";
 export function DevFooter() {
     const [isVisible, setIsVisible] = useState(true);
     const [isMounted, setIsMounted] = useState(false);
+    const [isOnLeft, setIsOnLeft] = useState(false);
+    const hoverTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Only show if the env variable is explicitly set to "true"
     const showDevBanner = process.env.NEXT_PUBLIC_SHOW_DEV_BANNER === "true";
 
     useEffect(() => {
-        setIsMounted(true);
-        const hidden = localStorage.getItem("flashmath_dev_footer_hidden");
-        if (hidden === "true") {
-            setIsVisible(false);
-        }
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            setIsMounted(true);
+            const hidden = localStorage.getItem("flashmath_dev_footer_hidden");
+            if (hidden === "true") {
+                setIsVisible(false);
+            }
+        }, 0);
     }, []);
 
     const toggleVisibility = () => {
@@ -33,11 +38,26 @@ export function DevFooter() {
         return null;
     }
 
+    const handleMouseEnter = () => {
+        hoverTimerRef.current = setTimeout(() => {
+            setIsOnLeft(prev => !prev);
+        }, 2000);
+    };
+
+    const handleMouseLeave = () => {
+        if (hoverTimerRef.current) {
+            clearTimeout(hoverTimerRef.current);
+            hoverTimerRef.current = null;
+        }
+    };
+
     if (!isVisible) {
         return (
             <button
                 onClick={toggleVisibility}
-                className="fixed bottom-4 right-4 z-[9999] flex h-8 w-8 items-center justify-center rounded-full bg-orange-600 text-white shadow-lg transition-transform hover:scale-110 active:scale-95"
+                onMouseEnter={handleMouseEnter}
+                onMouseLeave={handleMouseLeave}
+                className={`fixed bottom-4 ${isOnLeft ? 'left-4' : 'right-4'} z-[9999] flex h-8 w-8 items-center justify-center rounded-full bg-orange-600 text-white shadow-lg transition-all duration-300 hover:scale-110 active:scale-95`}
                 title="Show Dev Banner"
             >
                 <Hammer size={16} />

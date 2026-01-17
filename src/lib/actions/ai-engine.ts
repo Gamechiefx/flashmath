@@ -9,7 +9,7 @@
  */
 
 import { auth } from "@/auth";
-import { queryOne } from "@/lib/db";
+import { queryOne, type UserRow } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import {
     initializeOrchestrator,
@@ -26,7 +26,6 @@ import {
 import {
     MAX_TIER,
     getBandForTier,
-    isAtBandBoundary,
     checkMilestoneReward,
     getTierOperandRange,
 } from "@/lib/tier-system";
@@ -47,37 +46,41 @@ export async function initializeAISession(operation: string): Promise<{
         return { error: "Unauthorized" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     // Get user's current math tiers
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) {
         return { error: "User not found" };
     }
 
     // Parse mathTiers from JSON if needed
-    let mathTiers = user.math_tiers;
-    if (typeof mathTiers === 'string') {
+    type MathTiersType = { addition: number; subtraction: number; multiplication: number; division: number };
+    let parsedMathTiers: MathTiersType;
+    const rawMathTiers = user.math_tiers;
+    if (typeof rawMathTiers === 'string') {
         try {
-            mathTiers = JSON.parse(mathTiers);
+            parsedMathTiers = JSON.parse(rawMathTiers) as MathTiersType;
         } catch {
-            mathTiers = null;
+            parsedMathTiers = { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
         }
+    } else {
+        parsedMathTiers = { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
     }
-    mathTiers = mathTiers || {
-        addition: 1,
-        subtraction: 1,
-        multiplication: 1,
-        division: 1,
-    };
+    // Ensure all fields exist
+    if (!parsedMathTiers.addition) parsedMathTiers.addition = 1;
+    if (!parsedMathTiers.subtraction) parsedMathTiers.subtraction = 1;
+    if (!parsedMathTiers.multiplication) parsedMathTiers.multiplication = 1;
+    if (!parsedMathTiers.division) parsedMathTiers.division = 1;
 
-    console.log(`[AI] Starting session for ${userId}, operation: ${operation}, tier: ${mathTiers[operation.toLowerCase()] || 1}`);
+    const opKey = operation.toLowerCase() as keyof MathTiersType;
+    console.log(`[AI] Starting session for ${userId}, operation: ${operation}, tier: ${parsedMathTiers[opKey] || 1}`);
 
     // Initialize orchestrator
     const state = initializeOrchestrator(
         userId,
         operation.toLowerCase() as MathOperation,
-        mathTiers,
+        parsedMathTiers,
         DEFAULT_AI_CONFIG
     );
 
@@ -263,7 +266,7 @@ export async function endAISession(
         return { error: "Unauthorized" };
     }
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const state = activeSessions.get(sessionId);
     if (!state) {
         return { error: "Session not found" };
@@ -332,48 +335,48 @@ export async function endAISession(
         const { getDatabase } = await import("@/lib/db/sqlite");
         const db = getDatabase();
 
-        const user = db.prepare("SELECT math_tiers, skill_points, coins, total_xp FROM users WHERE id = ?").get(userId) as any;
+        const user = db.prepare("SELECT math_tiers, skill_points, coins, total_xp FROM users WHERE id = ?").get(userId) as { math_tiers?: string | null; skill_points?: string | null; coins?: number; total_xp?: number } | undefined;
 
         if (user) {
-            let mathTiers = user.math_tiers;
-            if (typeof mathTiers === 'string') {
+            // Parse mathTiers
+            type TiersType = Record<string, number>;
+            let parsedTiers: TiersType = {};
+            if (typeof user.math_tiers === 'string') {
                 try {
-                    mathTiers = JSON.parse(mathTiers);
+                    parsedTiers = JSON.parse(user.math_tiers) as TiersType;
                 } catch {
-                    mathTiers = {};
+                    parsedTiers = {};
                 }
             }
-            mathTiers = mathTiers || {};
-            mathTiers[operation] = newTier;
+            parsedTiers[operation] = newTier;
 
             // Prepare updates
             let coinsToAdd = 0;
             let xpToAdd = 0;
 
             if (milestone) {
-                coinsToAdd = milestone.coins;
-                xpToAdd = milestone.xp;
+                coinsToAdd = milestone.reward?.coins ?? 0;
+                xpToAdd = milestone.reward?.xp ?? 0;
             }
 
             const newCoins = (Number(user.coins) || 0) + coinsToAdd;
             const newXp = (Number(user.total_xp) || 0) + xpToAdd;
 
             // Reset skill points for this operation (start fresh at new tier)
-            let skillPoints = user.skill_points;
-            if (typeof skillPoints === 'string') {
+            let parsedSkillPoints: TiersType = {};
+            if (typeof user.skill_points === 'string') {
                 try {
-                    skillPoints = JSON.parse(skillPoints);
+                    parsedSkillPoints = JSON.parse(user.skill_points) as TiersType;
                 } catch {
-                    skillPoints = {};
+                    parsedSkillPoints = {};
                 }
             }
-            skillPoints = skillPoints || {};
-            skillPoints[operation] = 0;  // Reset to 0% progress
+            parsedSkillPoints[operation] = 0;  // Reset to 0% progress
 
             // Use direct database access to avoid pattern-matching issues
             db.prepare(
                 "UPDATE users SET math_tiers = ?, skill_points = ?, coins = ?, total_xp = ? WHERE id = ?"
-            ).run(JSON.stringify(mathTiers), JSON.stringify(skillPoints), newCoins, newXp, userId);
+            ).run(JSON.stringify(parsedTiers), JSON.stringify(parsedSkillPoints), newCoins, newXp, userId);
 
             const band = getBandForTier(newTier);
             console.log(`[AI] Tier advanced for ${userId}: ${operation} ${previousTier} → ${newTier} (${band.name} band)`);
@@ -407,8 +410,8 @@ export async function endAISession(
             blockedByBandBoundary,
             milestone: milestone ? {
                 type: milestone.type,
-                coins: milestone.coins,
-                xp: milestone.xp,
+                coins: milestone.reward?.coins ?? 0,
+                xp: milestone.reward?.xp ?? 0,
             } : undefined,
         }
     };

@@ -14,7 +14,7 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
     Loader2, Users, Crown, Anchor, Zap, Search, UserPlus,
-    CheckCircle, AlertCircle, X, Vote, Clock, Maximize, Minimize
+    CheckCircle, AlertCircle, X, Maximize, Minimize
 } from 'lucide-react';
 import { Party, updatePartyQueueStatus } from '@/lib/actions/social';
 import { 
@@ -60,7 +60,6 @@ export function TeamQueueClient({
     const router = useRouter();
     
     // Debug: Log initial mount state
-    const mountTime = useRef(Date.now());
     console.log('[TeamQueue] === COMPONENT MOUNT ===');
     console.log('[TeamQueue] partyId:', partyId);
     console.log('[TeamQueue] party.queueStatus:', party.queueStatus);
@@ -115,8 +114,12 @@ export function TeamQueueClient({
                 const elem = document.documentElement;
                 if (elem.requestFullscreen) {
                     await elem.requestFullscreen();
-                } else if ((elem as any).webkitRequestFullscreen) {
-                    await (elem as any).webkitRequestFullscreen();
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                    const webkitElem = elem as any;
+                    if (webkitElem.webkitRequestFullscreen) {
+                        await webkitElem.webkitRequestFullscreen();
+                    }
                 }
             }
         } catch (err) {
@@ -125,10 +128,10 @@ export function TeamQueueClient({
     };
 
     const isLeader = party.leaderId === currentUserId;
-    const partySize = party.members.length;
-    // Get team size from mode (e.g., '2v2' -> 2, '5v5' -> 5)
-    const teamSize = parseInt(mode.charAt(0)) || 5;
-    const needsTeammates = partySize < teamSize;
+    
+    // Compute party and team sizes
+    const partySize = party.members?.length ?? 1;
+    const teamSize = mode === '5v5' ? 5 : mode === '2v2' ? 2 : 5;
     
     // Real-time presence for queue status updates
     // Pass userId/userName to avoid useSession dependency during navigation transitions
@@ -238,7 +241,7 @@ export function TeamQueueClient({
             // Clear from set after navigation completes
             setTimeout(() => redirectingParties.delete(partyId), 5000);
         }
-    }, [latestQueueStatusUpdate, partyId, router, clearQueueStatusUpdate]);
+    }, [latestQueueStatusUpdate, partyId, router, clearQueueStatusUpdate, mode]);
     
     useEffect(() => {
         console.log('[TeamQueue] === NON-LEADER POLL EFFECT ===');
@@ -469,52 +472,6 @@ export function TeamQueueClient({
     // PHASE 2: IGL SELECTION
     // =========================================================================
     
-    // IGL selection timer countdown
-    // When timer expires, auto-assigns roles based on ELO ranking
-    useEffect(() => {
-        if (phase !== 'igl_selection' || !assembledTeam) return;
-        
-        const elapsed = Date.now() - assembledTeam.odSelectionStartedAt;
-        const remaining = Math.max(0, 25 - Math.floor(elapsed / 1000));
-        setIglSelectionTime(remaining);
-        
-        const interval = setInterval(() => {
-            setIglSelectionTime(prev => {
-                if (prev <= 1) {
-                    // Time's up - auto-select based on highest ELO
-                    handleAutoSelectRoles();
-                    return 0;
-                }
-                return prev - 1;
-            });
-        }, 1000);
-        
-        return () => clearInterval(interval);
-    }, [phase, assembledTeam, handleAutoSelectRoles]);
-
-    // Refresh assembled team data periodically during IGL selection
-    useEffect(() => {
-        if (phase !== 'igl_selection' || !assembledTeam) return;
-        
-        const poll = async () => {
-            const updated = await getAssembledTeam(assembledTeam.id);
-            if (updated) {
-                setAssembledTeam(updated);
-                
-                // Check if both roles are selected and we should auto-confirm
-                if (updated.odIglId && updated.odAnchorId) {
-                    // Leader can confirm, or auto-confirm after a short delay
-                    if (updated.odLargestPartyLeaderId === currentUserId) {
-                        // Leader confirms
-                    }
-                }
-            }
-        };
-        
-        const interval = setInterval(poll, 1500);
-        return () => clearInterval(interval);
-    }, [phase, assembledTeam, currentUserId]);
-
     const handleSelectIGL = async (userId: string) => {
         if (!assembledTeam) return;
         
@@ -564,7 +521,7 @@ export function TeamQueueClient({
         
         // Sort by ELO and auto-select
         const sorted = [...assembledTeam.odMembers].sort(
-            (a, b) => (b.odOperationElo || b.odElo) - (a.odOperationElo || a.odElo)
+            (a, b) => b.odElo - a.odElo
         );
         
         // Highest ELO becomes IGL if not set
@@ -583,6 +540,52 @@ export function TeamQueueClient({
         // Auto-confirm after a short delay to allow state updates
         setTimeout(handleConfirmRoles, 500);
     }, [assembledTeam, handleConfirmRoles]);
+
+    // IGL selection timer countdown
+    // When timer expires, auto-assigns roles based on ELO ranking
+    useEffect(() => {
+        if (phase !== 'igl_selection' || !assembledTeam) return;
+        
+        const elapsed = Date.now() - assembledTeam.odSelectionStartedAt;
+        const remaining = Math.max(0, 25 - Math.floor(elapsed / 1000));
+        setIglSelectionTime(remaining);
+        
+        const interval = setInterval(() => {
+            setIglSelectionTime(prev => {
+                if (prev <= 1) {
+                    // Time's up - auto-select based on highest ELO
+                    handleAutoSelectRoles();
+                    return 0;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+        
+        return () => clearInterval(interval);
+    }, [phase, assembledTeam, handleAutoSelectRoles]);
+
+    // Refresh assembled team data periodically during IGL selection
+    useEffect(() => {
+        if (phase !== 'igl_selection' || !assembledTeam) return;
+        
+        const poll = async () => {
+            const updated = await getAssembledTeam(assembledTeam.id);
+            if (updated) {
+                setAssembledTeam(updated);
+                
+                // Check if both roles are selected and we should auto-confirm
+                if (updated.odIglId && updated.odAnchorId) {
+                    // Leader can confirm, or auto-confirm after a short delay
+                    if (updated.odLargestPartyLeaderId === currentUserId) {
+                        // Leader confirms
+                    }
+                }
+            }
+        };
+        
+        const interval = setInterval(poll, 1500);
+        return () => clearInterval(interval);
+    }, [phase, assembledTeam, currentUserId]);
 
     // =========================================================================
     // PHASE 3: OPPONENT SEARCH
@@ -797,7 +800,7 @@ export function TeamQueueClient({
             odName: m.odUserName,
             odLevel: m.odLevel,
             odDuelElo: m.odElo,
-            odElo5v5: m.odOperationElo,
+            odElo5v5: m.odElo,
             isLeader: m.odUserId === assembledTeam.odLargestPartyLeaderId,
             odOnline: true,
         }));

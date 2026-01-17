@@ -1,23 +1,29 @@
 "use server";
 
-import { query, queryOne, execute, loadData } from "@/lib/db";
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
+import { query, queryOne, execute, loadData, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import { syncLeagueState } from "@/lib/league-engine";
-import { revalidatePath } from "next/cache";
 
 import { ITEMS, ItemType } from "@/lib/items";
 
 export async function getLeagueData() {
     const session = await auth();
     if (!session?.user) return null;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     await syncLeagueState(); // Ensure reset logic runs
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     const currentLeagueId = user?.current_league_id || 'neon-league';
 
-    const league = queryOne("SELECT * FROM leagues where id = ?", [currentLeagueId]) as any;
+    interface LeagueRow {
+        id: string;
+        name?: string;
+        [key: string]: unknown;
+    }
+    const league = queryOne("SELECT * FROM leagues where id = ?", [currentLeagueId]) as LeagueRow | null;
     let participants = query("SELECT * FROM league_participants WHERE league_id = ?", [currentLeagueId]);
 
     // Ensure the user is in the participants list
@@ -44,7 +50,7 @@ export async function getLeagueData() {
 
     // Fetch real users details for accurate frames
     const realUserIds = sorted.filter(p => !p.user_id.startsWith('ghost-')).map(p => p.user_id);
-    let realUsersMap: Record<string, any> = {};
+    const realUsersMap: Record<string, any> = {};
 
     if (realUserIds.length > 0) {
         // Safe parameter expansion

@@ -7,9 +7,9 @@
  * Enhanced with real-time Socket.IO indicators for member online status.
  */
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, Crown, Plus, LogOut, UserPlus, Bell, Settings, Lock, Globe, ArrowUpCircle, Wifi, WifiOff } from 'lucide-react';
+import { Users, Crown, Plus, LogOut, UserPlus, Bell, Settings, Lock, Globe, ArrowUpCircle } from 'lucide-react';
 import { UserAvatar } from '@/components/user-avatar';
 import { cn } from '@/lib/utils';
 import type { Party, PartyInvite, Friend } from '@/lib/actions/social';

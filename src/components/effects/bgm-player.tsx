@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Volume2, VolumeX } from "lucide-react";
 
 interface BGMPlayerProps {
     src: string; // The asset path
@@ -13,7 +12,9 @@ import { useAudioSettings } from "@/components/audio-settings-provider";
 export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
     const { bgmVolume } = useAudioSettings();
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [isPlaying, setIsPlaying] = useState(false);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [userMuted, setUserMuted] = useState(false); // Local toggle for BGM specifically if desired
 
 
@@ -43,7 +44,7 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
                 audioRef.current = null;
             };
         }
-    }, [src, enabled]); // Only re-run if src changes. Volume handled separately.
+    }, [src, enabled, bgmVolume]); // Only re-run if src changes. Volume handled separately.
 
     // Dynamic Volume Update for FILE playback
     useEffect(() => {
@@ -59,20 +60,21 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
         // ... OTHERWISE USE PROCEDURAL ENGINE ...
 
         // Web Audio Context for Procedural BGM
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
         const ctx = new AudioContext();
 
-        let oscillators: OscillatorNode[] = [];
-        let gainNodes: GainNode[] = [];
+        const oscillators: OscillatorNode[] = [];
+        const gainNodes: GainNode[] = [];
         let isCleanedUp = false;
 
         const cleanup = () => {
             isCleanedUp = true;
             oscillators.forEach(o => {
-                try { o.stop(); o.disconnect(); } catch (e) { }
+                try { o.stop(); o.disconnect(); } catch (_e) { }
             });
             gainNodes.forEach(g => {
-                try { g.disconnect(); } catch (e) { }
+                try { g.disconnect(); } catch (_e) { }
             });
             if (ctx.state !== 'closed') ctx.close();
         };
@@ -266,6 +268,7 @@ export function BGMPlayer({ src, enabled }: BGMPlayerProps) {
             scheduler();
 
             // Register stopper
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Mock oscillator for cleanup tracking
             oscillators.push({ stop: () => { isPlayingSeq = false; }, disconnect: () => { } } as any);
         };
 

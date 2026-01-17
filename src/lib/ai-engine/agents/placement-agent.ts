@@ -13,27 +13,34 @@
 
 import {
     PlacementDirective,
-    LearnerModel,
-    SessionTelemetry,
     ContentItem,
     MathOperation,
-    SkillMastery,
     AIEngineConfig,
     DEFAULT_AI_CONFIG,
+     
+    LearnerModel,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
+    SessionTelemetry,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
+    SkillMastery,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     RepresentationType,
 } from '../types';
 import {
     getSkillMastery,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     updateSkillMastery,
     tierToDifficulty,
     difficultyToTier,
 } from '../state';
 import {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     createSkillId,
     generateVariantFromProblem,
 } from '../content-variants';
 import {
     getTierOperandRange,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     MAX_TIER,
 } from '@/lib/tier-system';
 
@@ -224,7 +231,7 @@ export function processPlacementAnswer(
     const skill = getSkillMastery(learnerModel, skillId);
 
     // BKT update
-    const { posteriorMastery, infoGain } = bktUpdate(skill.masteryProb, isCorrect);
+    const { posteriorMastery, infoGain: _infoGain } = bktUpdate(skill.masteryProb, isCorrect);
     skill.masteryProb = posteriorMastery;
 
     // Fast responses indicate higher mastery

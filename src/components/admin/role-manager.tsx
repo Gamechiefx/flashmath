@@ -21,7 +21,7 @@ const ROLE_ICONS: Record<Role, React.ReactNode> = {
     [Role.SUPER_ADMIN]: <Crown size={14} />,
 };
 
-export function RoleManager({ userId, userName, currentRole, managerRole, onRoleChanged }: RoleManagerProps) {
+export function RoleManager({ userId, userName: _userName, currentRole, managerRole, onRoleChanged }: RoleManagerProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -36,8 +36,8 @@ export function RoleManager({ userId, userName, currentRole, managerRole, onRole
 
     // Get available roles (all roles below manager level)
     const availableRoles = Object.entries(ROLE_HIERARCHY)
-        .filter(([_, level]) => level < managerLevel)
-        .map(([role, _]) => role as Role)
+        .filter(([, level]) => level < managerLevel)
+        .map(([role]) => role as Role)
         .sort((a, b) => ROLE_HIERARCHY[b] - ROLE_HIERARCHY[a]); // Highest first
 
     const openDropdown = useCallback(() => {

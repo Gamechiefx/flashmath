@@ -1,7 +1,9 @@
 "use server";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { auth } from "@/auth";
-import { loadData, queryOne, queryAll } from "@/lib/db";
+import { loadData, queryOne, type UserRow } from "@/lib/db";
 
 // =============================================================================
 // TYPES AND INTERFACES
@@ -71,7 +73,8 @@ function calculateLinearRegression(data: { x: number; y: number }[]): {
     const sumY = data.reduce((sum, point) => sum + point.y, 0);
     const sumXY = data.reduce((sum, point) => sum + point.x * point.y, 0);
     const sumXX = data.reduce((sum, point) => sum + point.x * point.x, 0);
-    const sumYY = data.reduce((sum, point) => sum + point.y * point.y, 0);
+     
+    const _sumYY = data.reduce((sum, point) => sum + point.y * point.y, 0);
 
     const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
     const intercept = (sumY - slope * sumX) / n;
@@ -313,14 +316,23 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
     const session = await auth();
     if (!session?.user) return null;
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) return null;
 
     const db = loadData();
     
     // Get user sessions (last 30 for trend analysis)
-    const userSessions = (db.sessions as any[])
-        .filter((s: any) => s.user_id === userId)
+    interface SessionRow {
+        user_id: string;
+        created_at: string;
+        operation?: string;
+        total_count?: number;
+        correct_count?: number;
+        avg_speed?: number;
+        [key: string]: unknown;
+    }
+    const userSessions = (db.sessions as SessionRow[])
+        .filter((s: SessionRow) => s.user_id === userId)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
         .slice(-30);
 
@@ -356,13 +368,18 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
     }
 
     // Convert sessions to performance metrics
-    const performanceMetrics: PerformanceMetrics[] = userSessions.map(session => ({
-        accuracy: session.total_count > 0 ? (session.correct_count / session.total_count) * 100 : 0,
-        speed: session.avg_speed || 5,
-        consistency: 1, // Will be calculated separately
-        streak: session.correct_count || 0,
-        timestamp: new Date(session.created_at)
-    }));
+    const performanceMetrics: PerformanceMetrics[] = userSessions.map(session => {
+        const totalCount = session.total_count ?? 0;
+        const correctCount = session.correct_count ?? 0;
+        const avgSpeed = typeof session.avg_speed === 'number' ? session.avg_speed : 5;
+        return {
+            accuracy: totalCount > 0 ? (correctCount / totalCount) * 100 : 0,
+            speed: avgSpeed,
+            consistency: 1, // Will be calculated separately
+            streak: correctCount,
+            timestamp: new Date(session.created_at)
+        };
+    });
 
     // Calculate overall trends
     const overallTrend = analyzeTrend(performanceMetrics, 'accuracy');
@@ -374,13 +391,18 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
     operations.forEach(op => {
         const opSessions = userSessions.filter(s => s.operation === op);
         if (opSessions.length >= 3) {
-            const opMetrics = opSessions.map(session => ({
-                accuracy: session.total_count > 0 ? (session.correct_count / session.total_count) * 100 : 0,
-                speed: session.avg_speed || 5,
-                consistency: 1,
-                streak: session.correct_count || 0,
-                timestamp: new Date(session.created_at)
-            }));
+            const opMetrics: PerformanceMetrics[] = opSessions.map(session => {
+                const totalCount = session.total_count ?? 0;
+                const correctCount = session.correct_count ?? 0;
+                const avgSpeed = typeof session.avg_speed === 'number' ? session.avg_speed : 5;
+                return {
+                    accuracy: totalCount > 0 ? (correctCount / totalCount) * 100 : 0,
+                    speed: avgSpeed,
+                    consistency: 1,
+                    streak: correctCount,
+                    timestamp: new Date(session.created_at)
+                };
+            });
             operationTrends[op.toLowerCase()] = analyzeTrend(opMetrics, 'accuracy');
         }
     });
@@ -419,7 +441,11 @@ export async function getAdvancedAnalytics(): Promise<AdvancedAnalytics | null> 
  */
 async function getUserStatsForAnalytics(userId: string) {
     const db = loadData();
-    const userSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId);
+    interface SessionRow {
+        user_id: string;
+        [key: string]: unknown;
+    }
+    const userSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
     
     const operations = ['Addition', 'Subtraction', 'Multiplication', 'Division'];
     const detailedOps = operations.map(op => {
@@ -440,8 +466,6 @@ async function getUserStatsForAnalytics(userId: string) {
         };
     });
 
-    const totalCorrect = userSessions.reduce((acc: number, s: any) => acc + (s.correct_count || 0), 0);
-    const totalAttempted = userSessions.reduce((acc: number, s: any) => acc + (s.total_count || 0), 0);
     const avgSpeed = userSessions.length > 0
         ? userSessions.reduce((acc: number, s: any) => acc + s.avg_speed, 0) / userSessions.length
         : 0;
@@ -555,12 +579,20 @@ export async function generateShareableAchievements(): Promise<ShareableAchievem
     const session = await auth();
     if (!session?.user) return [];
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     if (!userId) return [];
 
     const db = loadData();
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
-    const userSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId);
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
+    interface ShareSessionRow {
+        user_id: string;
+        created_at: string;
+        correct_count?: number;
+        total_count?: number;
+        avg_speed?: number;
+        [key: string]: unknown;
+    }
+    const userSessions = (db.sessions as ShareSessionRow[]).filter((s: ShareSessionRow) => s.user_id === userId);
     
     const achievements: ShareableAchievement[] = [];
 
@@ -700,7 +732,7 @@ export async function generateShareableAchievements(): Promise<ShareableAchievem
                 });
             }
         }
-    } catch (error) {
+    } catch (_error) {
         // Arena stats not available, skip
     }
 
@@ -717,12 +749,12 @@ export async function generateProgressSummary(timeframe: 'week' | 'month' | 'all
     const session = await auth();
     if (!session?.user) return null;
     
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const userName = session.user.name || 'Pilot';
     if (!userId) return null;
 
     const db = loadData();
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     
     // Calculate date range
     const now = new Date();
@@ -746,7 +778,11 @@ export async function generateProgressSummary(timeframe: 'week' | 'month' | 'all
     }
 
     // Filter sessions by timeframe
-    const allSessions = (db.sessions as any[]).filter((s: any) => s.user_id === userId);
+    interface SessionRow {
+        user_id: string;
+        [key: string]: unknown;
+    }
+    const allSessions = (db.sessions as SessionRow[]).filter((s: SessionRow) => s.user_id === userId);
     const timeframeSessions = allSessions.filter((s: any) => 
         new Date(s.created_at) >= startDate
     );
@@ -799,8 +835,9 @@ export async function generateProgressSummary(timeframe: 'week' | 'month' | 'all
 
     // Generate next goals
     const nextGoals: string[] = [];
+    const userLevel = user?.level ?? 1;
     if (averageAccuracy < 90) nextGoals.push('Reach 90% accuracy');
-    if (user?.level < 20) nextGoals.push(`Reach level ${user.level + 5}`);
+    if (userLevel < 20) nextGoals.push(`Reach level ${userLevel + 5}`);
     if (bestStreak < 15) nextGoals.push('Achieve 15+ question streak');
     
     // Try to get arena rank
@@ -810,7 +847,7 @@ export async function generateProgressSummary(timeframe: 'week' | 'month' | 'all
         if (arenaStats?.duel?.rank) {
             arenaRank = `${arenaStats.duel.rank} ${arenaStats.duel.rankDivision || ''}`.trim();
         }
-    } catch (error) {
+    } catch (_error) {
         // Arena stats not available
     }
 
@@ -885,12 +922,12 @@ export async function generateSocialShareText(card: ShareableCard): Promise<stri
 /**
  * Helper function to get arena stats for sharing (simplified)
  */
-async function getArenaStatsForSharing(userId: string) {
+async function getArenaStatsForSharing(_userId: string) {
     try {
         // Import dynamically to avoid circular dependencies
         const { getArenaStats } = await import('./matchmaking');
         return await getArenaStats();
-    } catch (error) {
+    } catch (_error) {
         return null;
     }
 }

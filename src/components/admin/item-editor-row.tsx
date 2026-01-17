@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { loadData } from "@/lib/db"; // Use server component data loading pattern? No, use client for interactivity or simple RSC table.
-// Let's make the page RSC and client components for row editing.
-
 import { Item, Rarity } from "@/lib/items";
 import { updateItem } from "@/lib/actions/admin";
-import { NeonButton } from "@/components/ui/neon-button";
-import { GlassCard } from "@/components/ui/glass-card";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner"; // If we have it? Or just alert.
 
@@ -40,7 +35,7 @@ export default async function AdminPage() {
 // I'll make a unified solution if I can, or separate.
 
 // I will create `src/components/admin/item-editor.tsx` first, then the page.
-import { Check, Save, Loader2 } from "lucide-react";
+import { Save, Loader2 } from "lucide-react";
 
 export function ItemEditorRow({ item }: { item: Item }) {
     const [name, setName] = useState(item.name);

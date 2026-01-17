@@ -5,8 +5,6 @@ import { ItemEditorRow } from "@/components/admin/item-editor-row";
 import { GlassCard } from "@/components/ui/glass-card";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { forceSeedShop } from "@/lib/actions/seed";
-import { NeonButton } from "@/components/ui/neon-button";
 import { UserManager } from "@/components/admin/user-manager";
 import { AdminSection } from "@/components/admin/admin-section";
 import { PriceGuide } from "@/components/admin/price-guide";
@@ -25,8 +23,14 @@ export default async function AdminPage() {
     // Get current user and their role from database
     const db = getDatabase();
     // Use SELECT * to handle databases without role column
+    interface UserRow {
+        id: string;
+        role?: string | null;
+        is_admin?: number;
+        [key: string]: unknown;
+    }
     const currentUser = db.prepare('SELECT * FROM users WHERE id = ?')
-        .get((session.user as any).id) as any;
+        .get((session.user as { id: string }).id) as UserRow | undefined;
 
     if (!currentUser) return <div className="p-10 text-center">Unauthorized: User not found</div>;
 
@@ -54,6 +58,7 @@ export default async function AdminPage() {
     const systemSettings = await getAllSystemSettings();
 
     // Count online players (users active in the last 5 minutes)
+    // eslint-disable-next-line react-hooks/purity -- Safe in Server Component
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const onlineCount = db.prepare(`
         SELECT COUNT(*) as count

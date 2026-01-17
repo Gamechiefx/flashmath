@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { generateProblemForSession, MathProblem } from "@/lib/math-tiers";
-import { BANDS, getBandForTier } from "@/lib/tier-system";
+import { BANDS } from "@/lib/tier-system";
 import { updateTiers } from "@/lib/actions/game";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, ChevronRight, XCircle, Zap, Target, X } from "lucide-react";
@@ -50,17 +50,72 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
         division: [],
     });
     const [currentProblem, setCurrentProblem] = useState<MathProblem | null>(null);
+    // eslint-disable-next-line react-hooks/purity -- Initial timestamp for timing questions
     const [questionStartTime, setQuestionStartTime] = useState(Date.now());
     const [timer, setTimer] = useState(0);
     const [showFeedback, setShowFeedback] = useState<'correct' | 'incorrect' | null>(null);
 
-    const ops: MathOperation[] = ['addition', 'subtraction', 'multiplication', 'division'];
+    const ops: MathOperation[] = useMemo(() => ['addition', 'subtraction', 'multiplication', 'division'], []);
     const currentOp = ops[currentOpIndex];
     const currentBand = BANDS[currentBandIndex];
 
     // Get current time limit for this band
     const currentTimeLimit = BAND_TIME_LIMITS[currentBandIndex];
     const timeRemaining = Math.max(0, currentTimeLimit / 1000 - timer);
+
+    const calculateFinalTiers = useCallback(async (finalResults: Record<MathOperation, TestResult[]>) => {
+        setIsSubmitting(true);
+
+        const newTiers: Record<string, number> = {};
+
+        ops.forEach(op => {
+            const opResults = finalResults[op];
+            if (!opResults.length) {
+                newTiers[op] = 10; // Default to Foundation tier
+                return;
+            }
+
+            // Calculate average performance
+            const correctCount = opResults.filter(r => r.correct).length;
+            const accuracy = correctCount / opResults.length;
+            const avgTime = opResults.reduce((sum, r) => sum + r.timeMs, 0) / opResults.length;
+
+            // Determine tier based on accuracy and speed
+            let tier = 10; // Foundation default
+
+            if (accuracy >= 0.8) {
+                // High accuracy - check speed
+                if (avgTime < SPEED_THRESHOLDS.fast) {
+                    tier = 90; // Master
+                } else if (avgTime < SPEED_THRESHOLDS.medium) {
+                    tier = 70; // Expert
+                } else if (avgTime < SPEED_THRESHOLDS.slow) {
+                    tier = 50; // Advanced
+                } else {
+                    tier = 30; // Intermediate
+                }
+            } else if (accuracy >= 0.6) {
+                // Medium accuracy
+                if (avgTime < SPEED_THRESHOLDS.medium) {
+                    tier = 50; // Advanced
+                } else {
+                    tier = 30; // Intermediate
+                }
+            } else if (accuracy >= 0.4) {
+                tier = 30; // Intermediate
+            } else {
+                tier = 10; // Foundation
+            }
+
+            newTiers[op] = tier;
+        });
+
+        // Update tiers in database
+        await updateTiers(newTiers);
+
+        // Complete test
+        onComplete();
+    }, [onComplete, ops]);
 
     // Timer effect
     useEffect(() => {
@@ -70,14 +125,7 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
         return () => clearInterval(interval);
     }, [questionStartTime]);
 
-    // Auto-fail if time runs out
-    useEffect(() => {
-        if (timer * 1000 >= currentTimeLimit && !showFeedback && currentProblem) {
-            handleTimeout();
-        }
-    }, [timer, currentTimeLimit, showFeedback, currentProblem]);
-
-    const handleTimeout = () => {
+    const handleTimeout = useCallback(() => {
         // Time ran out - count as incorrect
         const newResult: TestResult = {
             correct: false,
@@ -111,7 +159,14 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
                 }
             }
         }, 500);
-    };
+    }, [currentTimeLimit, currentBandIndex, currentOp, currentOpIndex, results, calculateFinalTiers]);
+
+    // Auto-fail if time runs out
+    useEffect(() => {
+        if (timer * 1000 >= currentTimeLimit && !showFeedback && currentProblem) {
+            handleTimeout();
+        }
+    }, [timer, currentTimeLimit, showFeedback, currentProblem, handleTimeout]);
 
     // Generate problem when operation or band changes
     useEffect(() => {
@@ -126,6 +181,7 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
     const submitAnswer = async () => {
         if (!inputValue || !currentProblem || showFeedback) return;
 
+         
         const timeMs = Date.now() - questionStartTime;
         const isCorrect = Math.abs(parseFloat(inputValue) - currentProblem.answer) < 0.01;
 
@@ -167,68 +223,6 @@ export function PlacementTest({ onComplete }: PlacementTestProps) {
                 }
             }
         }, 500);
-    };
-
-    const calculateFinalTiers = async (finalResults: Record<MathOperation, TestResult[]>) => {
-        setIsSubmitting(true);
-
-        const newTiers: Record<string, number> = {};
-
-        ops.forEach(op => {
-            const opResults = finalResults[op];
-
-            // Find highest band passed
-            let highestBandPassed = 0;
-            let avgSpeedInBand = 0;
-            let speedCount = 0;
-
-            for (let bandIdx = 0; bandIdx < opResults.length; bandIdx++) {
-                const result = opResults[bandIdx];
-                if (result.correct) {
-                    highestBandPassed = bandIdx + 1;
-                    avgSpeedInBand += result.timeMs;
-                    speedCount++;
-                } else {
-                    // Stop at first failure - can't skip ahead
-                    break;
-                }
-            }
-
-            if (speedCount > 0) {
-                avgSpeedInBand /= speedCount;
-            }
-
-            // Calculate final tier based on band and speed
-            if (highestBandPassed === 0) {
-                // Failed Foundation - start at tier 1
-                newTiers[op] = 1;
-            } else {
-                // Get band range
-                const band = BANDS[highestBandPassed - 1];
-                const [bandStart, bandEnd] = band.tierRange;
-
-                // Speed determines position within band
-                let tierWithinBand: number;
-                if (avgSpeedInBand < SPEED_THRESHOLDS.fast) {
-                    // Fast = upper third of band
-                    tierWithinBand = Math.round(bandStart + (bandEnd - bandStart) * 0.7);
-                } else if (avgSpeedInBand < SPEED_THRESHOLDS.medium) {
-                    // Medium = middle of band
-                    tierWithinBand = Math.round(bandStart + (bandEnd - bandStart) * 0.5);
-                } else if (avgSpeedInBand < SPEED_THRESHOLDS.slow) {
-                    // Slow = lower third of band
-                    tierWithinBand = Math.round(bandStart + (bandEnd - bandStart) * 0.3);
-                } else {
-                    // Very slow = start of band
-                    tierWithinBand = bandStart;
-                }
-
-                newTiers[op] = tierWithinBand;
-            }
-        });
-
-        await updateTiers(newTiers);
-        onComplete();
     };
 
     if (!currentProblem) {

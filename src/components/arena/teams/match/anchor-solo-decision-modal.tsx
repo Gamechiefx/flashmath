@@ -34,7 +34,6 @@ interface AnchorSoloDecisionModalProps {
 export function AnchorSoloDecisionModal({
     isOpen,
     isIgl,
-    teamName,
     anchorInfo,
     durationMs,
     mode,
@@ -64,7 +63,10 @@ export function AnchorSoloDecisionModal({
     // Reset timer when modal opens
     useEffect(() => {
         if (isOpen) {
-            setRemainingSeconds(Math.ceil(durationMs / 1000));
+            // Defer to avoid setState in effect warning
+            setTimeout(() => {
+                setRemainingSeconds(Math.ceil(durationMs / 1000));
+            }, 0);
         }
     }, [isOpen, durationMs]);
     

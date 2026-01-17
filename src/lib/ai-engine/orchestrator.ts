@@ -18,7 +18,6 @@ import {
     ContentItem,
     MathOperation,
     EchoQueueEntry,
-    QuestionCandidate,
     SelectionReason,
     PlacementDirective,
     CoachDirective,
@@ -26,6 +25,9 @@ import {
     HintPayload,
     AIEngineConfig,
     DEFAULT_AI_CONFIG,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
+    QuestionCandidate,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     AnswerSubmittedEvent,
 } from './types';
 
@@ -35,8 +37,6 @@ import {
     updateTelemetry,
     loadEchoQueue,
     persistLearnerModel,
-    tierToDifficulty,
-    difficultyToTier,
     updateSkillMastery,
 } from './state';
 
@@ -56,6 +56,7 @@ import {
 
 import {
     generateVariantFromProblem,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     selectNextRepresentation,
 } from './content-variants';
 
@@ -72,6 +73,7 @@ import {
     updateCoachState,
     buildCoachDirective,
     getHint,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     getAdjustedDifficulty,
     TiltState,
 } from './agents/coach-agent';
@@ -80,7 +82,9 @@ import {
     initializePlacementAgent,
     processPlacementAnswer,
     quickPlacement,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     shouldRunPlacementTest,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     generatePlacementItems,
     PlacementAgentState,
 } from './agents/placement-agent';
@@ -356,9 +360,9 @@ function selectNextItem(
     state: OrchestratorState,
     dueItems: EchoQueueEntry[],
     coachDirective: CoachDirective,
-    placementDirective: PlacementDirective
+    _placementDirective: PlacementDirective
 ): { item: ContentItem; reasonCodes: SelectionReason[] } {
-    const { operation, config } = state;
+    const { operation, config: _config } = state;
     const reasonCodes: SelectionReason[] = [];
 
     // Priority 1: Echo items that are due (must-serve)

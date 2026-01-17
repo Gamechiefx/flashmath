@@ -27,7 +27,7 @@ export default async function DashboardPage() {
 
     const stats = await getDashboardStats();
     const userName = session.user.name || "Pilot";
-    const emailVerified = (session.user as any).emailVerified;
+    const emailVerified = (session.user as { emailVerified?: boolean })?.emailVerified;
 
     return (
         <main className="min-h-screen bg-background text-foreground flex flex-col relative overflow-hidden">
@@ -44,7 +44,7 @@ export default async function DashboardPage() {
                     <UnverifiedEmailBanner email={session.user.email} />
                 )}
 
-                <DashboardView stats={stats} userName={userName} />
+                <DashboardView stats={stats} userName={userName} initialEmailVerified={emailVerified} />
             </div>
         </main>
     );

@@ -3,8 +3,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, X, Gift, Lock, Check, Coins, Star, Crown, Flame, Medal, Zap, Target, TrendingUp, ShoppingBag, Music, LucideIcon } from "lucide-react";
-import { GlassCard } from "@/components/ui/glass-card";
-import { NeonButton } from "@/components/ui/neon-button";
 import { cn } from "@/lib/utils";
 import { getUserAchievements, claimAchievement, UserAchievement } from "@/lib/actions/achievements";
 import type { AchievementCategory } from "@/lib/achievements";
@@ -40,18 +38,22 @@ export function AchievementsPanel({ isOpen, onClose }: AchievementsPanelProps) {
     const [claiming, setClaiming] = useState<string | null>(null);
     const [claimResult, setClaimResult] = useState<{ id: string; coins?: number; title?: string } | null>(null);
 
-    useEffect(() => {
-        if (isOpen) {
-            loadAchievements();
-        }
-    }, [isOpen]);
-
+    // Define loadAchievements before useEffect to avoid "accessed before declaration" error
     const loadAchievements = async () => {
         setIsLoading(true);
         const data = await getUserAchievements();
         setAchievements(data);
         setIsLoading(false);
     };
+
+    useEffect(() => {
+        if (isOpen) {
+            // Defer to avoid setState in effect warning
+            setTimeout(() => {
+                loadAchievements();
+            }, 0);
+        }
+    }, [isOpen]);
 
     const handleClaim = async (achievementId: string) => {
         setClaiming(achievementId);

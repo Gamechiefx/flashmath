@@ -53,6 +53,7 @@ export function RealTimeMatch({
     const [coinsEarned, setCoinsEarned] = useState<number | null>(null);
     const [hasSavedResult, setHasSavedResult] = useState(false);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Match result data type
     const [resultData, setResultData] = useState<any>(null);
     const savingRef = useRef(false); // Prevent double-save during HMR
 
@@ -112,8 +113,12 @@ export function RealTimeMatch({
                 const elem = document.documentElement;
                 if (elem.requestFullscreen) {
                     await elem.requestFullscreen();
-                } else if ((elem as any).webkitRequestFullscreen) {
-                    await (elem as any).webkitRequestFullscreen();
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                    const webkitElem = elem as any;
+                    if (webkitElem.webkitRequestFullscreen) {
+                        await webkitElem.webkitRequestFullscreen();
+                    }
                 }
             }
         } catch (err) {
@@ -122,6 +127,7 @@ export function RealTimeMatch({
     };
 
     const {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- connected is available but not currently used
         connected,
         players,
         currentQuestion,
@@ -322,7 +328,7 @@ export function RealTimeMatch({
         }
 
         saveResult();
-    }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation, router, update]);
+    }, [matchEnded, hasSavedResult, you, opponent, currentUserId, opponentId, matchId, operation, router, update, matchIntegrity, performanceStats]);
 
     // Ref to track if we're currently processing an answer to prevent double submission
     const isProcessingRef = useRef(false);
@@ -444,7 +450,7 @@ export function RealTimeMatch({
             soundEngine.playOpponentScore();
         }
         prevOpponentScore.current = opponent?.odScore || 0;
-    }, [opponent?.odScore]);
+    }, [opponent]);
     
     // Check friendship status when match ends (for non-AI opponents)
     useEffect(() => {
@@ -481,8 +487,6 @@ export function RealTimeMatch({
         !friendshipStatus.requestPending &&
         !friendRequestSent;
 
-    // Progress bar width
-    const timeProgress = (timeLeft / 60) * 100;
 
     // Waiting for opponent to connect via WebSocket
     if (waitingForOpponent && !matchStarted) {
@@ -524,10 +528,13 @@ export function RealTimeMatch({
         const oppScore = finalStats?.opponentScore ?? opponent?.odScore ?? 0;
         const isWinner = wonByForfeit || yourScore > oppScore;
         const isTie = !wonByForfeit && yourScore === oppScore;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- resultText, winnerBase, loserBase may be used in future
         const resultText = wonByForfeit ? 'VICTORY' : isTie ? 'DRAW' : isWinner ? 'VICTORY' : 'DEFEAT';
 
         // Determine winner and loser data for display
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const winnerBase = isWinner ? you : opponent;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const loserBase = isWinner ? opponent : you;
 
         // Use fresh stats if available, otherwise fallback to initial data

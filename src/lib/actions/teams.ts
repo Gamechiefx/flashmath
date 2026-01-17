@@ -85,7 +85,9 @@ export interface TeamLeaderboardEntry {
 }
 
 // Valid operations for ELO tracking
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used for type inference
 const VALID_OPERATIONS = ['addition', 'subtraction', 'multiplication', 'division'] as const;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used for type inference
 type Operation = typeof VALID_OPERATIONS[number];
 
 // =============================================================================
@@ -228,7 +230,22 @@ export async function getTeam(
         FROM teams t
         LEFT JOIN team_elo e ON e.team_id = t.id
         WHERE t.id = ?
-    `).get(teamId) as any;
+    `).get(teamId) as {
+        id: string;
+        name: string;
+        tag: string | null;
+        created_by: string;
+        created_at: string;
+        team_wins?: number;
+        team_losses?: number;
+        team_win_streak?: number;
+        team_best_win_streak?: number;
+        elo_5v5?: number;
+        elo_5v5_addition?: number;
+        elo_5v5_subtraction?: number;
+        elo_5v5_multiplication?: number;
+        elo_5v5_division?: number;
+    } | undefined;
 
     if (!team) {
         return null;
@@ -247,7 +264,21 @@ export async function getTeam(
         ORDER BY 
             CASE tm.role WHEN 'captain' THEN 0 WHEN 'igl' THEN 1 ELSE 2 END,
             tm.joined_at ASC
-    `).all(teamId) as any[];
+    `).all(teamId) as Array<{
+        id: string;
+        user_id: string;
+        role?: string;
+        primary_operation?: string | null;
+        joined_at?: string;
+        name: string;
+        level?: number;
+        equipped_items?: string | null;
+        arena_elo_5v5?: number;
+        arena_elo_5v5_addition?: number;
+        arena_elo_5v5_subtraction?: number;
+        arena_elo_5v5_multiplication?: number;
+        arena_elo_5v5_division?: number;
+    }>;
 
     const memberList: TeamMember[] = members.map(m => {
         const equipped = m.equipped_items ? JSON.parse(m.equipped_items) : {};
@@ -255,12 +286,12 @@ export async function getTeam(
             id: m.id,
             odUserId: m.user_id,
             odName: m.name,
-            odLevel: m.level,
+            odLevel: m.level || 1,
             odEquippedFrame: equipped.frame || null,
             odEquippedTitle: equipped.title || null,
-            role: m.role,
-            primaryOperation: m.primary_operation,
-            joinedAt: m.joined_at,
+            role: (m.role || 'member') as 'captain' | 'igl' | 'member',
+            primaryOperation: m.primary_operation ?? null,
+            joinedAt: m.joined_at || new Date().toISOString(),
             odElo5v5: m.arena_elo_5v5 || 300,
             odElo5v5Addition: m.arena_elo_5v5_addition || 300,
             odElo5v5Subtraction: m.arena_elo_5v5_subtraction || 300,
@@ -322,7 +353,22 @@ export async function getUserTeams(
         JOIN team_members tm ON tm.team_id = t.id
         WHERE tm.user_id = ?
         ORDER BY t.team_wins DESC
-    `).all(targetUserId) as any[];
+    `).all(targetUserId) as Array<{
+        id: string;
+        name: string;
+        tag: string | null;
+        created_by: string;
+        created_at: string;
+        team_wins?: number;
+        team_losses?: number;
+        team_win_streak?: number;
+        team_best_win_streak?: number;
+        elo_5v5?: number;
+        elo_5v5_addition?: number;
+        elo_5v5_subtraction?: number;
+        elo_5v5_multiplication?: number;
+        elo_5v5_division?: number;
+    }>;
 
     return teams.map(t => ({
         id: t.id,
@@ -433,7 +479,13 @@ export async function acceptTeamInvite(
     const invite = db.prepare(`
         SELECT id, team_id, invitee_id, expires_at, status
         FROM team_invites WHERE id = ?
-    `).get(inviteId) as any;
+    `).get(inviteId) as {
+        id: string;
+        team_id: string;
+        invitee_id: string;
+        expires_at: string;
+        status: string;
+    } | undefined;
 
     if (!invite) {
         return { error: 'Invite not found' };
@@ -490,9 +542,10 @@ export async function declineTeamInvite(
     const db = getDatabase();
     const userId = session.user.id;
 
-    const invite = db.prepare(`
+     
+    const invite = (db.prepare(`
         SELECT id, invitee_id, status FROM team_invites WHERE id = ?
-    `).get(inviteId) as any;
+    `).get(inviteId) as any); // eslint-disable-line @typescript-eslint/no-explicit-any -- Database query result
 
     if (!invite) {
         return { error: 'Invite not found' };
@@ -532,7 +585,17 @@ export async function getTeamInvites(): Promise<TeamInvite[]> {
         JOIN users u ON u.id = ti.inviter_id
         WHERE ti.invitee_id = ? AND ti.status = 'pending'
         ORDER BY ti.created_at DESC
-    `).all(session.user.id) as any[];
+    `).all(session.user.id) as Array<{
+        id: string;
+        team_id: string;
+        inviter_id: string;
+        created_at: string;
+        expires_at: string;
+        status: string;
+        team_name: string;
+        team_tag: string | null;
+        inviter_name: string;
+    }>;
 
     return invites.map(i => ({
         id: i.id,
@@ -541,7 +604,7 @@ export async function getTeamInvites(): Promise<TeamInvite[]> {
         teamTag: i.team_tag,
         inviterName: i.inviter_name,
         inviterId: i.inviter_id,
-        status: i.status,
+        status: i.status as 'pending' | 'accepted' | 'declined' | 'expired',
         createdAt: i.created_at,
         expiresAt: i.expires_at,
     }));
@@ -747,7 +810,13 @@ export async function getTeamElo(
             elo_5v5, elo_5v5_addition, elo_5v5_subtraction,
             elo_5v5_multiplication, elo_5v5_division
         FROM team_elo WHERE team_id = ?
-    `).get(teamId) as any;
+    `).get(teamId) as {
+        elo_5v5?: number;
+        elo_5v5_addition?: number;
+        elo_5v5_subtraction?: number;
+        elo_5v5_multiplication?: number;
+        elo_5v5_division?: number;
+    } | undefined;
 
     if (!elo) {
         return 300; // Default ELO
@@ -818,7 +887,8 @@ export async function updateTeamElo(
 /**
  * Calculate average ELO for a set of values
  */
-function calculateAverageElo(elos: Record<string, number>): number {
+ 
+function _calculateAverageElo(elos: Record<string, number>): number {
     const values = Object.values(elos).filter(v => v > 0);
     if (values.length === 0) return 300;
     return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
@@ -1118,7 +1188,22 @@ export async function searchTeams(
         WHERE t.name LIKE ? OR t.tag LIKE ?
         ORDER BY t.team_wins DESC
         LIMIT ?
-    `).all(searchQuery, searchQuery, limit) as any[];
+    `).all(searchQuery, searchQuery, limit) as Array<{
+        id: string;
+        name: string;
+        tag: string | null;
+        created_by: string;
+        created_at: string;
+        team_wins?: number;
+        team_losses?: number;
+        team_win_streak?: number;
+        team_best_win_streak?: number;
+        elo_5v5?: number;
+        elo_5v5_addition?: number;
+        elo_5v5_subtraction?: number;
+        elo_5v5_multiplication?: number;
+        elo_5v5_division?: number;
+    }>;
 
     return teams.map(t => ({
         id: t.id,

@@ -13,6 +13,8 @@
  * - Queue status sync across all clients
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Socket.IO event handlers use any types */
+
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useSession } from 'next-auth/react';
@@ -129,11 +131,18 @@ export function usePartySocket(options: UsePartySocketOptions = {}): UsePartySoc
     const sessionResult = useSession({ required: false });
     const session = sessionResult?.data;
     
-    const effectiveUserId = propsUserId || (session?.user as any)?.id;
-    const effectiveUserName = propsUserName || (session?.user as any)?.name || 'Unknown';
-    const effectiveLevel = (session?.user as any)?.level || 1;
-    const effectiveFrame = (session?.user as any)?.equippedFrame || null;
-    const effectiveTitle = (session?.user as any)?.equippedTitle || null;
+    interface ExtendedUser {
+        id?: string;
+        name?: string;
+        level?: number;
+        equippedFrame?: string | null;
+        equippedTitle?: string | null;
+    }
+    const effectiveUserId = propsUserId || (session?.user as ExtendedUser)?.id;
+    const effectiveUserName = propsUserName || (session?.user as ExtendedUser)?.name || 'Unknown';
+    const effectiveLevel = (session?.user as ExtendedUser)?.level || 1;
+    const effectiveFrame = (session?.user as ExtendedUser)?.equippedFrame || null;
+    const effectiveTitle = (session?.user as ExtendedUser)?.equippedTitle || null;
     
     // State
     const [isConnected, setIsConnected] = useState(false);
@@ -293,7 +302,7 @@ export function usePartySocket(options: UsePartySocketOptions = {}): UsePartySoc
                     ...prev,
                     queueState: {
                         ...prev.queueState,
-                        status: data.queueStatus as any,
+                        status: data.queueStatus as 'idle' | 'finding_teammates' | 'finding_opponents' | 'match_found',
                         startedAt: data.queueStatus !== 'idle' ? Date.now() : null,
                     },
                 };
@@ -393,7 +402,7 @@ export function usePartySocket(options: UsePartySocketOptions = {}): UsePartySoc
             socket.off('party:member_offline', handleMemberOffline);
             socket.off('party:invite_received', handleInviteReceived);
         };
-    }, [autoConnect, effectiveUserId, effectiveUserName]);
+    }, [autoConnect, effectiveUserId, effectiveUserName, party?.party?.id]);
     
     // ==========================================================================
     // ACTIONS

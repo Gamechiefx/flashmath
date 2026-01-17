@@ -1,23 +1,23 @@
 "use server";
 
 import { auth } from "@/auth";
-import { execute, queryOne, loadData, getDatabase, generateId, now } from "@/lib/db";
-import { Item, ITEMS } from "@/lib/items";
+import { execute, queryOne, getDatabase, generateId, now, type UserRow } from "@/lib/db";
+import { ITEMS } from "@/lib/items";
 import { revalidatePath } from "next/cache";
 
 export async function purchaseItem(itemId: string) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return { error: "User not found" };
 
     const item = ITEMS.find(i => i.id === itemId);
     if (!item) return { error: "Item not found" };
 
     // Check funds
-    if (user.coins < item.price) {
+    if ((user.coins || 0) < item.price) {
         return { error: "Insufficient funds" };
     }
 
@@ -27,7 +27,7 @@ export async function purchaseItem(itemId: string) {
     if (existingInventory) return { error: "Item already owned" };
 
     // Deduct coins
-    execute("UPDATE users SET coins = ? WHERE id = ?", [user.coins - item.price, userId]);
+    execute("UPDATE users SET coins = ? WHERE id = ?", [(user.coins || 0) - item.price, userId]);
 
     // Add to inventory using SQLite
     db.prepare(`
@@ -45,9 +45,9 @@ export async function purchaseItem(itemId: string) {
 export async function equipItem(type: string, itemId: string) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return { error: "User not found" };
 
     // Verify ownership using SQLite
@@ -60,7 +60,16 @@ export async function equipItem(type: string, itemId: string) {
     }
 
     // Update equipped_items
-    const currentEquipped = user.equipped_items || {};
+    let currentEquipped: Record<string, string> = {};
+    if (user.equipped_items) {
+        try {
+            currentEquipped = typeof user.equipped_items === 'string' 
+                ? JSON.parse(user.equipped_items) 
+                : user.equipped_items;
+        } catch {
+            currentEquipped = {};
+        }
+    }
     let targetItemId = itemId;
 
     // Toggle logic: if already equipped, unequip (set to default)
@@ -84,7 +93,7 @@ export async function getInventory() {
     const session = await auth();
     if (!session?.user) return [];
 
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
     const db = getDatabase();
 
     const inventory = db.prepare('SELECT item_id FROM inventory WHERE user_id = ?').all(userId) as { item_id: string }[];

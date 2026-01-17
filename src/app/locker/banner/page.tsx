@@ -1,5 +1,5 @@
 import { auth } from "@/auth";
-import { queryOne, loadData, getDatabase } from "@/lib/db";
+import { queryOne, loadData, getDatabase, type UserRow } from "@/lib/db";
 import { AuthHeader } from "@/components/auth-header";
 import { BannerEditorClient } from "@/components/locker/banner-editor-client";
 import { NeonButton } from "@/components/ui/neon-button";
@@ -12,8 +12,8 @@ export default async function BannerEditorPage() {
         return <div className="min-h-screen bg-background flex items-center justify-center text-foreground">Please log in</div>;
     }
 
-    const userId = (session.user as any).id;
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const userId = (session.user as { id: string }).id;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
 
     if (!user) {
         return <div className="min-h-screen bg-background flex items-center justify-center text-foreground">User not found</div>;
@@ -41,9 +41,14 @@ export default async function BannerEditorPage() {
     let titleDisplay = 'FlashMath Competitor';
     if (equippedTitleId !== 'default') {
         const data = loadData();
-        const titleItem = (data.shop_items as any[])?.find(i => i.id === equippedTitleId);
+        interface ShopItem {
+            id: string;
+            asset_value?: string;
+            name?: string;
+        }
+        const titleItem = (data.shop_items as ShopItem[])?.find((i: ShopItem) => i.id === equippedTitleId);
         if (titleItem) {
-            titleDisplay = titleItem.asset_value || titleItem.name;
+            titleDisplay = titleItem.asset_value || titleItem.name || 'FlashMath Competitor';
         }
     }
 

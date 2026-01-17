@@ -25,6 +25,9 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
+# Skip database initialization during build to avoid lock contention
+# from multiple Next.js worker processes
+ENV SKIP_DB_INIT=true
 
 # Build Next.js with BuildKit cache for .next/cache
 RUN --mount=type=cache,target=/app/.next/cache \
@@ -34,7 +37,8 @@ RUN --mount=type=cache,target=/app/.next/cache \
 FROM base AS runner
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat
+# Install runtime dependencies including netcat for entrypoint health checks
+RUN apk add --no-cache libc6-compat netcat-openbsd
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -57,6 +61,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
 # Copy ALL node_modules for server.js dependencies (socket.io, ioredis, pg, etc.)
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 
+# Copy migration scripts and SQL files
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/migrate.js ./scripts/migrate.js
+COPY --from=builder --chown=nextjs:nodejs /app/src/lib/db/migrations ./src/lib/db/migrations
+
 # Create data directory for SQLite database
 RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 
@@ -67,4 +75,6 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+# Run migrations before starting the server
+# --skip-if-exists ensures safe deployment even on existing databases
+CMD ["sh", "-c", "node scripts/migrate.js --skip-if-exists && node server.js"]

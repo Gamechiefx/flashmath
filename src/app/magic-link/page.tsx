@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
@@ -9,7 +8,6 @@ import { requestMagicLink } from "@/lib/actions/auth";
 import { Sparkles, ArrowLeft, CheckCircle, Mail } from "lucide-react";
 
 export default function MagicLinkPage() {
-    const router = useRouter();
     const [email, setEmail] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -47,7 +45,7 @@ export default function MagicLinkPage() {
                         <h1 className="text-2xl font-bold text-white mb-2">Check Your Email</h1>
                         <p className="text-muted-foreground mb-6">
                             If an account exists with <span className="text-white">{email}</span>,
-                            you'll receive a magic link to sign in.
+                            you&apos;ll receive a magic link to sign in.
                         </p>
                         <p className="text-sm text-muted-foreground mb-6">
                             The link expires in 15 minutes.
@@ -72,7 +70,7 @@ export default function MagicLinkPage() {
                             </div>
                             <h1 className="text-2xl font-bold text-white mb-2">Magic Link Login</h1>
                             <p className="text-muted-foreground">
-                                Enter your email and we'll send you a link to sign in instantly. No password needed!
+                                Enter your email and we&apos;ll send you a link to sign in instantly. No password needed!
                             </p>
                         </div>
 

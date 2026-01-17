@@ -1,10 +1,10 @@
 "use server";
 
-import { execute, loadData, saveData, queryOne } from "@/lib/db";
+import { execute, queryOne, type UserRow } from "@/lib/db";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { syncLeagueState } from "@/lib/league-engine";
-import { generateProblemForSession, checkProgression, MathOperation, generateMasteryTest } from "@/lib/math-tiers";
+import { generateProblemForSession, MathOperation, generateMasteryTest } from "@/lib/math-tiers";
 import { MAX_TIER, isAtBandBoundary, getBandForTier, checkMilestoneReward, isMasteryTestAvailable } from "@/lib/tier-system";
 
 export async function getNextProblems(operation: string, count: number = 20) {
@@ -14,11 +14,19 @@ export async function getNextProblems(operation: string, count: number = 20) {
     let currentTier = 1;
 
     if (session?.user) {
-        const userId = (session.user as any).id;
-        const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+        const userId = (session.user as { id: string }).id;
+        const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
 
         if (user && user.math_tiers) {
-            currentTier = (user.math_tiers as any)[operation.toLowerCase()] || 1;
+            let mathTiers: Record<string, number> = {};
+            try {
+                mathTiers = typeof user.math_tiers === 'string' 
+                    ? JSON.parse(user.math_tiers) 
+                    : user.math_tiers;
+            } catch {
+                mathTiers = {};
+            }
+            currentTier = mathTiers[operation.toLowerCase()] || 1;
         }
     }
 
@@ -36,13 +44,22 @@ export async function getNextProblems(operation: string, count: number = 20) {
 export async function updateTiers(newTiers: Record<string, number>) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return { error: "User not found" };
 
     // Merge provided tiers with existing
-    const currentTiers = user.math_tiers || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    let currentTiers: Record<string, number> = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+    if (user?.math_tiers) {
+        try {
+            currentTiers = typeof user.math_tiers === 'string' 
+                ? JSON.parse(user.math_tiers) 
+                : user.math_tiers;
+        } catch {
+            currentTiers = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+        }
+    }
     const updated = { ...currentTiers, ...newTiers };
 
     // In a real DB we'd use a proper update. Here we hack the JSON object via execute helper or direct
@@ -54,13 +71,20 @@ export async function updateTiers(newTiers: Record<string, number>) {
     return { success: true };
 }
 
-export async function saveSession(sessionData: any) {
+export async function saveSession(sessionData: {
+    operation: string;
+    correctCount: number;
+    totalCount: number;
+    avgSpeed: number;
+    xpGained?: number | string;
+    maxStreak?: number;
+}) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
 
     const { operation, correctCount, totalCount, avgSpeed, xpGained: rawXpGained, maxStreak = 0 } = sessionData;
     const xpGained = Number(rawXpGained) || 0;
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     console.log(`[SAVE_SESSION] User: ${userId}, XP: ${xpGained}, Op: ${operation}`);
 
@@ -72,7 +96,7 @@ export async function saveSession(sessionData: any) {
     // 🏆 LEAGUE & LEVELING SYSTEM
     await syncLeagueState(); // Process any time-based resets
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (user) {
         const currentTotalXp = Number(user.total_xp) || 0;
         const newTotalXp = currentTotalXp + xpGained;
@@ -98,22 +122,22 @@ export async function saveSession(sessionData: any) {
         // Only award skill points if at least 10 questions were answered
         if (totalCount >= 10) {
             const netSkillPoints = correctCount - (totalCount - correctCount); // = 2*correct - total
-            const opLower = operation.toLowerCase();
+            const opLower = operation.toLowerCase() as 'addition' | 'subtraction' | 'multiplication' | 'division';
 
-            let skillPoints = user.skill_points;
-            if (typeof skillPoints === 'string') {
-                try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+            type SkillPointsType = { addition: number; subtraction: number; multiplication: number; division: number };
+            let parsedSkillPoints: SkillPointsType = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+            if (typeof user.skill_points === 'string') {
+                try { parsedSkillPoints = JSON.parse(user.skill_points) as SkillPointsType; } catch { /* keep default */ }
             }
-            skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
 
             // Update points for this operation (can go negative, min 0)
-            skillPoints[opLower] = Math.max(0, (skillPoints[opLower] || 0) + netSkillPoints);
+            parsedSkillPoints[opLower] = Math.max(0, (parsedSkillPoints[opLower] || 0) + netSkillPoints);
 
-            console.log(`[SAVE_SESSION] Skill points for ${opLower}: ${netSkillPoints} net, new total: ${skillPoints[opLower]}`);
+            console.log(`[SAVE_SESSION] Skill points for ${opLower}: ${netSkillPoints} net, new total: ${parsedSkillPoints[opLower]}`);
 
             execute(
                 "UPDATE users SET skill_points = ? WHERE id = ?",
-                [JSON.stringify(skillPoints), userId]
+                [JSON.stringify(parsedSkillPoints), userId]
             );
         } else {
             console.log(`[SAVE_SESSION] Skipping skill points - only ${totalCount} questions (need 10+)`);
@@ -130,10 +154,11 @@ export async function saveSession(sessionData: any) {
     return { success: true };
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Stats array from database
 export async function updateMastery(stats: any[]) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
     const { getDatabase, generateId, now } = await import("@/lib/db");
     const db = getDatabase();
@@ -185,10 +210,18 @@ export async function updateMastery(stats: any[]) {
 export async function getMasteryTestProblems(operation: string) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
-    const currentTier = user?.math_tiers?.[operation.toLowerCase()] || 1;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
+    
+    // Parse math_tiers
+    type MathTiersType = { addition: number; subtraction: number; multiplication: number; division: number };
+    let mathTiers: MathTiersType = { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
+    if (typeof user?.math_tiers === 'string') {
+        try { mathTiers = JSON.parse(user.math_tiers) as MathTiersType; } catch { /* keep default */ }
+    }
+    const opKey = operation.toLowerCase() as keyof MathTiersType;
+    const currentTier = mathTiers[opKey] || 1;
 
     // Already at max tier
     if (currentTier >= MAX_TIER) {
@@ -228,13 +261,18 @@ export async function getMasteryTestProblems(operation: string) {
 export async function completeMasteryTest(operation: string, correctCount: number, totalCount: number) {
     const session = await auth();
     if (!session?.user) return { error: "Unauthorized" };
-    const userId = (session.user as any).id;
+    const userId = (session.user as { id: string }).id;
 
-    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as any;
+    const user = queryOne("SELECT * FROM users WHERE id = ?", [userId]) as UserRow | null;
     if (!user) return { error: "User not found" };
 
-    const currentTiers = user.math_tiers || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
-    const opKey = operation.toLowerCase();
+    // Parse math_tiers from JSON
+    type TiersType = { addition: number; subtraction: number; multiplication: number; division: number };
+    let currentTiers: TiersType = { addition: 1, subtraction: 1, multiplication: 1, division: 1 };
+    if (typeof user.math_tiers === 'string') {
+        try { currentTiers = JSON.parse(user.math_tiers) as TiersType; } catch { /* keep default */ }
+    }
+    const opKey = operation.toLowerCase() as keyof TiersType;
     const currentTier = currentTiers[opKey] || 1;
 
     const accuracy = totalCount > 0 ? (correctCount / totalCount) * 100 : 0;
@@ -256,8 +294,8 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
         }
 
         // Update tier
-        const updated = { ...currentTiers, [opKey]: newTier };
-        execute("UPDATE users SET math_tiers = ? WHERE id = ?", [updated, userId]);
+        const updated: TiersType = { ...currentTiers, [opKey]: newTier };
+        execute("UPDATE users SET math_tiers = ? WHERE id = ?", [JSON.stringify(updated), userId]);
 
         // Check for milestone rewards
         const milestone = checkMilestoneReward(currentTier, newTier);
@@ -265,8 +303,8 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
         let xpAwarded = 0;
 
         if (milestone) {
-            coinsAwarded = milestone.coins;
-            xpAwarded = milestone.xp;
+            coinsAwarded = milestone.reward?.coins ?? 0;
+            xpAwarded = milestone.reward?.xp ?? 0;
 
             // Award coins and XP
             const currentCoins = Number(user.coins) || 0;
@@ -279,13 +317,12 @@ export async function completeMasteryTest(operation: string, correctCount: numbe
 
         // Reset skill points only at band boundaries
         if (isBandBoundary) {
-            let skillPoints = user.skill_points;
-            if (typeof skillPoints === 'string') {
-                try { skillPoints = JSON.parse(skillPoints); } catch { skillPoints = null; }
+            let parsedSkillPoints: TiersType = { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
+            if (typeof user.skill_points === 'string') {
+                try { parsedSkillPoints = JSON.parse(user.skill_points) as TiersType; } catch { /* keep default */ }
             }
-            skillPoints = skillPoints || { addition: 0, subtraction: 0, multiplication: 0, division: 0 };
-            skillPoints[opKey] = 0;
-            execute("UPDATE users SET skill_points = ? WHERE id = ?", [JSON.stringify(skillPoints), userId]);
+            parsedSkillPoints[opKey] = 0;
+            execute("UPDATE users SET skill_points = ? WHERE id = ?", [JSON.stringify(parsedSkillPoints), userId]);
 
             // Clear mastery stats for this operation at band boundaries
             const { getDatabase } = await import("@/lib/db");

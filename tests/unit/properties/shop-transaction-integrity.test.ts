@@ -120,7 +120,7 @@ describe('Property 8: Shop Transaction Integrity', () => {
             // Select multiple items for purchase simulation
             const items = getRandomItems(3).filter(item => item.price <= initialCoins);
             let expectedCoins = initialCoins;
-            let expectedInventory: string[] = [];
+            const expectedInventory: string[] = [];
 
             items.forEach(item => {
                 const result = simulateShopTransaction({

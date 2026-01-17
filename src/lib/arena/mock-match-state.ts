@@ -534,7 +534,7 @@ export class MockMatchSimulator {
     return orderedSlots;
   }
   
-  submitAnswer(answer: string): { correct: boolean; points: number; newStreak: number } {
+  submitAnswer(_answer: string): { correct: boolean; points: number; newStreak: number } {
     const correct = Math.random() > 0.25;
     const points = correct ? Math.floor(Math.random() * 120) + 40 : 0;
     

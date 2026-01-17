@@ -19,7 +19,7 @@ import {
     IGLFAB,
     TeamPlayerCard,
     VSScreenBackground,
-    BANNER_STYLES
+    BANNER_STYLES,
 } from '@/components/arena/teams';
 import {
     HalftimePanel,
@@ -486,7 +486,7 @@ export function TeamMatchClient({
     
     // Points feed state for real-time scoring events
     const [pointsEvents, setPointsEvents] = useState<PointsEvent[]>([]);
-    
+
     // Quit vote state
     const [quitVote, setQuitVote] = useState<{
         active: boolean;
@@ -512,13 +512,15 @@ export function TeamMatchClient({
     const [doubleAnchorForRound, setDoubleAnchorForRound] = useState<number | null>(null); // Which round it applies to
     const [doubleAnchorBenchedPlayer, setDoubleAnchorBenchedPlayer] = useState<string | null>(null); // Who is benched
     const [doubleAnchorPlayerName, setDoubleAnchorPlayerName] = useState<string | null>(null); // Anchor player name
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- doubleAnchorTeamId is set but not currently used
     const [doubleAnchorTeamId, setDoubleAnchorTeamId] = useState<string | null>(null); // Which team has it active
     
     // For OPPONENT team - so we can show their Double Anchor status
     const [opponentDoubleAnchorSlot, setOpponentDoubleAnchorSlot] = useState<string | null>(null);
     const [opponentDoubleAnchorForRound, setOpponentDoubleAnchorForRound] = useState<number | null>(null);
     const [opponentDoubleAnchorPlayerName, setOpponentDoubleAnchorPlayerName] = useState<string | null>(null);
-    const [opponentDoubleAnchorBenchedPlayer, setOpponentDoubleAnchorBenchedPlayer] = useState<string | null>(null);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- opponentDoubleAnchorBenchedPlayer is set but not currently used
+    const [opponentDoubleAnchorBenchedPlayer, setOpponentDoubleAnchorBenchedPlayer] = useState<string | null>(null); // Who is benched
     const [phaseInitialDuration, setPhaseInitialDuration] = useState(0); // Initial duration when phase starts
     const lastPhaseRef = useRef<string | null>(null);
     
@@ -674,7 +676,8 @@ export function TeamMatchClient({
         }
     }, [isDemoMode, matchState, matchId, currentUserId, usedDoubleCallinHalf1, usedDoubleCallinHalf2]);
 
-    // Handle Anchor Solo (final round ability)
+    // Handle Anchor Solo (final round ability) - currently unused but kept for future use
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const handleAnchorSolo = useCallback(() => {
         if (!socketRef.current?.connected || usedAnchorSolo) return;
         console.log('[TeamMatch] Activating Anchor Solo');
@@ -803,7 +806,6 @@ export function TeamMatchClient({
             // Demo Mode: Use MockMatchSimulator instead of Socket.io
             console.log('[TeamMatch] Demo mode enabled - using MockMatchSimulator');
             mockSimulatorRef.current = new MockMatchSimulator();
-            // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: initializing demo mode state
             setConnected(true);
             
             // Convert mock state to match state format
@@ -2238,6 +2240,7 @@ export function TeamMatchClient({
             socket.disconnect();
             soundEngine.stopAllPhaseMusic(0); // Stop all phase music immediately on unmount
         };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- effectivePartyId, isDemoMode, myTeam, opponentTeam are derived values that don't need to be in deps
     }, [matchId, currentUserId, router]);
 
     // Quit vote timer countdown
@@ -2279,7 +2282,6 @@ export function TeamMatchClient({
             if (matchState.phase === 'break' || matchState.phase === 'halftime' || 
                 matchState.phase === 'strategy' || matchState.phase === 'pre_match' ||
                 matchState.phase === 'round_countdown') {
-                // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: syncing with server state
                 setPhaseInitialDuration(matchState.relayClockMs || 0);
             }
             
@@ -2320,7 +2322,6 @@ export function TeamMatchClient({
             // This is non-blocking - the QuestionAnswerCard shows immediately
             if (isIncomingCurrentUser) {
                 soundEngine.playYourTurn();
-                // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional: responding to slot change
                 setYourTurnStarting(true);
                 // Short notification duration - doesn't block input
                 setTimeout(() => setYourTurnStarting(false), 1500);
@@ -2332,6 +2333,7 @@ export function TeamMatchClient({
         }
         
         previousSlotRef.current = currentSlot;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- matchState is intentionally not in deps to avoid re-running on every state change
     }, [matchState?.phase, myTeam?.currentSlot, myTeam, currentUserId]);
 
 
@@ -3592,7 +3594,7 @@ export function TeamMatchClient({
                                 </div>
 
                                 {/* Relay Track with Full Banner Cards */}
-                                <div className="flex-1 flex items-stretch gap-3">
+                                <div className="flex-1 flex items-stretch gap-5">
                                     {sortSlotAssignments(myTeam.slotAssignments, matchOperationsOrder)
                                         .map(([op, odUserId], idx) => {
                                         const player = myTeam.players[odUserId];
@@ -3953,7 +3955,7 @@ export function TeamMatchClient({
                                 </div>
 
                                 {/* Relay Track with Full Banner Cards */}
-                                <div className="flex-1 flex items-stretch gap-3">
+                                <div className="flex-1 flex items-stretch gap-5">
                                     {sortSlotAssignments(opponentTeam.slotAssignments, matchOperationsOrder)
                                         .map(([op, odUserId], idx) => {
                                         const player = opponentTeam.players[odUserId];

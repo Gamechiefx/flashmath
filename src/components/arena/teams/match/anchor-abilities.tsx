@@ -8,7 +8,7 @@
  * - Final Round Solo: Play all 5 slots in the final round
  */
 
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Anchor, Zap, Shield, AlertTriangle } from 'lucide-react';
 
@@ -79,7 +79,7 @@ export function AnchorAbilities({
 
                     {canUseDoubleCallin && (
                         <div className="grid grid-cols-5 gap-1">
-                            {availableSlots.map(({ slot, operation }) => (
+                            {availableSlots.map(({ slot }) => (
                                 <button
                                     key={slot}
                                     onClick={() => onDoubleCallin(slot)}

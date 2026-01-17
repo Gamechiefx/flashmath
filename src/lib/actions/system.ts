@@ -32,7 +32,7 @@ function ensureSystemSettingsTable() {
 export async function getSystemSetting(key: string): Promise<string | null> {
     ensureSystemSettingsTable();
     const db = getDatabase();
-    const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key) as any;
+    const row = db.prepare('SELECT value FROM system_settings WHERE key = ?').get(key) as { value: string } | undefined;
     return row?.value ?? null;
 }
 
@@ -42,7 +42,7 @@ export async function getSystemSetting(key: string): Promise<string | null> {
 export async function getAllSystemSettings(): Promise<Record<string, string>> {
     ensureSystemSettingsTable();
     const db = getDatabase();
-    const rows = db.prepare('SELECT key, value FROM system_settings').all() as any[];
+    const rows = db.prepare('SELECT key, value FROM system_settings').all() as Array<{ key: string; value: string }>;
     const settings: Record<string, string> = {};
     for (const row of rows) {
         settings[row.key] = row.value;
@@ -60,8 +60,8 @@ export async function updateSystemSetting(key: string, value: string): Promise<{
     }
 
     const db = getDatabase();
-    const userId = (session.user as any).id;
-    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?').get(userId) as any;
+    const userId = (session.user as { id: string }).id;
+    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?').get(userId) as { role?: string | null; is_admin?: number } | undefined;
 
     if (!user) {
         return { success: false, error: "User not found" };
@@ -110,8 +110,8 @@ export async function canBypassMaintenance(): Promise<boolean> {
     if (!session?.user) return false;
 
     const db = getDatabase();
-    const userId = (session.user as any).id;
-    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?').get(userId) as any;
+    const userId = (session.user as { id: string }).id;
+    const user = db.prepare('SELECT role, is_admin FROM users WHERE id = ?').get(userId) as { role?: string | null; is_admin?: number } | undefined;
 
     if (!user) return false;
 

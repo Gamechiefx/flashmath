@@ -32,9 +32,16 @@ export function initializeLearnerModel(
     const db = getDatabase();
 
     // Load existing skill mastery from DB
+    interface SkillMasteryRow {
+        skill_id: string;
+        mastery_prob?: number;
+        uncertainty?: number;
+        error_signatures?: string;
+        last_seen_at?: string;
+    }
     const skillRows = db.prepare(`
     SELECT * FROM skill_mastery WHERE user_id = ?
-  `).all(userId) as any[];
+  `).all(userId) as SkillMasteryRow[];
 
     const skills = new Map<string, SkillMastery>();
 
@@ -101,7 +108,7 @@ export function updateSkillMastery(
     skillId: string,
     isCorrect: boolean,
     latencyMs: number,
-    config: AIEngineConfig = DEFAULT_AI_CONFIG
+    _config: AIEngineConfig = DEFAULT_AI_CONFIG
 ): void {
     const skill = getSkillMastery(model, skillId);
 
@@ -215,7 +222,7 @@ export function persistLearnerModel(model: LearnerModel): void {
 export function createSessionTelemetry(
     sessionId: string,
     userId: string,
-    config: AIEngineConfig = DEFAULT_AI_CONFIG
+    _config: AIEngineConfig = DEFAULT_AI_CONFIG
 ): SessionTelemetry {
     return {
         sessionId,
@@ -307,24 +314,36 @@ export function getLatencyTrendRatio(telemetry: SessionTelemetry): number {
 export function loadEchoQueue(userId: string): EchoQueueEntry[] {
     const db = getDatabase();
 
+    interface EchoQueueRow {
+        id: string;
+        skill_id: string;
+        concept_id?: string;
+        priority?: number;
+        due_after_n?: number;
+        max_attempts?: number;
+        attempts?: number;
+        variant_policy?: string;
+        created_at: string;
+        status: 'scheduled' | 'due';
+    }
     const rows = db.prepare(`
     SELECT * FROM echo_queue 
     WHERE user_id = ? AND status IN ('scheduled', 'due')
     ORDER BY priority DESC, created_at ASC
-  `).all(userId) as any[];
+  `).all(userId) as EchoQueueRow[];
 
     return rows.map(row => ({
         id: row.id,
         skillId: row.skill_id,
-        conceptId: row.concept_id,
-        priority: row.priority,
-        insertAfterN: row.due_after_n,
-        questionsUntilDue: row.due_after_n,  // Will be updated
-        maxAttempts: row.max_attempts,
-        attempts: row.attempts,
-        usedRepresentations: row.variant_policy ? [row.variant_policy] : ['direct'],
-        nextRepresentation: row.variant_policy || 'direct',
-        status: row.status,
+        conceptId: row.concept_id || row.skill_id,
+        priority: row.priority || 1,
+        insertAfterN: row.due_after_n || 0,
+        questionsUntilDue: row.due_after_n || 0,  // Will be updated
+        maxAttempts: row.max_attempts || 3,
+        attempts: row.attempts || 0,
+        usedRepresentations: row.variant_policy ? [row.variant_policy as 'direct'] : ['direct'],
+        nextRepresentation: (row.variant_policy || 'direct') as 'direct',
+        status: row.status as 'scheduled' | 'due',
         createdAt: new Date(row.created_at).getTime(),
         lastAttemptAt: undefined,
     }));

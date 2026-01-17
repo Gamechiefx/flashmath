@@ -88,6 +88,7 @@ class SoundEngine {
 
     private init() {
         if (!this.ctx) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         if (this.ctx.state === 'suspended') {
@@ -99,14 +100,15 @@ class SoundEngine {
     // Use this when enabling sound from a user gesture to ensure context is ready
     private async initAsync(): Promise<boolean> {
         if (!this.ctx) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
             this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         if (this.ctx.state === 'suspended') {
             try {
                 await this.ctx.resume();
                 return true;
-            } catch (e) {
-                console.error('[SoundEngine] Failed to resume AudioContext:', e);
+            } catch (resumeError) {
+                console.error('[SoundEngine] Failed to resume AudioContext:', resumeError);
                 return false;
             }
         }
@@ -237,8 +239,8 @@ class SoundEngine {
 
                 this.audioCache.set(path, audioBuffer);
                 return audioBuffer;
-            } catch (e) {
-                console.warn(`[SoundEngine] Failed to load sound: ${path}`, e);
+            } catch (loadError) {
+                console.warn(`[SoundEngine] Failed to load sound: ${path}`, loadError);
                 return null;
             } finally {
                 this.loadingPromises.delete(path);
@@ -1240,7 +1242,7 @@ class SoundEngine {
 
         // Rising power chord
         const freqs = this.is8BitPack() ? [262, 330, 392, 523] : [196, 262, 330, 392]; // Lower, more powerful
-        freqs.forEach((freq, i) => {
+        freqs.forEach((freq, _i) => {
             const osc = this.ctx!.createOscillator();
             const gain = this.ctx!.createGain();
 
@@ -1347,8 +1349,8 @@ class SoundEngine {
                     this.strategyGain = null;
                 }
             };
-        } catch (e) {
-            console.error('[SoundEngine] Failed to play strategy music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play strategy music:', playError);
             this.strategyLoading = false;
         }
     }
@@ -1381,7 +1383,7 @@ class SoundEngine {
             setTimeout(() => {
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1478,8 +1480,8 @@ class SoundEngine {
                     this.matchGain = null;
                 }
             };
-        } catch (e) {
-            console.error('[SoundEngine] Failed to play match music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play match music:', playError);
             this.matchLoading = false;
         }
     }
@@ -1510,7 +1512,7 @@ class SoundEngine {
             setTimeout(() => {
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1594,8 +1596,8 @@ class SoundEngine {
                     this.halftimeGain = null;
                 }
             };
-        } catch (e) {
-            console.error('[SoundEngine] Failed to play halftime music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play halftime music:', playError);
             this.halftimeLoading = false;
         }
     }
@@ -1622,7 +1624,7 @@ class SoundEngine {
             setTimeout(() => {
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1713,8 +1715,8 @@ class SoundEngine {
                     this.queueGain = null;
                 }
             };
-        } catch (e) {
-            console.error('[SoundEngine] Failed to play queue music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play queue music:', playError);
             this.queueLoading = false;
         }
     }
@@ -1741,7 +1743,7 @@ class SoundEngine {
             setTimeout(() => {
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1868,8 +1870,8 @@ class SoundEngine {
             };
 
             return analyser;
-        } catch (e) {
-            console.error('[SoundEngine] Failed to play arena entrance music:', e);
+        } catch (playError) {
+            console.error('[SoundEngine] Failed to play arena entrance music:', playError);
             this.arenaEntranceLoading = false;
             return null;
         }
@@ -1928,7 +1930,7 @@ class SoundEngine {
                 this.arenaEntranceFadingOut = false;
                 try {
                     sourceToStop.stop();
-                } catch (e) {
+                } catch (_e) {
                     // Already stopped
                 }
             }, fadeOutMs);
@@ -1970,8 +1972,8 @@ class SoundEngine {
 
             this.bgmSource = source;
             this.bgmGain = gain;
-        } catch (e) {
-            console.error('Failed to play BGM:', e);
+        } catch (playError) {
+            console.error('Failed to play BGM:', playError);
         }
     }
 

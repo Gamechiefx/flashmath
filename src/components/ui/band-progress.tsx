@@ -24,7 +24,7 @@ interface BandProgressProps {
 
 export function BandProgress({
     tier,
-    operation,
+    operation: _operation,
     showMilestones = false,
     showTestAvailable = true,
     animated = true,
@@ -110,7 +110,7 @@ interface BandOverviewProps {
     className?: string;
 }
 
-export function BandOverview({ currentTier, operation, className }: BandOverviewProps) {
+export function BandOverview({ currentTier, operation: _operation, className }: BandOverviewProps) {
     const currentBand = getBandForTier(currentTier);
 
     return (
@@ -160,19 +160,20 @@ interface TierProgressCardProps {
 export function TierProgressCard({
     operation,
     tier,
-    skillPoints = 0,
+    skillPoints: _skillPoints = 0,
     className,
 }: TierProgressCardProps) {
     const band = getBandForTier(tier);
     const tierInBand = getTierWithinBand(tier);
     const testAvailable = isMasteryTestAvailable(tier);
 
-    const operationDisplay = {
+    const operationLabels: Record<string, string> = {
         addition: 'Addition',
         subtraction: 'Subtraction',
         multiplication: 'Multiplication',
         division: 'Division',
-    }[operation.toLowerCase()] || operation;
+    };
+    const operationDisplay = operationLabels[operation.toLowerCase()] || operation;
 
     return (
         <div

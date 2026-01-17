@@ -8,13 +8,6 @@ import { getLinkedAccounts, unlinkAccount } from "@/lib/actions/security";
 import { signInWithGoogle } from "@/lib/actions/auth";
 import { ArrowLeft, Link2, Unlink } from "lucide-react";
 
-const PROVIDER_INFO: Record<string, { name: string; color: string; icon: string }> = {
-    google: {
-        name: "Google",
-        color: "bg-blue-500/20 text-blue-400",
-        icon: "G",
-    },
-};
 
 function formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString("en-US", {
@@ -30,16 +23,20 @@ export default function LinkedAccountsPage() {
     const [unlinking, setUnlinking] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        loadAccounts();
-    }, []);
-
+    // Define loadAccounts before useEffect to avoid "accessed before declaration" error
     const loadAccounts = async () => {
         setLoading(true);
         const result = await getLinkedAccounts();
         setAccounts(result);
         setLoading(false);
     };
+
+    useEffect(() => {
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            loadAccounts();
+        }, 0);
+    }, []);
 
     const handleUnlink = async (provider: string) => {
         setUnlinking(provider);

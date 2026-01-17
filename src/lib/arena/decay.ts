@@ -14,6 +14,8 @@
  * - 60+ days: Flagged as returning player, requires placement matches
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { getDatabase } from '@/lib/db';
 import { DECAY, PLACEMENT } from './constants.js';
 
@@ -166,7 +168,17 @@ export async function getDecayStatus(userId: string): Promise<DecayStatus> {
             arena_elo_duel,
             arena_elo_team
         FROM users WHERE id = ?
-    `).get(userId) as any;
+    `).get(userId) as {
+        last_arena_activity?: string | null;
+        decay_warning_sent?: number;
+        is_returning_player?: number;
+        placement_matches_required?: number;
+        placement_matches_completed?: number;
+        total_elo_decayed?: number;
+        last_decay_applied?: string | null;
+        arena_elo_duel?: number;
+        arena_elo_team?: number;
+    } | undefined;
     
     if (!user) {
         return {
@@ -205,7 +217,7 @@ export async function getDecayStatus(userId: string): Promise<DecayStatus> {
         placementMatchesRequired: user.placement_matches_required || 0,
         placementMatchesCompleted: user.placement_matches_completed || 0,
         totalEloDecayed: user.total_elo_decayed || 0,
-        lastDecayApplied: user.last_decay_applied,
+        lastDecayApplied: user.last_decay_applied ?? null,
     };
 }
 
@@ -258,7 +270,19 @@ export async function applyDecayToUser(userId: string): Promise<{
             arena_elo_duel_addition, arena_elo_duel_subtraction,
             arena_elo_duel_multiplication, arena_elo_duel_division
         FROM users WHERE id = ?
-    `).get(userId) as any;
+    `).get(userId) as {
+        id: string;
+        last_arena_activity?: string | null;
+        last_decay_applied?: string | null;
+        is_returning_player?: number;
+        total_elo_decayed?: number;
+        arena_elo_duel?: number;
+        arena_elo_team?: number;
+        arena_elo_duel_addition?: number;
+        arena_elo_duel_subtraction?: number;
+        arena_elo_duel_multiplication?: number;
+        arena_elo_duel_division?: number;
+    } | undefined;
     
     if (!user || !user.last_arena_activity) {
         return { applied: false, eloDecayed: 0, tierDecayed: 0, becameReturning: false };
@@ -307,7 +331,7 @@ export async function applyDecayToUser(userId: string): Promise<{
         arena_elo_duel_multiplication = ?, arena_elo_duel_division = ?,
         total_elo_decayed = ?, last_decay_applied = ?
     `;
-    let params: any[] = [
+    const params: any[] = [
         newDuelElo, newTeamElo,
         newDuelAdd, newDuelSub, newDuelMul, newDuelDiv,
         totalDecayed, now
@@ -423,7 +447,17 @@ export async function getPlacementProgress(userId: string): Promise<{
     const user = db.prepare(`
         SELECT is_returning_player, placement_matches_required, placement_matches_completed
         FROM users WHERE id = ?
-    `).get(userId) as any;
+    `).get(userId) as {
+        last_arena_activity?: string | null;
+        decay_warning_sent?: number;
+        is_returning_player?: number;
+        placement_matches_required?: number;
+        placement_matches_completed?: number;
+        total_elo_decayed?: number;
+        last_decay_applied?: string | null;
+        arena_elo_duel?: number;
+        arena_elo_team?: number;
+    } | undefined;
     
     if (!user || !user.is_returning_player) {
         return {
@@ -436,14 +470,16 @@ export async function getPlacementProgress(userId: string): Promise<{
         };
     }
     
-    const inPlacement = user.placement_matches_completed < user.placement_matches_required;
+    const placementCompleted = user.placement_matches_completed || 0;
+    const placementRequired = user.placement_matches_required || 0;
+    const inPlacement = placementCompleted < placementRequired;
     
     return {
         isReturningPlayer: true,
         inPlacementMode: inPlacement,
-        matchesRequired: user.placement_matches_required,
-        matchesCompleted: user.placement_matches_completed,
-        matchesRemaining: Math.max(0, user.placement_matches_required - user.placement_matches_completed),
+        matchesRequired: placementRequired,
+        matchesCompleted: placementCompleted,
+        matchesRemaining: Math.max(0, placementRequired - placementCompleted),
         eloMultiplier: inPlacement ? PLACEMENT.ELO_MULTIPLIER : 1.0
     };
 }
@@ -460,14 +496,25 @@ export async function recordPlacementMatch(userId: string): Promise<{
     const user = db.prepare(`
         SELECT is_returning_player, placement_matches_required, placement_matches_completed
         FROM users WHERE id = ?
-    `).get(userId) as any;
+    `).get(userId) as {
+        last_arena_activity?: string | null;
+        decay_warning_sent?: number;
+        is_returning_player?: number;
+        placement_matches_required?: number;
+        placement_matches_completed?: number;
+        total_elo_decayed?: number;
+        last_decay_applied?: string | null;
+        arena_elo_duel?: number;
+        arena_elo_team?: number;
+    } | undefined;
     
     if (!user || !user.is_returning_player) {
         return { placementComplete: true, matchesRemaining: 0 };
     }
     
     const newCompleted = (user.placement_matches_completed || 0) + 1;
-    const isComplete = newCompleted >= user.placement_matches_required;
+    const placementRequired = user.placement_matches_required || 0;
+    const isComplete = newCompleted >= placementRequired;
     
     if (isComplete) {
         // Exit returning player mode
@@ -488,7 +535,7 @@ export async function recordPlacementMatch(userId: string): Promise<{
     
     return {
         placementComplete: isComplete,
-        matchesRemaining: Math.max(0, user.placement_matches_required - newCompleted)
+        matchesRemaining: Math.max(0, placementRequired - newCompleted)
     };
 }
 
@@ -519,7 +566,11 @@ export async function applySoftReset(userId: string): Promise<{
     const user = db.prepare(`
         SELECT last_arena_activity, arena_elo_duel, arena_elo_team
         FROM users WHERE id = ?
-    `).get(userId) as any;
+    `).get(userId) as {
+        last_arena_activity?: string | null;
+        arena_elo_duel?: number;
+        arena_elo_team?: number;
+    } | undefined;
     
     if (!user || !user.last_arena_activity) {
         return { applied: false, eloReduction: 0 };

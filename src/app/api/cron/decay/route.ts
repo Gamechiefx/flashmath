@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 }
 
 // Also support GET for easier testing (with same auth)
-export async function GET(request: NextRequest) {
+export async function GET() {
     // In development, allow GET without auth for testing
     if (process.env.NODE_ENV === 'development') {
         try {

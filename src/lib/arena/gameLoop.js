@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS file, require() is legitimate */
 /**
  * FlashMath Arena - Real-Time Game Loop
  * 
@@ -177,7 +178,7 @@ class MatchState {
      * @param {number} clientTimestamp - When the client registered the answer
      * @returns {Object} Result of the answer submission
      */
-    submitAnswer(playerId, answer, clientTimestamp) {
+    submitAnswer(playerId, answer, _clientTimestamp) {
         const player = this.players.find(p => p.id === playerId);
 
         if (!player) {
@@ -736,6 +737,7 @@ function test() {
 
     // Mock Socket.IO
     const mockSockets = new Map();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
     const mockRooms = new Map();
 
     const mockIo = {

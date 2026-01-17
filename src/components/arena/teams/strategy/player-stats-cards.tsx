@@ -9,7 +9,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { 
-    Target, Zap, Clock, TrendingUp, Crown, Anchor,
+    Target, Zap, TrendingUp, Crown, Anchor,
     Plus, Minus, X, Divide, HelpCircle
 } from 'lucide-react';
 

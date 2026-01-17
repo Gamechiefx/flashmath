@@ -1,5 +1,7 @@
 'use server';
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results and Redis operations use any types */
+
 /**
  * FlashMath Party System - Redis-Based
  * 
@@ -81,6 +83,7 @@ export interface PartyMember {
     odLevel: number;
     odEquippedFrame: string | null;
     odEquippedTitle: string | null;
+    odEquippedBanner?: string | null;
     isReady: boolean;
     preferredOperation: string | null;
     joinedAt: number;
@@ -305,23 +308,23 @@ export async function getParty(partyId: string): Promise<FullPartyData | null> {
             leaderName: partyData.leaderName,
             iglId: partyData.iglId || null,
             anchorId: partyData.anchorId || null,
-            targetMode: partyData.targetMode as any || null,
+            targetMode: (partyData.targetMode as '5v5' | '3v3' | '2v2' | null) || null,
             teamId: partyData.teamId || null,
             teamName: partyData.teamName || null,
             teamTag: partyData.teamTag || null,
-            inviteMode: partyData.inviteMode as any || 'open',
+            inviteMode: (partyData.inviteMode as 'open' | 'invite_only') || 'open',
             maxSize: parseInt(partyData.maxSize) || 5,
             createdAt: parseInt(partyData.createdAt) || Date.now(),
             updatedAt: parseInt(partyData.updatedAt) || Date.now(),
         };
 
-        const members: PartyMember[] = Object.values(membersData).map((m: string) => JSON.parse(m));
+        const members: PartyMember[] = Object.values(membersData).map((m) => JSON.parse(m as string));
 
         const queueState: PartyQueueState = queueData 
             ? JSON.parse(queueData) 
             : { status: 'idle', startedAt: null, matchType: null, matchId: null };
 
-        const invites: PartyInvite[] = Object.values(invitesData).map((i: string) => JSON.parse(i));
+        const invites: PartyInvite[] = Object.values(invitesData).map((i) => JSON.parse(i as string));
 
         return { party, members, queueState, invites };
 
@@ -908,9 +911,10 @@ export async function updateQueueState(
     partyId: string,
     leaderId: string,
     status: 'idle' | 'finding_teammates' | 'finding_opponents',
-    matchType?: 'ranked' | 'casual'
+    matchType?: 'ranked' | 'casual' | 'vs_ai'
 ): Promise<{ success: boolean; error?: string }> {
     // #region agent log - HA: Track queue state updates at Redis level
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Debug logging
     const fs = require('fs');
     const logPath = '/home/evan.hill/FlashMath/.cursor/debug.log';
     const logEntry = (msg: string, data: any, hypothesisId: string) => {
@@ -942,7 +946,7 @@ export async function updateQueueState(
         const queueState: PartyQueueState = {
             status,
             startedAt: status !== 'idle' ? Date.now() : null,
-            matchType: matchType || null,
+            matchType: matchType === 'vs_ai' ? 'casual' : (matchType || null),
             matchId: null,
         };
 
@@ -1011,6 +1015,7 @@ export async function getQueueState(partyId: string): Promise<PartyQueueState | 
         const parsed = queueData ? JSON.parse(queueData) : null;
         
         // #region agent log - Track queue state reads
+        // eslint-disable-next-line @typescript-eslint/no-require-imports -- Debug logging
         const fs = require('fs');
         try {
             fs.appendFileSync('/home/evan.hill/FlashMath/.cursor/debug.log', JSON.stringify({location:'party-redis.ts:getQueueState',message:'Queue state read from Redis',data:{partyId,status:parsed?.status},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'A'}) + '\n');
@@ -1018,7 +1023,7 @@ export async function getQueueState(partyId: string): Promise<PartyQueueState | 
         // #endregion
         
         return parsed;
-    } catch (error) {
+    } catch (_error) {
         return null;
     }
 }
@@ -1255,8 +1260,8 @@ export async function linkToTeam(
     partyId: string,
     leaderId: string,
     teamId: string | null,
-    teamName?: string,
-    teamTag?: string
+    teamName?: string | null,
+    teamTag?: string | null
 ): Promise<{ success: boolean; error?: string }> {
     const redis = await getRedis();
     if (!redis) {

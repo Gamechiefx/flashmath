@@ -19,6 +19,8 @@ interface Player {
     odEquippedTitle?: string;
     odLevel?: number;
     odTier?: string;
+    odRank?: string;
+    odDivision?: string;
 }
 
 interface Question {
@@ -128,7 +130,6 @@ export function useArenaSocket({
                 reconnectionAttempts: 5,
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
-                maxReconnectionAttempts: 5,
                 forceNew: attempt > 1, // Force new connection on retry
             });
 
@@ -328,7 +329,7 @@ export function useArenaSocket({
                 socketRef.current.disconnect();
             }
         };
-    }, [matchId, userId, userName, operation, isAiMatch]);
+    }, [matchId, userId, userName, operation, isAiMatch, connected, onAnswerResult, onConnectionStatesUpdate, onMatchEnd, onMatchStart, onNewQuestion, onPlayerForfeit, onPlayerJoined, onPlayerLeft, onTimeUpdate, userBanner, userDivision, userLevel, userRank, userTitle]);
 
     const submitAnswer = useCallback((userAnswer: number) => {
         if (socketRef.current && connected) {

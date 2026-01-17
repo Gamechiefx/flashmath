@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     Zap,
@@ -61,6 +63,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
     // Session History
     const [sessionStats, setSessionStats] = useState<any[]>([]);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [attempts, setAttempts] = useState(0);
     const [streak, setStreak] = useState(0);
     const [maxStreak, setMaxStreak] = useState(0);
@@ -75,8 +78,10 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [showPlacementTest, setShowPlacementTest] = useState(false);
     const [showHelpModal, setShowHelpModal] = useState(false);
     const [currentExplanation, setCurrentExplanation] = useState("");
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [pausedTime, setPausedTime] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [isLoadingProblems, setIsLoadingProblems] = useState(false);
     const [currentTier, setCurrentTier] = useState(1);
     const [showMasteryTest, setShowMasteryTest] = useState(false);
@@ -89,7 +94,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [tiltScore, setTiltScore] = useState(0);
     const [echoQueueSize, setEchoQueueSize] = useState(0);
     const [echoItemsResolved, setEchoItemsResolved] = useState(0);
-    const [isAIMode, setIsAIMode] = useState(true);  // AI mode enabled by default
+    const [isAIMode] = useState(true);  // AI mode enabled by default
     const [prefetchedQuestion, setPrefetchedQuestion] = useState<{ question: ContentItem; stats: any } | null>(null);
     const [tierAdvanced, setTierAdvanced] = useState<{ from: number; to: number } | null>(null);
     const [aiAnalysis, setAiAnalysis] = useState<{
@@ -104,7 +109,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
     const [isLoadingHint, setIsLoadingHint] = useState(false);
 
     // Fetch problems helper
-    const fetchMoreProblems = async (op: string) => {
+    const fetchMoreProblems = useCallback(async (op: string) => {
         setIsLoadingProblems(true);
         const res = await getNextProblems(op);
         if (res.problems) {
@@ -112,7 +117,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             if (res.currentTier) setCurrentTier(res.currentTier);
         }
         setIsLoadingProblems(false);
-    };
+    }, []);
 
     // Sync selected op with URL param on mount
     useEffect(() => {
@@ -251,6 +256,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                     setAiSessionId(null);
                 }
 
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const result = await saveSession({
                     operation: selectedOp,
                     correctCount: finalScore,
@@ -276,7 +282,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
         setIsSaving(false);
         soundEngine.playComplete();
-    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState, aiSessionId, maxStreak, tiltScore, echoQueueSize, hintsReceivedCount]);
+    }, [session, score, totalAttempts, sessionStats, selectedOp, sessionXP, isSaving, gameState, aiSessionId, maxStreak, tiltScore, hintsReceivedCount, echoItemsResolved, update]);
 
     // Timer logic - use setInterval for reliable timing independent of state changes
     const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -373,20 +379,38 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                         setTimeout(() => reject(new Error('timeout')), AI_TIMEOUT_MS)
                     );
 
-                    const aiResult = await Promise.race([aiPromise, timeoutPromise]) as any;
+                    interface AIAnswerResult {
+                        isCorrect?: boolean;
+                        hint?: unknown;
+                        nextQuestion?: {
+                            promptText: string;
+                            correctAnswer: number;
+                            explanation?: string;
+                        };
+                        envelope?: unknown;
+                        sessionStats?: {
+                            questionNumber?: number;
+                            tiltScore?: number;
+                            echoQueueSize?: number;
+                            echoItemsResolved?: number;
+                        };
+                        error?: string;
+                    }
+                    const aiResult = await Promise.race([aiPromise, timeoutPromise]) as AIAnswerResult | { error: string };
 
-                    if (!('error' in aiResult)) {
-                        setTiltScore(aiResult.sessionStats.tiltScore);
-                        setEchoQueueSize(aiResult.sessionStats.echoQueueSize);
-                        setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved || 0);
+                    if (!('error' in aiResult) && aiResult.sessionStats && aiResult.nextQuestion) {
+                        setTiltScore(aiResult.sessionStats.tiltScore ?? 0);
+                        setEchoQueueSize(aiResult.sessionStats.echoQueueSize ?? 0);
+                        setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved ?? 0);
 
                         // Show feedback briefly, then update to next question
+                        const nextQ = aiResult.nextQuestion;
                         setTimeout(() => {
-                            setCurrentAIItem(aiResult.nextQuestion);
+                            setCurrentAIItem(nextQ as ContentItem);
                             setProblem({
-                                question: aiResult.nextQuestion.promptText,
-                                answer: aiResult.nextQuestion.correctAnswer,
-                                explanation: aiResult.nextQuestion.explanation,
+                                question: nextQ.promptText,
+                                answer: nextQ.correctAnswer,
+                                explanation: nextQ.explanation,
                             });
                             setInputValue("");
                             setProblemStartTime(Date.now());
@@ -472,19 +496,6 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         if (savedKey) setContinueKey(savedKey);
     }, []);
 
-    // Continue key handler
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.code === continueKey && isError) {
-                e.preventDefault();
-                handleHelpNext();
-            }
-        };
-        window.addEventListener("keydown", handleKeyDown);
-        return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [isError, problemQueue, selectedOp, continueKey]);
-
-
     const getSymbol = () => {
         switch (selectedOp) {
             case 'Addition': return '+';
@@ -502,33 +513,34 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
 
         let a = Math.floor(Math.random() * (max - min + 1)) + min;
         let b = Math.floor(Math.random() * (max - min + 1)) + min;
-        let answer: number;
+        let _answer: number;
         let question: string;
 
         switch (op) {
             case 'Addition':
-                answer = a + b;
+                _answer = a + b;
                 question = `${a} + ${b}`;
                 break;
             case 'Subtraction':
                 // Ensure positive result
                 if (b > a) [a, b] = [b, a];
-                answer = a - b;
+                _answer = a - b;
                 question = `${a} - ${b}`;
                 break;
             case 'Division':
                 // Ensure clean division
                 b = Math.max(2, b);
-                answer = a;
+                _answer = a;
                 a = a * b;
                 question = `${a} ÷ ${b}`;
                 break;
             default: // Multiplication
-                answer = a * b;
+                _answer = a * b;
                 question = `${a} × ${b}`;
         }
 
         const band = getBandForTier(tier);
+        const answer = _answer;
         return { question, answer, explanation: `${question} = ${answer}`, type: 'basic' as const, tier, band: band.name };
     };
 
@@ -576,7 +588,7 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
         }
     };
 
-    const handleHelpNext = async () => {
+    const handleHelpNext = useCallback(async () => {
         setShowHelpModal(false);
         setIsPaused(false);
         setInputValue("");
@@ -614,19 +626,36 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                     setTimeout(() => reject(new Error('timeout')), AI_TIMEOUT_MS)
                 );
 
-                const aiResult = await Promise.race([aiPromise, timeoutPromise]) as any;
+                interface AIAnswerResult {
+                    isCorrect?: boolean;
+                    hint?: unknown;
+                    nextQuestion?: {
+                        promptText: string;
+                        correctAnswer: number;
+                        explanation?: string;
+                    };
+                    envelope?: unknown;
+                    sessionStats?: {
+                        questionNumber?: number;
+                        tiltScore?: number;
+                        echoQueueSize?: number;
+                        echoItemsResolved?: number;
+                    };
+                    error?: string;
+                }
+                const aiResult = await Promise.race([aiPromise, timeoutPromise]) as AIAnswerResult | { error: string };
 
-                if (!('error' in aiResult)) {
-                    setCurrentAIItem(aiResult.nextQuestion);
+                if (!('error' in aiResult) && aiResult.nextQuestion && aiResult.sessionStats) {
+                    setCurrentAIItem(aiResult.nextQuestion as ContentItem);
                     setProblem({
                         question: aiResult.nextQuestion.promptText,
                         answer: aiResult.nextQuestion.correctAnswer,
                         explanation: aiResult.nextQuestion.explanation,
                     });
                     setProblemStartTime(Date.now());
-                    setTiltScore(aiResult.sessionStats.tiltScore);
-                    setEchoQueueSize(aiResult.sessionStats.echoQueueSize);
-                    setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved || 0);
+                    setTiltScore(aiResult.sessionStats.tiltScore ?? 0);
+                    setEchoQueueSize(aiResult.sessionStats.echoQueueSize ?? 0);
+                    setEchoItemsResolved(aiResult.sessionStats.echoItemsResolved ?? 0);
                     return;
                 }
             } catch (err: any) {
@@ -652,7 +681,19 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
             setProblem(nextQueue[0]);
             setProblemStartTime(Date.now());
         }
-    };
+    }, [aiSessionId, prefetchedQuestion, currentAIItem, problemStartTime, selectedOp, currentTier, problemQueue, fetchMoreProblems]);
+
+    // Continue key handler - must be after handleHelpNext is defined
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.code === continueKey && isError) {
+                e.preventDefault();
+                handleHelpNext();
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isError, continueKey, handleHelpNext]);
 
     return (
         <main className="min-h-screen bg-background text-foreground flex flex-col items-center relative overflow-hidden">
@@ -1096,14 +1137,14 @@ export function PracticeView({ session: initialSession }: PracticeViewProps) {
                                         className="mb-8 p-6 rounded-2xl bg-gradient-to-r from-primary/10 via-accent/10 to-primary/10 border border-primary/20 text-center"
                                     >
                                         <div className="text-lg font-bold text-white mb-2">
-                                            🎉 Enjoyed that? There's so much more!
+                                            🎉 Enjoyed that? There&apos;s so much more!
                                         </div>
                                         <p className="text-sm text-muted-foreground mb-4">
                                             Sign up to track your progress, compete on leaderboards, unlock achievements, and level up your skills.
                                         </p>
                                         <Link href="/auth/register">
                                             <button className="px-8 py-3 rounded-xl font-black uppercase tracking-widest border border-primary/30 hover:border-primary/50 bg-gradient-to-r from-primary/20 to-accent/20 transition-all text-primary">
-                                                Sign Up — It's Free!
+                                                Sign Up — It&apos;s Free!
                                             </button>
                                         </Link>
                                     </motion.div>

@@ -14,7 +14,7 @@
  */
 
 import { getDatabase } from '@/lib/db';
-import { migrateTier, migrateMathTiers, MathOperation } from '@/lib/tier-system';
+import { migrateTier } from '@/lib/tier-system';
 import { auth } from '@/auth';
 
 interface MigrationResult {
@@ -67,7 +67,16 @@ export async function runTierMigration(): Promise<MigrationResult> {
     const session = await auth();
 
     // Only allow admins to run migration
-    if (!session?.user || !(session.user as any).isAdmin) {
+    if (!session?.user) {
+        return {
+            success: false,
+            usersProcessed: 0,
+            usersUpdated: 0,
+            errors: ['Unauthorized: Not authenticated'],
+        };
+    }
+    const isAdmin = (session.user as { isAdmin?: boolean })?.isAdmin;
+    if (!isAdmin) {
         return {
             success: false,
             usersProcessed: 0,
@@ -176,8 +185,8 @@ export async function migrateUserTiers(userId: string): Promise<{
     const session = await auth();
 
     // Only allow admins or the user themselves
-    const currentUserId = (session?.user as any)?.id;
-    const isAdmin = (session?.user as any)?.isAdmin;
+    const currentUserId = (session?.user as { id?: string })?.id;
+    const isAdmin = (session?.user as { isAdmin?: boolean })?.isAdmin;
 
     if (!currentUserId || (currentUserId !== userId && !isAdmin)) {
         return {
@@ -244,7 +253,16 @@ export async function migrateUserTiers(userId: string): Promise<{
 export async function rollbackTierMigration(): Promise<MigrationResult> {
     const session = await auth();
 
-    if (!session?.user || !(session.user as any).isAdmin) {
+    if (!session?.user) {
+        return {
+            success: false,
+            usersProcessed: 0,
+            usersUpdated: 0,
+            errors: ['Unauthorized: Not authenticated'],
+        };
+    }
+    const isAdmin = (session.user as { isAdmin?: boolean })?.isAdmin;
+    if (!isAdmin) {
         return {
             success: false,
             usersProcessed: 0,
@@ -303,7 +321,7 @@ export async function rollbackTierMigration(): Promise<MigrationResult> {
 
                     updateStmt.run(JSON.stringify(oldTiers), user.id);
                     usersUpdated++;
-                } catch (err) {
+                } catch (_err) {
                     errors.push(`Failed to rollback user ${user.id}`);
                 }
             }

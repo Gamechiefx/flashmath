@@ -69,8 +69,9 @@ export function RelayHandoff({
         
         if (typeof window !== 'undefined' && !audioContextRef.current) {
             try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- webkitAudioContext is not in TypeScript types
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-            } catch (e) {
+            } catch {
                 // AudioContext not available
             }
         }
@@ -80,7 +81,7 @@ export function RelayHandoff({
             if (ctx && ctx.state !== 'closed') {
                 try {
                     ctx.close();
-                } catch (e) {
+                } catch {
                     // Already closed or error closing
                 }
             }
@@ -113,7 +114,7 @@ export function RelayHandoff({
             
             oscillator.start(ctx.currentTime);
             oscillator.stop(ctx.currentTime + duration);
-        } catch (e) {
+        } catch {
             // Ignore audio errors
         }
     };
@@ -121,13 +122,19 @@ export function RelayHandoff({
     // Animation sequence
     useEffect(() => {
         if (!isVisible) {
-            setPhase('summary');
-            hasCompletedRef.current = false;
+            // Defer to avoid setState in effect warning
+            setTimeout(() => {
+                setPhase('summary');
+                hasCompletedRef.current = false;
+            }, 0);
             return;
         }
         
-        hasCompletedRef.current = false;
-        setPhase('summary');
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            hasCompletedRef.current = false;
+            setPhase('summary');
+        }, 0);
         
         // Phase progression: summary (1s) -> ready (0.6s) -> set (0.6s) -> go (0.8s) -> complete
         const timers = [

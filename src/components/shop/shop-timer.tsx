@@ -41,7 +41,10 @@ export function ShopTimer() {
             }
         }, 1000);
 
-        setTimeLeft(calculateTimeUntilMidnightET());
+        // Defer initial setState to avoid setState in effect warning
+        setTimeout(() => {
+            setTimeLeft(calculateTimeUntilMidnightET());
+        }, 0);
 
         return () => clearInterval(timer);
     }, [router]);

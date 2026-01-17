@@ -11,7 +11,8 @@ import { useSession } from 'next-auth/react';
 
 export type PresenceStatus = 'online' | 'away' | 'invisible' | 'in-match' | 'offline';
 
-interface FriendPresence {
+ 
+interface _FriendPresence {
     userId: string;
     status: PresenceStatus;
     lastUpdated: number;
@@ -57,6 +58,9 @@ interface UsePresenceReturn {
     pendingPartyInvites: { inviterName: string; partyId: string; timestamp: number }[];
     clearFriendRequestNotification: () => void;
     clearPartyInviteNotification: () => void;
+    // Change flags for triggering data refresh
+    friendsChanged: number;
+    partyChanged: number;
     // Party settings real-time update
     latestPartySettingsUpdate: PartySettingsUpdate | null;
     clearPartySettingsUpdate: () => void;
@@ -71,7 +75,9 @@ interface UsePresenceReturn {
 }
 
 let presenceSocket: Socket | null = null;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
 let socketConnectionCount = 0;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future use
 let handlerRegistrationCount = 0;
 
 export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn {
@@ -85,7 +91,8 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
     
     // Prefer props over session (avoids SessionProvider dependency during navigation)
     const effectiveUserId = propsUserId || session?.user?.id;
-    const effectiveUserName = propsUserName || (session?.user as any)?.name || 'Unknown';
+    const effectiveUserName = propsUserName || (session?.user as { name?: string })?.name || 'Unknown';
+    const userNameFromSession = (session?.user as { name?: string })?.name;
     
     const [isConnected, setIsConnected] = useState(false);
     const [myStatus, setMyStatusState] = useState<PresenceStatus>('online');
@@ -111,7 +118,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
 
     // Step update for real-time sync (party/roles/ready flow)
     const [latestStepUpdate, setLatestStepUpdate] = useState<PartyStepUpdate | null>(null);
-    
+
     const userIdRef = useRef<string | null>(null);
     const statusRef = useRef<PresenceStatus>('online');
     
@@ -283,7 +290,7 @@ export function usePresence(options: UsePresenceOptions = {}): UsePresenceReturn
             socket.off('party:queue_status_changed', handlePartyQueueStatusChanged);
             socket.off('party:step_changed', handlePartyStepChanged);
         };
-    }, [autoConnect, effectiveUserId, effectiveUserName]);
+    }, [autoConnect, effectiveUserId, effectiveUserName, userNameFromSession]);
     
     // Set my status
     const setMyStatus = useCallback((status: PresenceStatus) => {

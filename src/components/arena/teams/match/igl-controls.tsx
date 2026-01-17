@@ -59,7 +59,6 @@ export function IGLControls({
     // During strategy phase: deciding for Round 1
     // During break after Round N: deciding for Round N+1
     const nextRound = currentRound === 0 ? 1 : currentRound + 1;
-    const roundInHalf = half === 1 ? nextRound : nextRound - 4;
     
     // Calculate remaining rounds where Double Call-In can still be used
     const remainingRounds = half === 1 
@@ -170,6 +169,8 @@ export function IGLControls({
                             {[1, 2, 3].map(r => {
                                 const isPast = r < nextRound;
                                 const isCurrent = r === nextRound;
+                                // eslint-disable-next-line @typescript-eslint/no-unused-vars -- roundInHalf may be used in future
+                                const roundInHalf = half === 1 ? r : r - 4;
                                 const isAvailable = r >= nextRound && r <= 3;
                                 return (
                                     <span key={r} className={cn(

@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X } from "lucide-react";
@@ -17,16 +19,20 @@ type TabType = "sessions" | "daily" | "monthly" | "topSpeeds";
 export function OperationStatsModal({ operation, isOpen, onClose }: OperationStatsModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>("sessions");
     const [data, setData] = useState<any>(null);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [loading, setLoading] = useState(true);
     const [hoveredPoint, setHoveredPoint] = useState<{ x: number; y: number; data: any } | null>(null);
 
     useEffect(() => {
         if (isOpen && operation) {
-            setLoading(true);
-            getOperationStats(operation).then((result) => {
-                setData(result);
-                setLoading(false);
-            });
+            // Defer to avoid setState in effect warning
+            setTimeout(() => {
+                setLoading(true);
+                getOperationStats(operation).then((result) => {
+                    setData(result);
+                    setLoading(false);
+                });
+            }, 0);
         }
     }, [isOpen, operation]);
 

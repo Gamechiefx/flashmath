@@ -10,6 +10,9 @@
  * - Redis: Real-time queue state, active matches, parties, CACHING
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- PostgreSQL query results use any types */
+/* eslint-disable @typescript-eslint/no-require-imports -- CommonJS modules */
+
 // Import the PostgreSQL module
 const arenaPostgres = require('./postgres.js');
 
@@ -24,8 +27,9 @@ let arenaRedis: {
 } | null = null;
 
 try {
+     
     arenaRedis = require('../../../server-redis.js');
-} catch (e) {
+} catch (_e) {
     // Redis not available (e.g., during build), will use direct DB
     console.log('[arena-db] Redis caching not available, using direct DB queries');
 }
@@ -331,7 +335,7 @@ export async function getDuelLeaderboard(
             if (cached && cached.length >= limit) {
                 return cached.slice(0, limit);
             }
-        } catch (e) {
+        } catch (_e) {
             // Cache miss or error, continue to DB
         }
     }
@@ -403,7 +407,7 @@ export async function getArenaDisplayStats(userId: string): Promise<ArenaDisplay
             if (cached) {
                 return cached as ArenaDisplayStats;
             }
-        } catch (e) {
+        } catch (_e) {
             // Cache miss, continue to DB
         }
     }
@@ -491,7 +495,7 @@ export async function getArenaDisplayStatsBatch(
                 }
             }
             uncachedIds = userIds.filter(id => !cachedStats[id]);
-        } catch (e) {
+        } catch (_e) {
             // Cache failed, fetch all from DB
             uncachedIds = [...userIds];
         }
@@ -508,11 +512,11 @@ export async function getArenaDisplayStatsBatch(
         // #endregion
         // Fetch uncached players in one query
         const players = await arenaPostgres.getPlayersBatch(uncachedIds);
-        const playerMap = new Map(players.map((p: ArenaPlayer) => [p.user_id, p]));
+        const playerMap = new Map<string, ArenaPlayer>(players.map((p: ArenaPlayer) => [p.user_id, p]));
         
         // Build result with defaults for missing players
         for (const userId of uncachedIds) {
-            const player = playerMap.get(userId);
+            const player = playerMap.get(userId) as ArenaPlayer | undefined;
             
             if (player) {
                 const duelRank = getRankFromElo(player.elo);

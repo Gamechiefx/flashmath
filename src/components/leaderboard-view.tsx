@@ -1,9 +1,11 @@
 "use client";
 
+/* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+
 import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { motion } from "framer-motion";
-import { Trophy, Timer, ChevronUp, ChevronDown, User } from "lucide-react";
+import { Trophy, Timer, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UserAvatar } from "@/components/user-avatar";
 

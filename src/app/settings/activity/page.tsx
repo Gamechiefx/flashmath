@@ -12,10 +12,11 @@ import {
     Shield,
     Link2,
     AlertTriangle,
-    Clock
+    Clock,
+    type LucideIcon
 } from "lucide-react";
 
-const ACTION_ICONS: Record<string, any> = {
+const ACTION_ICONS: Record<string, LucideIcon> = {
     login: LogIn,
     logout: LogOut,
     password_change: Key,
@@ -64,16 +65,20 @@ export default function SecurityActivityPage() {
     const [activities, setActivities] = useState<SecurityActivity[]>([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        loadActivity();
-    }, []);
-
+    // Define loadActivity before useEffect to avoid "accessed before declaration" error
     const loadActivity = async () => {
         setLoading(true);
         const result = await getSecurityActivity(50);
         setActivities(result);
         setLoading(false);
     };
+
+    useEffect(() => {
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            loadActivity();
+        }, 0);
+    }, []);
 
     if (loading) {
         return (

@@ -12,6 +12,17 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 
+// Extend global to store arena logs
+declare global {
+    var arenaLogs: Array<{
+        timestamp: string;
+        level: string;
+        event: string;
+        matchId: string;
+        details?: unknown;
+    }> | undefined;
+}
+
 interface MatchState {
     matchId: string;
     players: {
@@ -65,6 +76,7 @@ const connectionMetrics = new Map<string, ConnectionMetrics>();
 const initializationTimeouts = new Map<string, NodeJS.Timeout>();
 
 // Enhanced logging function
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Logging details can be any type
 function logArenaEvent(level: 'info' | 'warn' | 'error', matchId: string, event: string, details?: any) {
     const timestamp = new Date().toISOString();
     const logEntry = {
@@ -253,7 +265,7 @@ function startMatch(matchId: string) {
                 endMatch(matchId);
             }
         } catch (error) {
-            logArenaEvent('error', matchId, 'Timer error', { error: error.message });
+            logArenaEvent('error', matchId, 'Timer error', { error: (error as Error)?.message || String(error) });
             clearInterval(timerInterval);
         }
     }, 1000);
@@ -362,6 +374,7 @@ export function initializeSocketServer(httpServer: HTTPServer): SocketIOServer {
             if (data.matchId) {
                 const match = activeMatches.get(data.matchId);
                 if (match) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Match state can be any type
                     const states: Record<string, any> = {};
                     Object.keys(match.players).forEach(playerId => {
                         const metrics = connectionMetrics.get(playerId);
@@ -468,7 +481,7 @@ export function initializeSocketServer(httpServer: HTTPServer): SocketIOServer {
 
             } catch (error) {
                 logArenaEvent('error', data.matchId || 'unknown', 'Join match error', {
-                    error: error.message,
+                    error: (error as Error)?.message || String(error),
                     userId: data.userId,
                     socketId: socket.id
                 });
@@ -476,7 +489,7 @@ export function initializeSocketServer(httpServer: HTTPServer): SocketIOServer {
                 socket.emit('match_error', {
                     type: 'JOIN_FAILED',
                     message: 'Failed to join match. Please try again.',
-                    error: error.message
+                    error: (error as Error)?.message || String(error)
                 });
             }
         });
@@ -558,7 +571,7 @@ export function initializeSocketServer(httpServer: HTTPServer): SocketIOServer {
 
             } catch (error) {
                 logArenaEvent('error', data.matchId, 'Submit answer error', {
-                    error: error.message,
+                    error: (error as Error)?.message || String(error),
                     userId: data.odUserId
                 });
             }
@@ -669,7 +682,7 @@ export function initializeSocketServer(httpServer: HTTPServer): SocketIOServer {
                 }
             } catch (error) {
                 logArenaEvent('error', data.matchId, 'Leave match error', {
-                    error: error.message,
+                    error: (error as Error)?.message || String(error),
                     userId: data.userId
                 });
             }
@@ -698,7 +711,7 @@ export function initializeSocketServer(httpServer: HTTPServer): SocketIOServer {
                 }
             } catch (error) {
                 logArenaEvent('error', data.matchId, 'Forfeit match error', {
-                    error: error.message,
+                    error: (error as Error)?.message || String(error),
                     userId: data.userId
                 });
             }

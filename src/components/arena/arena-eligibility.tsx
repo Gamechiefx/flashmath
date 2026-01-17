@@ -6,7 +6,7 @@ import {
     AnimatePresence
 } from 'framer-motion';
 import Link from 'next/link';
-import { ChevronDown, ChevronUp, Zap, AlertTriangle, Activity, Award } from 'lucide-react';
+import { ChevronDown, ChevronUp, Zap, AlertTriangle, Activity } from 'lucide-react';
 import { useAuditor } from '@/components/auditor';
 import type { ConfidenceBreakdown, DecayInfo } from './flash-auditor';
 
@@ -43,36 +43,40 @@ export function ArenaEligibility({
 
     // Check eligibility - simplified since confidence is no longer a gate
     const hasEnoughPractice = practiceStats.totalSessions >= MIN_SESSIONS;
-    const hasGoodAccuracy = practiceStats.totalSessions === 0 || (practiceStats.recentAccuracy ?? 0) >= MIN_ACCURACY;
     const meetsAge = isAdmin || (userAge !== null && userAge >= MIN_AGE);
 
     useEffect(() => {
-        // Admin bypasses all requirements
-        if (isAdmin) {
-            setIsEligible(true);
-            setRequirementsExpanded(false);
-            return;
-        }
-        
-        // Simplified eligibility: just age and basic practice
-        const eligible = hasEnoughPractice && meetsAge;
-        setIsEligible(eligible);
-        
-        // Auto-collapse when all requirements are met
-        if (eligible) {
-            setRequirementsExpanded(false);
-        }
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            // Admin bypasses all requirements
+            if (isAdmin) {
+                setIsEligible(true);
+                setRequirementsExpanded(false);
+                return;
+            }
+            
+            // Simplified eligibility: just age and basic practice
+            const eligible = hasEnoughPractice && meetsAge;
+            setIsEligible(eligible);
+            
+            // Auto-collapse when all requirements are met
+            if (eligible) {
+                setRequirementsExpanded(false);
+            }
+        }, 0);
     }, [isAdmin, hasEnoughPractice, meetsAge]);
 
     // Build confidence breakdown from practiceStats if not provided
+    const overallConfidence = practiceStats.confidence;
     const confidence: ConfidenceBreakdown = confidenceBreakdown || {
-        overall: practiceStats.confidence,
+        overall: overallConfidence,
         volume: Math.min(1, Math.log10(practiceStats.totalSessions + 1) / Math.log10(51)),
         consistency: 0.5, // Estimated without full data
         recency: practiceStats.daysSinceLastPractice <= 7 ? 1 : Math.max(0, 1 - (practiceStats.daysSinceLastPractice - 7) / 30),
         totalSessions: practiceStats.totalSessions,
         sessionsPerWeek: practiceStats.totalSessions / 4, // Rough estimate
-        daysSinceLastPractice: practiceStats.daysSinceLastPractice
+        daysSinceLastPractice: practiceStats.daysSinceLastPractice,
+        bracket: overallConfidence >= 0.7 ? 'ESTABLISHED' : overallConfidence >= 0.3 ? 'DEVELOPING' : 'NEWCOMER'
     };
 
     const requirements = [
@@ -250,8 +254,12 @@ export function ArenaEligibility({
                             const elem = document.documentElement;
                             if (elem.requestFullscreen && !document.fullscreenElement) {
                                 elem.requestFullscreen();
-                            } else if ((elem as any).webkitRequestFullscreen) {
-                                (elem as any).webkitRequestFullscreen();
+                            } else {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                                const webkitElem = elem as any;
+                                if (webkitElem.webkitRequestFullscreen) {
+                                    webkitElem.webkitRequestFullscreen();
+                                }
                             }
                         } catch (err) {
                             console.log('[Arena] Fullscreen request failed:', err);

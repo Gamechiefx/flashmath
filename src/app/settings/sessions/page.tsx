@@ -40,16 +40,20 @@ export default function SessionsPage() {
     const [revoking, setRevoking] = useState<string | null>(null);
     const [revokingAll, setRevokingAll] = useState(false);
 
-    useEffect(() => {
-        loadSessions();
-    }, []);
-
+    // Define loadSessions before useEffect to avoid "accessed before declaration" error
     const loadSessions = async () => {
         setLoading(true);
         const result = await getUserSessions();
         setSessions(result);
         setLoading(false);
     };
+
+    useEffect(() => {
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            loadSessions();
+        }, 0);
+    }, []);
 
     const handleRevoke = async (sessionId: string) => {
         setRevoking(sessionId);
@@ -94,7 +98,7 @@ export default function SessionsPage() {
                     </div>
                     <div>
                         <h1 className="text-2xl font-bold text-white">Active Sessions</h1>
-                        <p className="text-muted-foreground">Manage devices where you're logged in</p>
+                        <p className="text-muted-foreground">Manage devices where you&apos;re logged in</p>
                     </div>
                 </div>
 

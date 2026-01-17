@@ -58,10 +58,11 @@ export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
 
     // Auto-submit when code is complete
     useEffect(() => {
-        if (code.every(d => d) && !isVerifying) {
+        if (code.every(d => d) && !isVerifying && !success) {
             handleVerify();
         }
-    }, [code]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleVerify is stable
+    }, [code, isVerifying, success]);
 
     // Resend cooldown timer
     useEffect(() => {
@@ -92,7 +93,7 @@ export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
                 setCode(['', '', '', '', '', '']);
                 document.getElementById('arena-code-0')?.focus();
             }
-        } catch (err) {
+        } catch {
             setError('Failed to verify code');
             setCode(['', '', '', '', '', '']);
         }
@@ -117,7 +118,7 @@ export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
             } else {
                 toast.error(result.error || 'Failed to send email');
             }
-        } catch (error) {
+        } catch {
             toast.error('Failed to send verification email');
         } finally {
             setIsResending(false);
@@ -267,7 +268,7 @@ export function VerifyEmailClient({ email, userName }: VerifyEmailClientProps) {
 
                             {/* Help Text */}
                             <p className="text-xs text-muted-foreground mt-6">
-                                Can't find the email? Check your spam folder or{' '}
+                                Can&apos;t find the email? Check your spam folder or{' '}
                                 <Link href="/settings" className="underline hover:text-foreground">
                                     update your email address
                                 </Link>

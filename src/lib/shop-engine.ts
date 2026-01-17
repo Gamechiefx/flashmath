@@ -14,7 +14,8 @@ import { loadData, initSchema } from "./db";
 // 5. BGM Slot
 // 6. Wildcard (Title or Frame)
 
-const RARITY_WEIGHTS = {
+ 
+const _RARITY_WEIGHTS = {
     [Rarity.COMMON]: 0.50,
     [Rarity.UNCOMMON]: 0.30,
     [Rarity.RARE]: 0.15,
@@ -30,7 +31,7 @@ export function getDailyShopSelection(): Item[] {
     // Convert to Eastern Time
     const eastern = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
     const seed = `${eastern.getFullYear()}-${eastern.getMonth() + 1}-${eastern.getDate()}`;
-    const rng = seedrandom(seed);
+    seedrandom(seed);
 
     // 2. Select Items: One per Category, Cycling through available items
     // "Ensure ALL items get cycled" means we shouldn't just pick random. 

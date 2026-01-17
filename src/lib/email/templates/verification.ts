@@ -1,54 +1,39 @@
 /**
  * Email Verification Template
  * Premium styled verification email with 6-digit code
+ * Used when: User registers a new account
  */
 
-import { baseTemplate, emailCode, emailInfoBox } from './base';
+import { 
+    baseTemplate, 
+    emailHero, 
+    emailCode, 
+    emailInfoBox, 
+    emailFooterNote,
+    emailParagraph,
+    emailUsername,
+    COLORS
+} from './base';
 
-export function verificationEmailTemplate(username: string, code: string): { html: string; text: string; subject: string } {
+export function verificationEmailTemplate(
+    username: string, 
+    code: string
+): { html: string; text: string; subject: string } {
     const subject = `${code} is your FlashMath verification code`;
+    const preheader = `Welcome to FlashMath! Use code ${code} to verify your email.`;
 
     const content = `
-<table role="presentation" cellspacing="0" cellpadding="0" width="100%">
-    <tr>
-        <td align="center" style="padding-bottom: 8px;">
-            <div style="width: 64px; height: 64px; background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(139, 92, 246, 0.2)); border-radius: 16px; display: inline-flex; align-items: center; justify-content: center;">
-                <span style="font-size: 32px;">✉️</span>
-            </div>
-        </td>
-    </tr>
-    <tr>
-        <td align="center">
-            <h1 style="color: #ffffff; font-size: 26px; font-weight: 700; margin: 16px 0 8px 0;">
-                Verify Your Email
-            </h1>
-        </td>
-    </tr>
-    <tr>
-        <td align="center">
-            <p style="color: #a1a1aa; font-size: 16px; line-height: 1.6; margin: 0 0 8px 0;">
-                Welcome to FlashMath, <strong style="color: #ffffff;">${username}</strong>!
-            </p>
-            <p style="color: #71717a; font-size: 15px; line-height: 1.6; margin: 0 0 16px 0;">
-                Enter this code to verify your email and activate your account.
-            </p>
-        </td>
-    </tr>
-</table>
+${emailHero('✉️', 'Verify Your Email', `Welcome to FlashMath, ${emailUsername(username)}!`, COLORS.cyan)}
 
-${emailCode(code)}
+${emailParagraph('Enter this code to verify your email and unlock your account.')}
 
-${emailInfoBox('⏱️', 'This code expires in <strong style="color: #ffffff;">15 minutes</strong>. Request a new one if needed.')}
+${emailCode(code, 'Your verification code')}
 
-<table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="margin-top: 24px;">
-    <tr>
-        <td align="center">
-            <p style="color: #52525b; font-size: 13px; line-height: 1.6; margin: 0;">
-                Didn't create an account? You can safely ignore this email.
-            </p>
-        </td>
-    </tr>
-</table>
+${emailInfoBox('⏱️', 'This code expires in <strong>15 minutes</strong>. Request a new one if needed.', 'info')}
+
+${emailInfoBox('🎮', 'Once verified, you\'ll unlock <strong>Practice Mode</strong>, <strong>Achievements</strong>, and <strong>Leaderboards</strong>!', 'success')}
+
+${emailFooterNote('Didn\'t create an account? You can safely ignore this email.')}
 `.trim();
 
     const text = `
@@ -58,17 +43,20 @@ Welcome to FlashMath, ${username}!
 
 Your verification code is: ${code}
 
-This code expires in 15 minutes.
+This code expires in 15 minutes. Request a new one if needed.
+
+Once verified, you'll unlock Practice Mode, Achievements, and Leaderboards!
 
 If you didn't create an account on FlashMath, you can safely ignore this email.
 
 ---
 © ${new Date().getFullYear()} FlashMath
+https://flashmath.io
 `.trim();
 
     return {
         subject,
-        html: baseTemplate(content, `Your verification code is ${code}`),
+        html: baseTemplate(content, preheader),
         text,
     };
 }

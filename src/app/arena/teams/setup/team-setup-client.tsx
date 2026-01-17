@@ -12,12 +12,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import {
-    Users, Crown, Anchor, Check, ChevronRight,
+    Users, Crown, Anchor, Check,
     ArrowLeft, Loader2, AlertCircle, UserPlus, Search, Sparkles,
     Zap, Shield, Maximize, Minimize, X
 } from 'lucide-react';
 import { 
-    Party, PartyMember, PartyInvite,
+    Party, PartyInvite,
     createParty, setPartyIGL, setPartyAnchor, 
     togglePartyReady, setPartyTargetMode, linkPartyToTeam,
     getPartyData
@@ -25,7 +25,6 @@ import {
 import { updateQueueState } from '@/lib/party/party-redis';
 import { TeamWithElo } from '@/lib/actions/teams';
 import { createAITeamMatch, BotDifficulty } from '@/lib/actions/team-matchmaking';
-import { UserAvatar } from '@/components/user-avatar';
 import { usePresence } from '@/lib/socket/use-presence';
 import { TeamPlayerCard, VSScreenBackground } from '@/components/arena/teams';
 import { soundEngine } from '@/lib/sound-engine';
@@ -43,22 +42,9 @@ interface TeamSetupClientProps {
 // Debug: Track render count for H3 hypothesis testing (module-level to persist across renders)
 let setupRenderCount = 0;
 
-// Rank color helper
-function getRankColors(rank?: string) {
-    switch (rank?.toUpperCase()) {
-        case 'DIAMOND': return 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30';
-        case 'PLATINUM': return 'bg-slate-300/20 text-slate-300 border-slate-300/30';
-        case 'GOLD': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-        case 'SILVER': return 'bg-zinc-400/20 text-zinc-400 border-zinc-400/30';
-        case 'BRONZE': return 'bg-amber-700/20 text-amber-600 border-amber-600/30';
-        default: return 'bg-zinc-500/20 text-zinc-500 border-zinc-500/30';
-    }
-}
-
 export function TeamSetupClient({
     mode,
     initialParty,
-    partyInvites,
     userTeams,
     currentUserId,
     currentUserName,
@@ -68,7 +54,16 @@ export function TeamSetupClient({
     const [party, setParty] = useState<Party | null>(initialParty);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [step, setStep] = useState<'party' | 'roles' | 'ready'>('party');
+
+    // Derive initial step from party state to handle missed socket events
+    // If roles are already assigned, start at 'ready'; if party is full, start at 'roles'
+    const getInitialStep = (p: Party | null): 'party' | 'roles' | 'ready' => {
+        if (!p) return 'party';
+        if (p.iglId && p.anchorId) return 'ready';
+        if (p.members && p.members.length >= 3) return 'roles';
+        return 'party';
+    };
+    const [step, setStep] = useState<'party' | 'roles' | 'ready'>(() => getInitialStep(initialParty));
     const [isFullscreen, setIsFullscreen] = useState(false);
     
     // Prevent hydration mismatch - only show animations after mount
@@ -85,7 +80,6 @@ export function TeamSetupClient({
     type MatchType = 'ranked' | 'casual' | 'vs_ai';
     const [matchType, setMatchType] = useState<MatchType>('ranked');
     const [aiDifficulty, setAIDifficulty] = useState<BotDifficulty>('medium');
-    const [showAIOptions, setShowAIOptions] = useState(false);
     // Option to defer anchor role to an AI teammate (for solo/partial party AI matches)
     const [deferAnchorToAI, setDeferAnchorToAI] = useState(false);
     // State for showing role selection before AI match (for partial parties with 2+ humans)
@@ -114,8 +108,12 @@ export function TeamSetupClient({
                 const elem = document.documentElement;
                 if (elem.requestFullscreen) {
                     await elem.requestFullscreen();
-                } else if ((elem as any).webkitRequestFullscreen) {
-                    await (elem as any).webkitRequestFullscreen();
+                } else {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser-specific fullscreen APIs
+                    const webkitElem = elem as any;
+                    if (webkitElem.webkitRequestFullscreen) {
+                        await webkitElem.webkitRequestFullscreen();
+                    }
                 }
             }
         } catch (err) {
@@ -444,7 +442,7 @@ export function TeamSetupClient({
         } else {
             console.log('[TeamSetup] No queueStatus, staying on setup page');
         }
-    }, [party?.queueStatus, party?.id, router, fromQueue]);
+    }, [party?.queueStatus, party?.id, router, fromQueue, mode]);
     
     // Real-time queue status listener - instant notification when leader starts queue
     useEffect(() => {
@@ -480,10 +478,12 @@ export function TeamSetupClient({
         // Check if this is an AI match notification
         if (latestQueueStatusUpdate.queueStatus.startsWith('ai_match:')) {
             const matchId = latestQueueStatusUpdate.queueStatus.replace('ai_match:', '');
-            console.log('[TeamSetup] 🤖 AI Match started via socket - redirecting to match:', matchId);
+            // Use partyId from socket event - more reliable than potentially stale party state
+            const socketPartyId = latestQueueStatusUpdate.partyId || party?.id;
+            console.log('[TeamSetup] 🤖 AI Match started via socket - redirecting to match:', matchId, 'partyId:', socketPartyId);
             isRedirecting.current = true;
             clearQueueStatusUpdate();
-            router.push(`/arena/teams/match/${matchId}?partyId=${party?.id}`);
+            router.push(`/arena/teams/match/${matchId}?partyId=${socketPartyId}`);
             return;
         }
         
@@ -492,15 +492,17 @@ export function TeamSetupClient({
         // #endregion
         isRedirecting.current = true;
         blockAutoRedirect.current = false;
-        
+
         // Clear sessionStorage since we're intentionally following the leader
         sessionStorage.removeItem('flashmath_just_left_queue');
-        
+
+        // Use partyId from socket event - more reliable than potentially stale party state
+        const socketPartyId = latestQueueStatusUpdate.partyId || party?.id;
         clearQueueStatusUpdate();
-        const phase = latestQueueStatusUpdate.queueStatus === 'finding_teammates' 
-            ? 'teammates' 
+        const phase = latestQueueStatusUpdate.queueStatus === 'finding_teammates'
+            ? 'teammates'
             : 'opponent';
-        router.push(`/arena/teams/queue?partyId=${party?.id}&phase=${phase}&mode=${mode}`);
+        router.push(`/arena/teams/queue?partyId=${socketPartyId}&phase=${phase}&mode=${mode}`);
     }, [latestQueueStatusUpdate, party?.id, router, clearQueueStatusUpdate, mode]);
 
     // Listen for step changes from party leader via socket (for non-leaders)
@@ -520,6 +522,15 @@ export function TeamSetupClient({
     useEffect(() => {
         if (hasFullParty && step === 'party') setStep('roles');
     }, [hasFullParty, step]);
+
+    // Sync step from party state - handles missed socket events
+    // If roles are already assigned in party data, advance to 'ready'
+    useEffect(() => {
+        if (party?.iglId && party?.anchorId && step === 'roles') {
+            console.log('[TeamSetup] 🔄 Syncing step from party state: roles already assigned, advancing to ready');
+            setStep('ready');
+        }
+    }, [party?.iglId, party?.anchorId, step]);
 
     const handleCreateParty = async () => {
         setLoading(true);
@@ -575,7 +586,7 @@ export function TeamSetupClient({
         setLoading(false);
     };
 
-    const handleStartQueue = async () => {
+    const _handleStartQueue = async () => {
         if (!party || !allReady || !hasIgl || !hasAnchor) {
             console.log('[TeamSetup] handleStartQueue early return - conditions not met:', {
                 hasParty: !!party,
@@ -638,7 +649,7 @@ export function TeamSetupClient({
 
     // For AI matches from the Party step (solo/partial party)
     // If 2+ human players, always show role selection so leader can review/change
-    const handleStartAIMatchFromParty = async () => {
+    const _handleStartAIMatchFromParty = async () => {
         if (!party) return;
         console.log('[TeamSetup] === handleStartAIMatchFromParty CALLED ===');
         console.log('[TeamSetup] partyId:', party.id, 'difficulty:', aiDifficulty, 'memberCount:', party.members.length);
@@ -858,6 +869,7 @@ export function TeamSetupClient({
             // Reset loading state before navigation to prevent stuck button
             setLoading(false);
             router.push(`/arena/teams/queue?partyId=${party.id}&phase=teammates&mode=${mode}`);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Error type from catch
         } catch (err: any) {
             console.error('[TeamSetup] handleFindTeammates error:', err);
             setError(err.message || 'An error occurred');
@@ -1194,10 +1206,7 @@ export function TeamSetupClient({
                                                             <span>Casual</span>
                                                         </button>
                                                         <button
-                                                            onClick={() => {
-                                                                setMatchType('vs_ai');
-                                                                setShowAIOptions(true);
-                                                            }}
+                                                            onClick={() => setMatchType('vs_ai')}
                                                             className={cn(
                                                                 "flex-1 p-2 rounded-lg text-xs font-medium transition-all flex flex-col items-center gap-1",
                                                                 matchType === 'vs_ai'
@@ -1596,10 +1605,7 @@ export function TeamSetupClient({
 
                                         {/* VS AI */}
                                         <button
-                                            onClick={() => {
-                                                setMatchType('vs_ai');
-                                                setShowAIOptions(true);
-                                            }}
+                                            onClick={() => setMatchType('vs_ai')}
                                             className={cn(
                                                 "p-3 rounded-xl border-2 transition-all text-center",
                                                 matchType === 'vs_ai'

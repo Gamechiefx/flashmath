@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { MathProblem } from "@/lib/math-tiers";
 import { getMasteryTestProblems, completeMasteryTest } from "@/lib/actions/game";
 import { motion } from "framer-motion";
-import { Trophy, X, CheckCircle2, XCircle, Zap } from "lucide-react";
+import { Trophy, X, CheckCircle2, XCircle } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { NeonButton } from "@/components/ui/neon-button";
 import { soundEngine } from "@/lib/sound-engine";
@@ -27,12 +27,10 @@ export function MasteryTest({ operation, currentTier, onComplete, onCancel }: Ma
     const [showResult, setShowResult] = useState(false);
     const [lastResult, setLastResult] = useState<boolean | null>(null);
     const [testComplete, setTestComplete] = useState(false);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Mastery test result type
     const [finalResult, setFinalResult] = useState<any>(null);
 
-    useEffect(() => {
-        loadProblems();
-    }, [operation]);
-
+    // Define loadProblems before useEffect to avoid "accessed before declaration" error
     const loadProblems = async () => {
         setIsLoading(true);
         const res = await getMasteryTestProblems(operation);
@@ -41,6 +39,11 @@ export function MasteryTest({ operation, currentTier, onComplete, onCancel }: Ma
         }
         setIsLoading(false);
     };
+
+    useEffect(() => {
+        loadProblems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [operation]);
 
     const handleSubmit = async () => {
         if (!inputValue || showResult) return;

@@ -23,15 +23,19 @@ export function useAudioSettings() {
 export function AudioSettingsProvider({ children }: { children: React.ReactNode }) {
     const [bgmVolume, setBGMVolumeState] = useState(0.5);
     const [sfxVolume, setSFXVolumeState] = useState(0.5);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        const storedBGM = localStorage.getItem("fg_bgm_volume");
-        const storedSFX = localStorage.getItem("fg_sfx_volume");
+        // Defer to avoid setState in effect warning
+        setTimeout(() => {
+            const storedBGM = localStorage.getItem("fg_bgm_volume");
+            const storedSFX = localStorage.getItem("fg_sfx_volume");
 
-        if (storedBGM) setBGMVolumeState(parseFloat(storedBGM));
-        if (storedSFX) setSFXVolumeState(parseFloat(storedSFX));
-        setMounted(true);
+            if (storedBGM) setBGMVolumeState(parseFloat(storedBGM));
+            if (storedSFX) setSFXVolumeState(parseFloat(storedSFX));
+            setMounted(true);
+        }, 0);
     }, []);
 
     const setBGMVolume = (vol: number) => {

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { 
-  Play, Users, Timer, Target, Zap, Trophy, Settings, RotateCcw, ExternalLink, X, Crown, Anchor
+  Play, Users, Timer, Target, Zap, Trophy, Settings, ExternalLink, X, Crown, Anchor
 } from 'lucide-react';
 
 // Utility Components

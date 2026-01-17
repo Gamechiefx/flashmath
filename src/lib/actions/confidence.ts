@@ -44,7 +44,7 @@ export interface ConfidenceResult {
  */
 export async function getConfidenceBreakdown(userId?: string): Promise<ConfidenceResult | null> {
     const session = await auth();
-    const targetId = userId || (session?.user as any)?.id;
+    const targetId = userId || (session?.user as { id?: string })?.id;
     
     if (!targetId) {
         return null;
@@ -57,7 +57,7 @@ export async function getConfidenceBreakdown(userId?: string): Promise<Confidenc
         const user = db.prepare(`
             SELECT created_at, last_arena_activity
             FROM users WHERE id = ?
-        `).get(targetId) as any;
+        `).get(targetId) as { created_at?: string; last_arena_activity?: string | null } | undefined;
         
         if (!user) {
             return null;
