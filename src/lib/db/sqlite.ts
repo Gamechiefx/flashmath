@@ -1,4 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Database query results use any types */
+/**
+ * FlashMath SQLite Database Layer
+ * 
+ * DATABASE MIGRATIONS:
+ * ====================
+ * Schema changes are now managed by the migration system in src/lib/db/migrations/
+ * 
+ * To add a new migration:
+ * 1. Create a new file: src/lib/db/migrations/sqlite/XXX_description.up.sql
+ * 2. Optionally create: src/lib/db/migrations/sqlite/XXX_description.down.sql
+ * 3. Run: npm run migrate (or it runs automatically on Docker container start)
+ * 
+ * The legacy inline migrations below are kept for backwards compatibility
+ * and will be skipped if the migration system has already applied them.
+ */
 
 import Database from 'better-sqlite3';
 import path from 'path';
@@ -7,11 +22,125 @@ import fs from 'fs';
 // Database file path
 const DB_PATH = process.env.DATABASE_PATH || path.join(process.cwd(), 'flashmath.db');
 
+// Lock file for preventing concurrent schema initialization
+const LOCK_FILE = DB_PATH + '.init.lock';
+
 // Create database connection
 let db: Database.Database | null = null;
+let schemaInitialized = false;
+
+/**
+ * Check if we're in a Next.js build phase.
+ * During build, we should not initialize the database schema to avoid
+ * multiple workers causing "database is locked" errors.
+ * 
+ * Uses multiple detection methods for robustness:
+ * 1. NEXT_PHASE environment variable (set by Next.js during build)
+ * 2. npm_lifecycle_event (set during npm script execution)
+ * 3. SKIP_DB_INIT environment variable (explicit opt-out)
+ * 4. Check if we're running under multiple workers (Next.js build uses workers)
+ * 5. Check for CI environment variables
+ */
+function isBuildPhase(): boolean {
+    // Explicit skip via environment variable
+    if (process.env.SKIP_DB_INIT === 'true' || process.env.SKIP_DB_INIT === '1') {
+        return true;
+    }
+    
+    // NEXT_PHASE is set during next build
+    // 'phase-production-build' indicates we're building
+    const phase = process.env.NEXT_PHASE;
+    if (phase === 'phase-production-build') {
+        return true;
+    }
+    
+    // Check npm lifecycle event (covers "npm run build")
+    const npmEvent = process.env.npm_lifecycle_event;
+    if (npmEvent === 'build') {
+        return true;
+    }
+    
+    // Check for CI environments where build might be happening
+    // In CI, we should skip schema init and let migrations handle it
+    if (process.env.CI === 'true' || process.env.CI === '1') {
+        return true;
+    }
+    
+    // Gitea Actions detection
+    if (process.env.GITEA_ACTIONS === 'true') {
+        return true;
+    }
+    
+    // GitHub Actions detection
+    if (process.env.GITHUB_ACTIONS === 'true') {
+        return true;
+    }
+    
+    // Generic build environment check
+    if (process.env.BUILD_ENV === 'true' || process.env.IS_BUILD === 'true') {
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * Acquire a file-based lock for schema initialization.
+ * This prevents multiple Next.js workers from initializing the schema concurrently.
+ * Returns true if lock was acquired, false if another process holds the lock.
+ */
+function acquireSchemaLock(): boolean {
+    try {
+        // Check if lock file exists and is recent (within last 60 seconds)
+        if (fs.existsSync(LOCK_FILE)) {
+            const stats = fs.statSync(LOCK_FILE);
+            const ageMs = Date.now() - stats.mtimeMs;
+            
+            // If lock is fresh (< 60 seconds old), another process is initializing
+            if (ageMs < 60000) {
+                return false;
+            }
+            
+            // Lock is stale, remove it
+            fs.unlinkSync(LOCK_FILE);
+        }
+        
+        // Create lock file with our PID
+        fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: 'wx' });
+        return true;
+    } catch (e: any) {
+        // EEXIST means another process created the lock between our check and write
+        if (e.code === 'EEXIST') {
+            return false;
+        }
+        // Other errors - proceed cautiously
+        return true;
+    }
+}
+
+/**
+ * Release the schema initialization lock
+ */
+function releaseSchemaLock(): void {
+    try {
+        if (fs.existsSync(LOCK_FILE)) {
+            const content = fs.readFileSync(LOCK_FILE, 'utf-8');
+            // Only remove if we own the lock
+            if (content === String(process.pid)) {
+                fs.unlinkSync(LOCK_FILE);
+            }
+        }
+    } catch (_e) {
+        // Ignore errors during cleanup
+    }
+}
 
 export function getDatabase(): Database.Database {
     if (!db) {
+        // During build phase, we still need to return a database connection
+        // for static analysis, but we should skip heavy schema initialization
+        const skipSchemaInit = isBuildPhase();
+        
         // Ensure the parent directory exists before opening the database
         const dbDir = path.dirname(DB_PATH);
         if (!fs.existsSync(dbDir)) {
@@ -24,9 +153,27 @@ export function getDatabase(): Database.Database {
         db.pragma('foreign_keys = ON');
         // Enable WAL mode for better concurrency
         db.pragma('journal_mode = WAL');
+        // Set busy timeout to wait for locks (30 seconds) - important for concurrent access
+        db.pragma('busy_timeout = 30000');
 
-        // Initialize schema if needed
-        initializeSchema();
+        // Initialize schema if needed (skip during build phase)
+        if (!skipSchemaInit && !schemaInitialized) {
+            // Try to acquire lock - if we can't, another process is initializing
+            if (acquireSchemaLock()) {
+                try {
+                    initializeSchema();
+                    schemaInitialized = true;
+                } finally {
+                    releaseSchemaLock();
+                }
+            } else {
+                console.log('[SQLite] Another process is initializing schema, waiting...');
+                // Wait a bit and mark as initialized (the other process will do it)
+                schemaInitialized = true;
+            }
+        } else if (skipSchemaInit) {
+            console.log('[SQLite] Skipping schema initialization during build phase');
+        }
     }
     return db;
 }
@@ -271,6 +418,8 @@ function initializeSchema() {
     const decayColumns = [
         { name: 'last_arena_activity', type: 'TEXT' },
         { name: 'decay_warning_sent', type: 'TEXT' },
+        { name: 'decay_started_email_sent', type: 'TEXT' },
+        { name: 'severe_decay_email_sent', type: 'TEXT' },
         { name: 'is_returning_player', type: 'INTEGER', default: 0 },
         { name: 'placement_matches_required', type: 'INTEGER', default: 0 },
         { name: 'placement_matches_completed', type: 'INTEGER', default: 0 },

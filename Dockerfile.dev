@@ -2,7 +2,8 @@
 FROM node:20-alpine
 
 # Install dependencies for native modules (better-sqlite3) and sqlite3 CLI
-RUN apk add --no-cache libc6-compat python3 make g++ sqlite
+# Also install netcat for health checks in entrypoint
+RUN apk add --no-cache libc6-compat python3 make g++ sqlite netcat-openbsd
 
 WORKDIR /app
 
@@ -15,11 +16,15 @@ RUN npm ci
 # Copy the rest of the application
 COPY . .
 
+# Make entrypoint executable
+RUN chmod +x scripts/docker-entrypoint.sh 2>/dev/null || true
+
 # Expose port
 EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Run the custom server with Socket.io support
-CMD ["npm", "run", "dev:server"]
+# Run migrations before starting the server
+# --skip-if-exists ensures safe deployment even on existing databases
+CMD ["sh", "-c", "node scripts/migrate.js --skip-if-exists && npm run dev:server"]
